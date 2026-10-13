@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Il mio Portale Grist</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; }
+        h1, h2 { color: #2c3e50; border-bottom: 2px solid #dee2e6; padding-bottom: 8px; }
+        p { color: #6c757d; font-size: 14px; margin-top: -5px; }
+        .grid-forms { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+        .section-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 40px; }
+        iframe { border: 1px solid #dee2e6; border-radius: 4px; background: white; width: 100%; }
+        @media (max-width: 768px) { .grid-forms { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+    <h1>Pannello di Controllo Aziendale</h1>
+
+    <!-- ================= SEZIONE 1: I DUE MODULI INVERTITI ================= -->
+    <div class="grid-forms">
+        
+        <!-- PRIMO FORM: TIMBRATURA GIORNATA (ex Prova - link /1) -->
+        <div class="section-box">
+            <h2>Timbratura giornata</h2>
+            <p>Compila questo modulo per aggiungere dati al database.</p>
+            <iframe src="https://docs.getgrist.com/forms/mMdkwRWWXZbnBKdSuf4qVK/1" height="650" frameborder="0"></iframe>
+        </div>
+
+        <!-- SECONDO FORM: INSERIMENTO FERIE, PERMESSI E MALATTIA (ex Ferie - link /8) -->
+        <div class="section-box">
+            <h2>Inserimento ferie, permessi e malattia</h2>
+            <p>Compila questo modulo per fare una richiesta.</p>
+            <iframe src="https://docs.getgrist.com/forms/c8F3MNvQMEVf5fivNtpF7s/8" height="650" frameborder="0"></iframe>
+        </div>
+
+    </div>
+
+    <!-- ================= SEZIONE 2: LA DASHBOARD (DASHBOARD DI RIEPILOGO) ================= -->
+    <div class="section-box">
+        <h2>Dashboard di riepilogo</h2>
+        <p>Grafici e riepiloghi aggiornati automaticamente in tempo reale.</p>
+        <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage" height="500" frameborder="0"></iframe>
+    </div>
+
+    <!-- ================= SEZIONE 3: TABELLA INTERATTIVA (IMPOSTAZIONI PARAMETRI) ================= -->
+    <div class="section-box">
+        <h2>Impostazioni parametri</h2>
+        <p>Fai doppio clic sulle celle di questa tabella per modificarle o aggiornarle al volo.</p>
+        <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/6?style=singlePage" height="600" frameborder="0"></iframe>
+    </div>
+
+</body>
+</html>
