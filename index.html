@@ -142,6 +142,8 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.02);
             display: none;
         }
+        
+        /* Moduli standard */
         iframe {
             width: 100%;
             height: calc(100vh - 180px);
@@ -152,10 +154,18 @@
             margin-top: 15px;
         }
 
+        /* TRUCCO PER NON TAGLIARE LE LEGENDE SU PC */
+        #dashboard iframe {
+            width: 115% !important;
+            height: calc(115vh - 180px) !important;
+            transform: scale(0.87);
+            transform-origin: 0 0;
+        }
+
         /* RESPONSIVE: OTTIMIZZAZIONE PER SMARTPHONE */
         @media (max-width: 768px) {
             .panel-container {
-                flex-direction: column; /* Sposta la sidebar sopra il contenuto */
+                flex-direction: column;
             }
             .sidebar {
                 width: 100%;
@@ -167,8 +177,8 @@
                 margin-bottom: 10px;
             }
             .sidebar-menu {
-                flex-direction: row; /* Dispone i pulsanti in orizzontale */
-                overflow-x: auto;   /* Permette lo scorrimento se non ci stanno tutti */
+                flex-direction: row;
+                overflow-x: auto;
                 padding: 0 10px;
                 white-space: nowrap;
                 -webkit-overflow-scrolling: touch;
@@ -183,17 +193,23 @@
             }
             .tab-btn.active {
                 border-left: none;
-                border-bottom: 3px solid #fff; /* Sposta la riga bianca sotto al bottone */
+                border-bottom: 3px solid #fff;
                 padding-left: 15px;
             }
             .main-content {
-                padding: 15px; /* Recupera spazio utile allargando la visuale */
+                padding: 15px;
             }
             .section {
                 padding: 15px;
             }
             iframe {
-                height: calc(100vh - 200px); /* Ridimensiona l'iframe per i display piccoli */
+                height: calc(100vh - 200px);
+            }
+            /* Annulla il trucco su smartphone dove si vedeva già bene */
+            #dashboard iframe {
+                width: 100% !important;
+                height: calc(100vh - 200px) !important;
+                transform: none;
             }
         }
     </style>
