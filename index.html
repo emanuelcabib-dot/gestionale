@@ -213,12 +213,13 @@
             }
         }
     </style>
-
+</head>
+<body>
 
     <!-- Schermata di Login -->
     <div id="loginSection" class="login-container">
         <h2>Accesso Riservato</h2>
-        <p>Inserisci il codice di sblocco </p>
+        <p>Inserisci il codice di sblocco</p>
         <input type="password" id="companyCode" placeholder="Codice Azienda">
         <button onclick="checkCode()">Accedi</button>
         <p id="errorMessage" class="error-message">Codice errato. Riprova.</p>
@@ -235,6 +236,7 @@
                 <button class="tab-btn" onclick="openSection(event, 'ferie')">Ferie e Permessi</button>
                 <button class="tab-btn" onclick="openSection(event, 'dashboard')">Dashboard di riepilogo</button>
                 <button class="tab-btn" onclick="openSection(event, 'impostazioni')">Impostazioni parametri</button>
+                <button class="tab-btn" onclick="openSection(event, 'istruzioni-database')">Istruzioni d'uso</button>
             </div>
         </div>
 
@@ -245,69 +247,39 @@
             <div id="timbratura" class="section" style="display: block;">
                 <h2>Timbratura giornata</h2>
                 <p>Compila questo modulo per aggiungere evento giornata/timbratura.</p>
-                <iframe src="https://docs.getgrist.com/forms/mMdkwRWWXZbnBKdSuf4qVK/1"></iframe>
+                <iframe src="https://getgrist.com"></iframe>
             </div>
 
             <!-- Inserimento ferie, permessi e malattia -->
             <div id="ferie" class="section">
                 <h2>Inserimento ferie, permessi e malattia</h2>
                 <p>Compila questo modulo per inserire una giornata di ferie, ore di permesso, o malattia.</p>
-                <iframe src="https://docs.getgrist.com/forms/c8F3MNvQMEVf5fivNtpF7s/8"></iframe>
+                <iframe src="https://getgrist.com"></iframe>
             </div>
 
             <!-- Dashboard di riepilogo -->
             <div id="dashboard" class="section">
                 <h2>Dashboard di riepilogo</h2>
                 <p>Grafici e riepiloghi aggiornati automaticamente in tempo reale.</p>
-                <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage"></iframe>
+                <iframe src="https://getgrist.com"></iframe>
             </div>
 
             <!-- Impostazioni parametri -->
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
-                <p>Impostazione paramentri ferie/permessi.</p>
-                <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/6?style=singlePage"></iframe>
+                <p>Impostazione parametri ferie/permessi.</p>
+                <iframe src="https://getgrist.com"></iframe>
             </div>
             
-        </div>
-    </div>
+            <!-- Sezione Istruzioni d'uso -->
+            <div id="istruzioni-database" class="section" style="padding: 20px 15px; max-width: 900px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif; color: #333; line-height: 1.6;">
+                <div style="background: #ffffff; border: 1px solid #e1e4e8; border-radius: 12px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    
+                    <h2 style="color: #0366d6; margin-top: 0; border-bottom: 2px solid #eaecef; padding-bottom: 8px; font-size: 1.5rem;">
+                        📖 Guida Tecnica & Promemoria Database
+                    </h2>
+                    <p style="font-size: 0.95rem; color: #586069; margin-bottom: 25px;">
+                        Consulta questo schema in caso di disallineamenti con le buste paga dello studio consulenza o per configurare correttamente gli anni futuri.
+                    </p>
 
-    <script>
-        function checkCode() {
-            const codeInput = document.getElementById('companyCode').value;
-            const errorMessage = document.getElementById('errorMessage');
-            const codiceNascosto = "NzUyMQ=="; 
-
-            if (btoa(codeInput) === codiceNascosto) {
-                document.getElementById('loginSection').style.display = 'none';
-                // Usiamo 'flex' per attivare correttamente l'allineamento sidebar-contenuto
-                document.getElementById('mainPanel').style.display = 'flex';
-            } else {
-                errorMessage.style.display = 'block';
-            }
-        }
-
-        // Funzione per cambiare la sezione visibile
-        function openSection(evt, sectionId) {
-            const sections = document.getElementsByClassName("section");
-            for (let i = 0; i < sections.length; i++) {
-                sections[i].style.display = "none";
-            }
-
-            const tabButtons = document.getElementsByClassName("tab-btn");
-            for (let i = 0; i < tabButtons.length; i++) {
-                tabButtons[i].className = tabButtons[i].className.replace(" active", "");
-            }
-
-            document.getElementById(sectionId).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
-
-        document.getElementById('companyCode').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                checkCode();
-            }
-        });
-    </script>
-</body>
-</html>
+                    <!-- GESTIONE PARAMETRI -->
