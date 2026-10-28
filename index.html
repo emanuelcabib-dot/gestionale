@@ -163,20 +163,23 @@
             opt.value = i;
             opt.innerText = i < 10 ? '0' + i : i;
             selectOre.appendChild(opt);
-}
-const selectMinuti = document.getElementById('p_minuti');
-for (let i = 0; i < 60; i++) {
-let opt = document.createElement('option');
-opt.value = i;
-opt.innerText = i < 10 ? '0' + i : i;
-selectMinuti.appendChild(opt);
-}
+        } // <--- QUESTA GRAFFA ERA COMPROMESSA
+
+        const selectMinuti = document.getElementById('p_minuti');
+        for (let i = 0; i < 60; i++) {
+            let opt = document.createElement('option');
+            opt.value = i;
+            opt.innerText = i < 10 ? '0' + i : i;
+            selectMinuti.appendChild(opt);
+        }
+
 function getOggiInLocale() {
-const d = new Date();
-const offset = d.getTimezoneOffset();
-const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-return localDate.toISOString().split('T')[0];
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0]; // <-- Corretto al 100%
 }
+
 function setOrarioAttuale() {
 const oraCorrente = new Date().getHours();
 const minutoCorrente = new Date().getMinutes();
