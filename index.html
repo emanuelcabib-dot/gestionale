@@ -157,14 +157,16 @@
     <script>
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
 
+        // Generazione Ore
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
             let opt = document.createElement('option');
             opt.value = i;
             opt.innerText = i < 10 ? '0' + i : i;
             selectOre.appendChild(opt);
-        } // <--- QUESTA GRAFFA ERA COMPROMESSA
+        }
 
+        // Generazione Minuti
         const selectMinuti = document.getElementById('p_minuti');
         for (let i = 0; i < 60; i++) {
             let opt = document.createElement('option');
@@ -177,103 +179,119 @@
             const d = new Date();
             const offset = d.getTimezoneOffset();
             const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T')[0]; // <-- L'ERRORE ERA QUI (mancava)
+            return localDate.toISOString().split('T')[0];
         }
 
+        function setOrarioAttuale() {
+            const oraCorrente = new Date().getHours();
+            const minutoCorrente = new Date().getMinutes();
+            document.getElementById('p_ore').value = oraCorrente;
+            document.getElementById('p_minuti').value = minutoCorrente;
+        }
 
-function setOrarioAttuale() {
-const oraCorrente = new Date().getHours();
-const minutoCorrente = new Date().getMinutes();
-document.getElementById('p_ore').value = oraCorrente;
-document.getElementById('p_minuti').value = minutoCorrente;
-}
-function checkCode() {
-const codeInput = document.getElementById('companyCode').value;
-const errorMessage = document.getElementById('errorMessage');
-const codiceNascosto = "NzUyMQ==";
-if (btoa(codeInput) === codiceNascosto) {
-document.getElementById('loginSection').style.display = 'none';
-document.getElementById('mainPanel').style.display = 'flex';
-const oggi = getOggiInLocale();
-document.getElementById('p_data').value = oggi;
-document.getElementById('r_data').value = oggi;
-setOrarioAttuale();
-} else {
-errorMessage.style.display = 'block';
-}
-}
-function openSection(evt, sectionId) {
-const sections = document.getElementsByClassName("section");
-for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
-const tabButtons = document.getElementsByClassName("tab-btn");
-for (let i = 0; i < tabButtons.length; i++) { tabButtons[i].className = tabButtons[i].className.replace(" active", ""); }
-document.getElementById(sectionId).style.display = "block";
-evt.currentTarget.className += " active";
-}
-document.getElementById('companyCode').addEventListener('keypress', function (e) {
-if (e.key === 'Enter') { checkCode(); }
-});
-document.getElementById('formPresenze').addEventListener('submit', async (e) => {
-e.preventDefault();
-const submitBtn = e.target.querySelector('button');
-submitBtn.disabled = true;
-submitBtn.innerText = 'Invio in corso...';
-const payload = {
-tipo: "presenze",
-data: document.getElementById('p_data').value,
-evento: document.getElementById('p_evento').value,
-ore: parseInt(document.getElementById('p_ore').value),
-minuti: parseInt(document.getElementById('p_minuti').value),
-note: document.getElementById('p_note').value
-};
-try {
-const response = await fetch(WORKER_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(payload)
-});
-if (response.ok) {
-alert('Presenza registrata con successo!');
-document.getElementById('formPresenze').reset();
-document.getElementById('p_data').value = getOggiInLocale();
-setOrarioAttuale();
-} else { alert('Errore lato server durante il salvataggio.'); }
-} catch (error) {
-console.error('Errore:', error);
-alert('Impossibile connettersi al servizio di salvataggio.');
-} finally {
-submitBtn.disabled = false;
-submitBtn.innerText = 'Conferma presenza';
-}
-});
-document.getElementById('formRegistro').addEventListener('submit', async (e) => {
-e.preventDefault();
-const submitBtn = e.target.querySelector('button');
-submitBtn.disabled = true;
-submitBtn.innerText = 'Invio in corso...';
-const payload = {
-tipo: "registro",
-data: document.getElementById('r_data').value,
-tipoAssenza: document.getElementById('r_tipo').value,
-quantita: parseFloat(document.getElementById('r_quantita').value),
-note: document.getElementById('r_note').value
-};
-try {
-const response = await fetch(WORKER_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(payload)
-});
-if (response.ok) {
-alert('Richiesta registrata con successo!');
-document.getElementById('formRegistro').reset();
-document.getElementById('r_data').value = getOggiInLocale();
-} else { alert('Errore lato server durante il salvataggio.'); }
-} catch (error) {
-console.error('Errore:', error);
-alert('Impossibile connettersi al servizio di salvataggio.');
-} finally {
-submitBtn.disabled = false;
-submitBtn.innerText = 'Invia assenza';
-}
-});
+        function checkCode() {
+            const codeInput = document.getElementById('companyCode').value;
+            const errorMessage = document.getElementById('errorMessage');
+            const codiceNascosto = "NzUyMQ=="; // Decodificato corrisponde a: 7521
+            
+            if (btoa(codeInput) === codiceNascosto) {
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('mainPanel').style.display = 'flex';
+                const oggi = getOggiInLocale();
+                document.getElementById('p_data').value = oggi;
+                document.getElementById('r_data').value = oggi;
+                setOrarioAttuale();
+            } else {
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        function openSection(evt, sectionId) {
+            const sections = document.getElementsByClassName("section");
+            for (let i = 0; i < sections.length; i++) { 
+                sections[i].style.display = "none"; 
+            }
+            const tabButtons = document.getElementsByClassName("tab-btn");
+            for (let i = 0; i < tabButtons.length; i++) { 
+                tabButtons[i].className = tabButtons[i].className.replace(" active", ""); 
+            }
+            document.getElementById(sectionId).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        document.getElementById('companyCode').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') { checkCode(); }
+        });
+
+        // Form Presenze
+        document.getElementById('formPresenze').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Invio in corso...';
+            const payload = {
+                tipo: "presenze",
+                data: document.getElementById('p_data').value,
+                evento: document.getElementById('p_evento').value,
+                ore: parseInt(document.getElementById('p_ore').value),
+                minuti: parseInt(document.getElementById('p_minuti').value),
+                note: document.getElementById('p_note').value
+            };
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    alert('Presenza registrata con successo!');
+                    document.getElementById('formPresenze').reset();
+                    document.getElementById('p_data').value = getOggiInLocale();
+                    setOrarioAttuale();
+                } else { 
+                    alert('Errore lato server durante il salvataggio.'); 
+                }
+            } catch (error) {
+                console.error('Errore:', error);
+                alert('Impossibile connettersi al servizio di salvataggio.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Conferma presenza';
+            }
+        });
+
+        // Form Registro Assenze
+        document.getElementById('formRegistro').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Invio in corso...';
+            const payload = {
+                tipo: "registro",
+                data: document.getElementById('r_data').value,
+                tipoAssenza: document.getElementById('r_tipo').value,
+                quantita: parseFloat(document.getElementById('r_quantita').value),
+                note: document.getElementById('r_note').value
+            };
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    alert('Richiesta registrata con successo!');
+                    document.getElementById('formRegistro').reset();
+                    document.getElementById('r_data').value = getOggiInLocale();
+                } else { 
+                    alert('Errore lato server durante il salvataggio.'); 
+                }
+            } catch (error) {
+                console.error('Errore:', error);
+                alert('Impossibile connettersi al servizio di salvataggio.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Invia assenza';
+            }
+        });
+    </script>
