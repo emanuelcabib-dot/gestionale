@@ -4,10 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pannello controllo lavoro</title>
-    <!-- Collegamento al Manifest per renderlo installabile -->
     <link rel="manifest" href="manifest.json">
-    
-    <!-- Script per attivare il Service Worker -->
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
@@ -15,219 +12,57 @@
                 .catch(err => console.error('Errore PWA:', err));
         }
     </script>
-
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-            margin: 0;
-            padding: 0;
-            color: #333;
-            height: 100vh;
-        }
-        
-        /* Schermata di Login */
-        .login-container {
-            max-width: 400px;
-            margin: 100px auto 0 auto;
-            background: #fff;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            text-align: center;
-        }
-        input[type="password"] {
-            width: 100%;
-            padding: 12px;
-            margin: 15px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .login-container button {
-            width: 100%;
-        }
-        .error-message {
-            color: #e74c3c;
-            margin-top: 15px;
-            display: none;
-        }
-
-        /* Layout Principale */
-        .panel-container {
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-        }
-
-        /* Sidebar predefinita (Desktop) */
-        .sidebar {
-            width: 280px;
-            background-color: #2c3e50;
-            color: white;
-            padding: 20px 0;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-            flex-shrink: 0;
-        }
-        .sidebar h1 {
-            font-size: 18px;
-            color: #ecf0f1;
-            text-align: center;
-            margin-bottom: 30px;
-            padding: 0 15px;
-            line-height: 1.4;
-        }
-        .sidebar-menu {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            flex-grow: 1;
-        }
-        .tab-btn {
-            background: none;
-            border: none;
-            color: #bdc3c7;
-            text-align: left;
-            padding: 15px 25px;
-            font-size: 15px;
-            font-weight: 500;
-            cursor: pointer;
-            width: 100%;
-            border-radius: 0;
-            transition: all 0.2s ease;
-        }
-        .tab-btn:hover {
-            background-color: #34495e;
-            color: white;
-        }
-        .tab-btn.active {
-            background-color: #3498db;
-            color: white;
-            border-left: 5px solid #fff;
-            padding-left: 20px;
-        }
-
-        /* Area contenuto principale (Desktop) */
-        .main-content {
-            flex-grow: 1;
-            padding: 30px;
-            overflow-y: auto;
-            background-color: #f4f7f6;
-        }
-        h2 {
-            color: #34495e;
-            margin-top: 0;
-            border-bottom: 2px solid #ecf0f1;
-            padding-bottom: 10px;
-        }
-        .section {
-            background: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-            display: none;
-        }
-        
-        /* Moduli standard */
-        iframe {
-            width: 100%;
-            height: calc(100vh - 180px);
-            min-height: 500px;
-            border: none;
-            border-radius: 4px;
-            background: #fff;
-            margin-top: 15px;
-        }
-
-        /* TRUCCO PER NON TAGLIARE LE LEGENDE SU PC */
-        #dashboard iframe {
-            width: 115% !important;
-            height: calc(115vh - 180px) !important;
-            transform: scale(0.87);
-            transform-origin: 0 0;
-        }
-
-        /* RESPONSIVE: OTTIMIZZAZIONE PER SMARTPHONE */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; height: 100vh; }
+        .login-container { max-width: 400px; margin: 100px auto 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
+        input[type="password"] { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #3498db; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #2980b9; }
+        .login-container button { width: 100%; }
+        .error-message { color: #e74c3c; margin-top: 15px; display: none; }
+        .panel-container { display: flex; height: 100vh; width: 100vw; }
+        .sidebar { width: 280px; background-color: #2c3e50; color: white; padding: 20px 0; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.1); flex-shrink: 0; }
+        .sidebar h1 { font-size: 18px; color: #ecf0f1; text-align: center; margin-bottom: 30px; padding: 0 15px; line-height: 1.4; }
+        .sidebar-menu { display: flex; flex-direction: column; gap: 5px; flex-grow: 1; }
+        .tab-btn { background: none; border: none; color: #bdc3c7; text-align: left; padding: 15px 25px; font-size: 15px; font-weight: 500; cursor: pointer; width: 100%; border-radius: 0; transition: all 0.2s ease; }
+        .tab-btn:hover { background-color: #34495e; color: white; }
+        .tab-btn.active { background-color: #3498db; color: white; border-left: 5px solid #fff; padding-left: 20px; }
+        .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; background-color: #f4f7f6; }
+        h2 { color: #34495e; margin-top: 0; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        .section { background: #fff; padding: 25px; border-radius: 8px; border: 1px solid #e0e0e0; box-shadow: 0 2px 8px rgba(0,0,0,0.02); display: none; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #2c3e50; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; }
+        .form-group textarea { resize: vertical; }
+        .btn-submit { background-color: #2ecc71; color: white; font-weight: bold; padding: 14px 24px; width: auto; min-width: 150px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-submit:hover { background-color: #27ae60; }
+        iframe { width: 100%; height: calc(100vh - 180px); min-height: 500px; border: none; border-radius: 4px; background: #fff; margin-top: 15px; }
+        #dashboard iframe { width: 115% !important; height: calc(115vh - 180px) !important; transform: scale(0.87); transform-origin: 0 0; }
         @media (max-width: 768px) {
-            .panel-container {
-                flex-direction: column;
-            }
-            .sidebar {
-                width: 100%;
-                height: auto;
-                padding: 10px 0;
-            }
-            .sidebar h1 {
-                font-size: 16px;
-                margin-bottom: 10px;
-            }
-            .sidebar-menu {
-                flex-direction: row;
-                overflow-x: auto;
-                padding: 0 10px;
-                white-space: nowrap;
-                -webkit-overflow-scrolling: touch;
-            }
-            .tab-btn {
-                padding: 10px 15px;
-                font-size: 13px;
-                text-align: center;
-                border-radius: 4px;
-                display: inline-block;
-                width: auto;
-            }
-            .tab-btn.active {
-                border-left: none;
-                border-bottom: 3px solid #fff;
-                padding-left: 15px;
-            }
-            .main-content {
-                padding: 15px;
-            }
-            .section {
-                padding: 15px;
-            }
-            iframe {
-                height: calc(100vh - 200px);
-            }
-            /* Annulla il trucco su smartphone dove si vedeva già bene */
-            #dashboard iframe {
-                width: 100% !important;
-                height: calc(100vh - 200px) !important;
-                transform: none;
-            }
+            .panel-container { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; padding: 10px 0; }
+            .sidebar h1 { font-size: 16px; margin-bottom: 10px; }
+            .sidebar-menu { flex-direction: row; overflow-x: auto; padding: 0 10px; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+            .tab-btn { padding: 10px 15px; font-size: 13px; text-align: center; border-radius: 4px; display: inline-block; width: auto; }
+            .tab-btn.active { border-left: none; border-bottom: 3px solid #fff; padding-left: 15px; }
+            .main-content { padding: 15px; }
+            .section { padding: 15px; }
+            iframe { height: calc(100vh - 200px); }
+            .btn-submit { width: 100%; }
+            #dashboard iframe { width: 100% !important; height: calc(100vh - 200px) !important; transform: none; }
         }
     </style>
-
-
-    <!-- Schermata di Login -->
+</head>
+<body>
     <div id="loginSection" class="login-container">
         <h2>Accesso Riservato</h2>
-        <p>Inserisci il codice di sblocco </p>
+        <p>Inserisci il codice di sblocco</p>
         <input type="password" id="companyCode" placeholder="Codice Azienda">
         <button onclick="checkCode()">Accedi</button>
         <p id="errorMessage" class="error-message">Codice errato. Riprova.</p>
     </div>
 
-    <!-- Pannello Principale (Visualizzato come flex dopo il login) -->
     <div id="mainPanel" class="panel-container" style="display: none;">
-        
-        <!-- Sidebar di Navigazione -->
         <div class="sidebar">
             <h1>Pannello Controllo Lavoro</h1>
             <div class="sidebar-menu">
@@ -238,74 +73,181 @@
             </div>
         </div>
 
-        <!-- Area Contenuto Destra -->
         <div class="main-content">
-            
-            <!-- Timbratura giornata -->
             <div id="timbratura" class="section" style="display: block;">
-                <h2>Timbratura giornata</h2>
-                <p>Compila questo modulo per aggiungere evento giornata/timbratura.</p>
-                <iframe src="https://docs.getgrist.com/forms/mMdkwRWWXZbnBKdSuf4qVK/1"></iframe>
+                <h2>Presenze (Tabella Prova)</h2>
+                <p>Inserisci i dati relativi alla timbratura giornaliera.</p>
+                <form id="formPresenze">
+                    <div class="form-group">
+                        <label for="p_data">Data:</label>
+                        <input type="date" id="p_data" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="p_evento">Evento:</label>
+                        <select id="p_evento" required>
+                            <option value="Inizio lavoro">Inizio lavoro</option>
+                            <option value="Fine lavoro">Fine lavoro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="p_ore">Ore:</label>
+                        <input type="number" id="p_ore" min="0" max="24" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="p_minuti">Minuti:</label>
+                        <input type="number" id="p_minuti" min="0" max="59" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="p_note">Note:</label>
+                        <textarea id="p_note" rows="3" placeholder="Eventuali annotazioni..."></textarea>
+                    </div>
+                    <button type="submit" class="btn-submit">Invia Presenza</button>
+                </form>
             </div>
 
-            <!-- Inserimento ferie, permessi e malattia -->
             <div id="ferie" class="section">
-                <h2>Inserimento ferie, permessi e malattia</h2>
-                <p>Compila questo modulo per inserire una giornata di ferie, ore di permesso, o malattia.</p>
-                <iframe src="https://docs.getgrist.com/forms/c8F3MNvQMEVf5fivNtpF7s/8"></iframe>
+                <h2>Registro ferie, permessi e malattia</h2>
+                <p>Compila questo modulo per inserire una richiesta o registrazione di assenza.</p>
+                <form id="formRegistro">
+                    <div class="form-group">
+                        <label for="r_data">Data:</label>
+                        <input type="date" id="r_data" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="r_tipo">Tipo assenza:</label>
+                        <select id="r_tipo" required>
+                            <option value="Ferie">Ferie</option>
+                            <option value="Permesso">Permesso</option>
+                            <option value="Malattia">Malattia</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="r_quantita">Quantità:</label>
+                        <input type="number" id="r_quantita" step="0.1" min="0" placeholder="Es. ore o giorni" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="r_note">Note:</label>
+                        <textarea id="r_note" rows="3" placeholder="Motivazione o dettagli..."></textarea>
+                    </div>
+                    <button type="submit" class="btn-submit" style="background-color: #e67e22;">Invia Registro</button>
+                </form>
             </div>
 
-            <!-- Dashboard di riepilogo -->
             <div id="dashboard" class="section">
                 <h2>Dashboard di riepilogo</h2>
                 <p>Grafici e riepiloghi aggiornati automaticamente in tempo reale.</p>
                 <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage"></iframe>
             </div>
 
-            <!-- Impostazioni parametri -->
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
-                <p>Impostazione paramentri ferie/permessi.</p>
+                <p>Impostazione parametri ferie/permessi.</p>
                 <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/6?style=singlePage"></iframe>
             </div>
-            
         </div>
     </div>
 
     <script>
+        const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
+
+        function getOggiInLocale() {
+            const d = new Date();
+            const offset = d.getTimezoneOffset();
+            const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+            return localDate.toISOString().split('T')[0];
+        }
+
         function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
             const errorMessage = document.getElementById('errorMessage');
             const codiceNascosto = "NzUyMQ=="; 
-
             if (btoa(codeInput) === codiceNascosto) {
                 document.getElementById('loginSection').style.display = 'none';
-                // Usiamo 'flex' per attivare correttamente l'allineamento sidebar-contenuto
                 document.getElementById('mainPanel').style.display = 'flex';
+                const oggi = getOggiInLocale();
+                document.getElementById('p_data').value = oggi;
+                document.getElementById('r_data').value = oggi;
             } else {
                 errorMessage.style.display = 'block';
             }
         }
 
-        // Funzione per cambiare la sezione visibile
         function openSection(evt, sectionId) {
             const sections = document.getElementsByClassName("section");
-            for (let i = 0; i < sections.length; i++) {
-                sections[i].style.display = "none";
-            }
-
+            for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             const tabButtons = document.getElementsByClassName("tab-btn");
-            for (let i = 0; i < tabButtons.length; i++) {
-                tabButtons[i].className = tabButtons[i].className.replace(" active", "");
-            }
-
+            for (let i = 0; i < tabButtons.length; i++) { tabButtons[i].className = tabButtons[i].className.replace(" active", ""); }
             document.getElementById(sectionId).style.display = "block";
             evt.currentTarget.className += " active";
         }
 
         document.getElementById('companyCode').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                checkCode();
+            if (e.key === 'Enter') { checkCode(); }
+        });
+
+        document.getElementById('formPresenze').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Invio in corso...';
+            const payload = {
+                tipo: "presenze",
+                data: document.getElementById('p_data').value,
+                evento: document.getElementById('p_evento').value,
+                ore: parseInt(document.getElementById('p_ore').value),
+                minuti: parseInt(document.getElementById('p_minuti').value),
+                note: document.getElementById('p_note').value
+            };
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    alert('Presenza registrata con successo!');
+                    document.getElementById('formPresenze').reset();
+                    const oggi = getOggiInLocale();
+document.getElementById('p_data').value = oggi;
+                } else { alert('Errore lato server durante il salvataggio.'); }
+            } catch (error) {
+                console.error('Errore:', error);
+                alert('Impossibile connettersi al servizio di salvataggio.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Invia Presenza';
+            }
+        });
+
+        document.getElementById('formRegistro').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Invio in corso...';
+            const payload = {
+                tipo: "registro",
+                data: document.getElementById('r_data').value,
+                tipoAssenza: document.getElementById('r_tipo').value,
+                quantita: parseFloat(document.getElementById('r_quantita').value),
+                note: document.getElementById('r_note').value
+            };
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    alert('Richiesta registrata con successo!');
+                    document.getElementById('formRegistro').reset();
+                    document.getElementById('r_data').value = getOggiInLocale();
+                } else { alert('Errore lato server durante il salvataggio.'); }
+            } catch (error) {
+                console.error('Errore:', error);
+                alert('Impossibile connettersi al servizio di salvataggio.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Invia Registro';
             }
         });
     </script>
