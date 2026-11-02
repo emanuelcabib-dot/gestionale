@@ -70,10 +70,21 @@
                 <button class="tab-btn" onclick="openSection(event, 'ferie')">Ferie, permessi e malattia</button>
                 <button class="tab-btn" onclick="openSection(event, 'dashboard')">Dashboard di riepilogo</button>
                 <button class="tab-btn" onclick="openSection(event, 'impostazioni')">Impostazioni parametri</button>
-                <button class="tab-btn" onclick="logout()" style="color: #e74c3c; margin-top: auto; border-top: 1px solid #34495e; font-weight: bold;">Esci</button>
+                <!-- NUOVO MENU DI SELEZIONE ANNO, SCARICA PDF E LOGOUT -->
+                <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
+                    <label for="pdfAnno" style="display:block; color:#bdc3c7; font-size:12px; margin-bottom:5px;">Seleziona Anno Report:</label>
+                    <select id="pdfAnno" style="width:100%; padding:8px; border-radius:4px; border:none; background-color:#34495e; color:white; font-size:14px; margin-bottom:10px;">
+                        <option value="TUTTI">Tutti gli anni</option>
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026">2026</option>
+                    </select>
+                    <button class="tab-btn" onclick="generaPDF(event)" style="padding:10px 0; color:#2ecc71; font-weight:bold; background:none; border:none; text-align:left; width:100%;">📥 Scarica PDF</button>
+                    <button class="tab-btn" onclick="logout()" style="padding:10px 0; color:#e74c3c; font-weight:bold; background:none; border:none; text-align:left; width:100%; margin-top:5px;">Esci</button>
+                </div>
             </div>
         </div>
-
         <div class="main-content">
             <div id="timbratura" class="section" style="display: block;">
                 <h2>Timbratura giornata</h2>
@@ -234,6 +245,49 @@
             window.close();
         }
 
+        async function generaPDF(evt) {
+            
+            const MAKE_WEBHOOK_URL = 'https://hook.eu1.make.com/e8cxdpq8m5eon1e2kspt04yrzumy58yl';
+            
+            const annoSelezionato = document.getElementById('pdfAnno').value;
+            const btn = evt.currentTarget;
+            const vecchioTesto = btn.innerText;
+            
+            btn.disabled = true;
+            btn.innerText = '⏳ Generazione...';
+
+            try {
+                const response = await fetch(MAKE_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        token: sessionToken,
+                        anno: annoSelezionato 
+                    })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Report_Ferie_${annoSelezionato}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert('Errore lato server durante la creazione del PDF.');
+                }
+            } catch (error) {
+                console.error('Errore PDF:', error);
+                alert('Impossibile connettersi al servizio di generazione.');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = vecchioTesto;
+            }
+        }
+
         function openSection(evt, sectionId) {
             const sections = document.getElementsByClassName("section");
             for (let i = 0; i < sections.length; i++) { 
@@ -246,6 +300,7 @@
             document.getElementById(sectionId).style.display = "block";
             evt.currentTarget.className += " active";
         }
+
 
         document.getElementById('companyCode').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { checkCode(); }
