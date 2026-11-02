@@ -143,13 +143,13 @@
             <div id="dashboard" class="section">
                 <h2>Dashboard di riepilogo</h2>
                 <p>Grafici e riepiloghi aggiornati automaticamente in tempo reale.</p>
-                <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage"></iframe>
+                <iframe id="iframeDashboard" src="about:blank"></iframe>
             </div>
 
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
                 <p>Impostazione parametri ferie/permessi.</p>
-                <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/6?style=singlePage"></iframe>
+                <iframe id="iframeImpostazioni" src="about:blank"></iframe>
             </div>
         </div>
     </div>
@@ -189,20 +189,38 @@
             document.getElementById('p_minuti').value = minutoCorrente;
         }
 
-        function checkCode() {
+        let sessionToken = "";
+
+        async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
             const errorMessage = document.getElementById('errorMessage');
-            const codiceNascosto = "NzUyMQ=="; // Decodificato corrisponde a: 7521
             
-            if (btoa(codeInput) === codiceNascosto) {
-                document.getElementById('loginSection').style.display = 'none';
-                document.getElementById('mainPanel').style.display = 'flex';
-                const oggi = getOggiInLocale();
-                document.getElementById('p_data').value = oggi;
-                document.getElementById('r_data').value = oggi;
-                setOrarioAttuale();
-            } else {
-                errorMessage.style.display = 'block';
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "auth", code: codeInput })
+                });
+
+                if (response.ok) {
+                    const resData = await response.json();
+                    sessionToken = resData.token;
+
+                    document.getElementById('iframeDashboard').src = resData.urls.dashboard;
+                    document.getElementById('iframeImpostazioni').src = resData.urls.impostazioni;
+
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('mainPanel').style.display = 'flex';
+                    const oggi = getOggiInLocale();
+                    document.getElementById('p_data').value = oggi;
+                    document.getElementById('r_data').value = oggi;
+                    setOrarioAttuale();
+                } else {
+                    errorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Errore Auth:', error);
+                alert('Impossibile connettersi al servizio di autenticazione.');
             }
         }
 
@@ -231,6 +249,7 @@
             submitBtn.innerText = 'Invio in corso...';
             const payload = {
                 tipo: "presenze",
+                token: sessionToken,
                 data: document.getElementById('p_data').value,
                 evento: document.getElementById('p_evento').value,
                 ore: parseInt(document.getElementById('p_ore').value),
@@ -249,10 +268,9 @@
                     document.getElementById('p_data').value = getOggiInLocale();
                     setOrarioAttuale();
                 } else { 
-                    alert('Errore lato server durante il salvataggio.'); 
+                    alert('Errore lato server o sessione non valida.'); 
                 }
             } catch (error) {
-                console.error('Errore:', error);
                 alert('Impossibile connettersi al servizio di salvataggio.');
             } finally {
                 submitBtn.disabled = false;
@@ -268,6 +286,7 @@
             submitBtn.innerText = 'Invio in corso...';
             const payload = {
                 tipo: "registro",
+                token: sessionToken,
                 data: document.getElementById('r_data').value,
                 tipoAssenza: document.getElementById('r_tipo').value,
                 quantita: parseFloat(document.getElementById('r_quantita').value),
@@ -284,10 +303,9 @@
                     document.getElementById('formRegistro').reset();
                     document.getElementById('r_data').value = getOggiInLocale();
                 } else { 
-                    alert('Errore lato server durante il salvataggio.'); 
+                    alert('Errore lato server o sessione non valida.'); 
                 }
             } catch (error) {
-                console.error('Errore:', error);
                 alert('Impossibile connettersi al servizio di salvataggio.');
             } finally {
                 submitBtn.disabled = false;
