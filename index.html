@@ -70,6 +70,7 @@
                 <button class="tab-btn" onclick="openSection(event, 'ferie')">Ferie, permessi e malattia</button>
                 <button class="tab-btn" onclick="openSection(event, 'dashboard')">Dashboard di riepilogo</button>
                 <button class="tab-btn" onclick="openSection(event, 'impostazioni')">Impostazioni parametri</button>
+                <button class="tab-btn" onclick="logout()" style="color: #e74c3c; margin-top: auto; border-top: 1px solid #34495e; font-weight: bold;">Esci</button>
             </div>
         </div>
 
@@ -222,6 +223,15 @@
                 console.error('Errore Auth:', error);
                 alert('Impossibile connettersi al servizio di autenticazione.');
             }
+        }
+        function logout() {
+            sessionToken = "";
+            document.getElementById('iframeDashboard').src = "about:blank";
+            document.getElementById('iframeImpostazioni').src = "about:blank";
+            document.getElementById('companyCode').value = "";
+            document.getElementById('mainPanel').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'block';
+            window.close();
         }
 
         function openSection(evt, sectionId) {
