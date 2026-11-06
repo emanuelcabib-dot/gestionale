@@ -453,26 +453,53 @@
             e.preventDefault();
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true;
-            submitBtn.innerText = 'Invio in corso...';
+            submitBtn.innerText = 'Verifica in corso...';
             
             const dataRegistroRaw = document.getElementById('r_data').value;
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
-            const payload = {
-                tipo: "registro",
-                token: sessionToken,
-                data: dataRegistroGrist,
-                tipoAssenza: document.getElementById('r_tipo').value,
-                quantita: parseFloat(document.getElementById('r_quantita').value),
-                note: document.getElementById('r_note').value
-            };
             try {
+                // --- CONTROLLO DUPLICATI ASSENZE ---
+                const checkResponse = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: "check_assenza",
+                        token: sessionToken,
+                        data: dataRegistroGrist
+                    })
+                });
+
+                if (checkResponse.ok) {
+                    const checkData = await checkResponse.json();
+                    if (checkData.esiste) {
+                        alert(`Errore bloccante: è già presente un'assenza registrata (Ferie/Permesso/Malattia) nella data del ${dataRegistroGrist}.`);
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = 'Invia assenza';
+                        return; // Blocca l'invio e interrompe la funzione
+                    }
+                } else {
+                    console.error("Impossibile completare la verifica dei duplicati.");
+                }
+
+                // --- PROCEDE CON L'INVIO SE NON CI SONO DUPLICATI ---
+                submitBtn.innerText = 'Invio in corso...';
+                const payload = {
+                    tipo: "registro",
+                    token: sessionToken,
+                    data: dataRegistroGrist,
+                    tipoAssenza: document.getElementById('r_tipo').value,
+                    quantita: parseFloat(document.getElementById('r_quantita').value),
+                    note: document.getElementById('r_note').value
+                };
+
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+
                 if (response.ok) {
                     alert('Richiesta registrata con successo!');
                     document.getElementById('formRegistro').reset();
