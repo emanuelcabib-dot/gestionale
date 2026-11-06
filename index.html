@@ -173,7 +173,6 @@
         let sessionToken = "";
         let eventiGiornoCorrente = [];
 
-        // Generazione automatica delle Opzioni Ore (00-23)
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
             let opt = document.createElement('option');
@@ -182,7 +181,6 @@
             selectOre.appendChild(opt);
         }
 
-        // Generazione automatica delle Opzioni Minuti (00-59)
         const selectMinuti = document.getElementById('p_minuti');
         for (let i = 0; i < 60; i++) {
             let opt = document.createElement('option');
@@ -195,11 +193,8 @@
             const d = new Date();
             const offset = d.getTimezoneOffset();
             const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T')[0]; // <--- AGGIUNTO [0] PER ESTRARRE IL TESTO PULITO
+            return localDate.toISOString().split('T')[0];
         }
-
-
-
 
         function setOrarioAttuale() {
             const oraCorrente = new Date().getHours();
@@ -208,7 +203,6 @@
             document.getElementById('p_minuti').value = minutoCorrente;
         }
 
-        // 🕒 Sincronizzazione centralizzata con Grist per il blocco duplicati remoti
         async function caricaEventiGiornoRemoti() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
@@ -237,7 +231,6 @@
             aggiornaOpzioniEvento();
         }
 
-        // ⚙️ Nasconde visibilmente e disabilita le opzioni già registrate su Grist
         function aggiornaOpzioniEvento() {
             const selectEvento = document.getElementById('p_evento');
             const opzioni = selectEvento.options;
@@ -257,14 +250,21 @@
                 }
             }
 
-            // Riposiziona stabilmente la selezione se l'evento corrente è diventato un duplicato nascosto
-            if (eventiGiornoCorrente.includes(selectEvento.value)) {
-                selectEvento.value = primoValido || "";
+            if (primoValido) {
+                if (!eventiGiornoCorrente.includes(selectEvento.value)) {
+                    // Mantiene stabile la selezione
+                } else {
+                    selectEvento.value = primoValido;
+                }
+            } else {
+                selectEvento.value = "";
             }
         }
 
-        // Event listener per gestire il cambio data
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
+        document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
+        document.getElementById('p_minuti').addEventListener('change', aggiornaOpzioniEvento);
+
         async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
             const errorMessage = document.getElementById('errorMessage');
@@ -311,7 +311,6 @@
             document.getElementById('loginSection').style.display = 'block';
             window.close();
         }
-
         async function generaPDF(evt) {
             const MAKE_WEBHOOK_URL = 'https://make.com';
             const annoSelezionato = document.getElementById('pdfAnno').value;
@@ -366,6 +365,7 @@
         document.getElementById('companyCode').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { checkCode(); }
         });
+
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -376,7 +376,7 @@
             const orarioDecimale = ora + (minuto / 60);
 
             if (eventiGiornoCorrente.includes(eventoSel)) {
-                alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi.`);
+                alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi da questo o da un altro dispositivo.`);
                 return;
             }
 
@@ -385,7 +385,7 @@
             
             if (giornoSettimana === 0 || giornoSettimana === 6) {
                 const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
-                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare?`);
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento in questo giorno festivo?`);
                 if (!confermaFestivo) return;
             }
 
@@ -407,7 +407,7 @@
             }
 
             if (orarioInsolito) {
-                const confermaOrario = confirm(`${messaggioAvviso}\nVuoi procedere comunque?`);
+                const confermaOrario = confirm(`${messaggioAvviso}\nL'orario inserito risulta insolito rispetto ai parametri aziendali.\n\nVuoi confermare e inviare comunque la registrazione?`);
                 if (!confermaOrario) return;
             }
 
@@ -434,14 +434,14 @@
                 if (response.ok) {
                     alert('Presenza registrata con successo!');
                     document.getElementById('formPresenze').reset();
-                    document.getElementById('p_data').value = getOggiInLocale();
+                    document.getElementById('p_data').value = dataStringa; 
                     setOrarioAttuale();
-                    await caricaEventiGiornoRemoti();
+                    await caricaEventiGiornoRemoti(); 
                 } else { 
-                    alert('Errore server o sessione scaduta.'); 
+                    alert('Errore lato server o sessione non valida.'); 
                 }
             } catch (error) {
-                alert('Impossibile connettersi al servizio.');
+                alert('Impossibile connettersi al servizio di salvataggio.');
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerText = 'Conferma presenza';
@@ -472,10 +472,10 @@
                     document.getElementById('formRegistro').reset();
                     document.getElementById('r_data').value = getOggiInLocale();
                 } else { 
-                    alert('Errore server o sessione scaduta.'); 
+                    alert('Errore lato server o sessione non valida.'); 
                 }
             } catch (error) {
-                alert('Impossibile connettersi al servizio.');
+                alert('Impossibile connettersi al servizio di salvataggio.');
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerText = 'Invia assenza';
@@ -484,3 +484,4 @@
     </script>
 </body>
 </html>
+
