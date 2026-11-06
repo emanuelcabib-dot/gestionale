@@ -267,47 +267,65 @@
             }
         }
 
-        // Aggiorna lo storico duplicati non appena l'utente interagisce con calendario e orari
+        // Aggiorna lo storico duplicati non appena l'utente cambia la data
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
-        document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
-        document.getElementById('p_minuti').addEventListener('change', aggiornaOpzioniEvento);
 
-        async function checkCode() {
-            const codeInput = document.getElementById('companyCode').value;
-            const errorMessage = document.getElementById('errorMessage');
+        // 🕒 Sincronizzazione centralizzata con Grist per il blocco duplicati remoti
+        async function caricaEventiGiornoRemoti() {
+            if (!sessionToken) return;
+            const dataSel = document.getElementById('p_data').value;
+            if (!dataSel) return;
             
             try {
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "auth", code: codeInput })
+                    body: JSON.stringify({
+                        tipo: "get_presenze",
+                        token: sessionToken,
+                        data: dataSel
+                    })
                 });
-
                 if (response.ok) {
-                    const resData = await response.json();
-                    sessionToken = resData.token;
-
-                    document.getElementById('iframeDashboard').src = resData.urls.dashboard;
-                    document.getElementById('iframeImpostazioni').src = resData.urls.impostazioni;
-
-                    document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('mainPanel').style.display = 'flex';
-                    
-                    const oggi = getOggiInLocale();
-                    document.getElementById('p_data').value = oggi;
-                    document.getElementById('r_data').value = oggi;
-                    setOrarioAttuale();
-                    
-                    // Avvia forzatamente il controllo duplicati iniziale per la giornata odierna
-                    await caricaEventiGiornoRemoti();
+                    const data = await response.json();
+                    eventiGiornoCorrente = data.eventi || [];
                 } else {
-                    errorMessage.style.display = 'block';
+                    eventiGiornoCorrente = [];
                 }
             } catch (error) {
-                console.error('Errore Auth:', error);
-                alert('Impossibile connettersi al servizio di autenticazione.');
+                console.error("Errore sincronizzazione server:", error);
+                eventiGiornoCorrente = [];
+            }
+            aggiornaOpzioniEvento();
+        }
+
+        // ⚙️ Nasconde visibilmente e disabilita le opzioni già registrate su Grist
+        function aggiornaOpzioniEvento() {
+            const selectEvento = document.getElementById('p_evento');
+            const opzioni = selectEvento.options;
+            let primoValido = null;
+
+            for (let i = 0; i < opzioni.length; i++) {
+                const opt = opzioni[i];
+                const val = opt.value;
+
+                if (eventiGiornoCorrente.includes(val)) {
+                    opt.style.display = "none";
+                    opt.disabled = true;
+                } else {
+                    opt.style.display = "block";
+                    opt.disabled = false;
+                    if (!primoValido) primoValido = val;
+                }
+            }
+
+            // Se l'evento attualmente selezionato è tra quelli già registrati, 
+            // sposta la selezione sul primo evento disponibile (o stringa vuota se completata)
+            if (eventiGiornoCorrente.includes(selectEvento.value)) {
+                selectEvento.value = primoValido || "";
             }
         }
+
 
         function logout() {
             sessionToken = "";
