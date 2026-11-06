@@ -171,9 +171,11 @@
     </div>
 
     <script>
-        const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
+              const WORKER_URL = 'https://workers.dev';
+        let sessionToken = "";
+        let eventiGiornoCorrente = []; // Memorizza gli eventi già salvati sul server per la data scelta
 
-        // Generazione Ore
+        // Generazione automatica delle Opzioni Ore (00-23)
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
             let opt = document.createElement('option');
@@ -182,7 +184,7 @@
             selectOre.appendChild(opt);
         }
 
-        // Generazione Minuti
+        // Generazione automatica delle Opzioni Minuti (00-59)
         const selectMinuti = document.getElementById('p_minuti');
         for (let i = 0; i < 60; i++) {
             let opt = document.createElement('option');
@@ -195,17 +197,75 @@
             const d = new Date();
             const offset = d.getTimezoneOffset();
             const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T')[0];
+            return localDate.toISOString().split('T');
         }
 
         function setOrarioAttuale() {
             const oraCorrente = new Date().getHours();
-            const minutoCorrente = new Date().getMinutes();
+            const DiagnosticMinuto = new Date().getMinutes();
             document.getElementById('p_ore').value = oraCorrente;
-            document.getElementById('p_minuti').value = minutoCorrente;
+            document.getElementById('p_minuti').value = DiagnosticMinuto;
         }
 
-        let sessionToken = "";
+        // 🕒 Sincronizzazione con il database remoto per evitare inserimenti doppi tra più dispositivi
+        async function caricaEventiGiornoRemoti() {
+            if (!sessionToken) return;
+            const dataSel = document.getElementById('p_data').value;
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: "get_presenze",
+                        token: sessionToken,
+                        data: dataSel
+                    })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    eventiGiornoCorrente = data.eventi || [];
+                } else {
+                    eventiGiornoCorrente = [];
+                }
+            } catch (error) {
+                console.error("Errore di sincronizzazione dal server:", error);
+                eventiGiornoCorrente = [];
+            }
+            aggiornaOpzioniEvento();
+        }
+
+        // ⚙️ Nasconde nella tendina le voci già registrate sul server
+        function aggiornaOpzioniEvento() {
+            const selectEvento = document.getElementById('p_evento');
+            const opzioni = selectEvento.options;
+            let primoValido = null;
+
+            for (let i = 0; i < opzioni.length; i++) {
+                const opt = opzioni[i];
+                const val = opt.value;
+
+                if (eventiGiornoCorrente.includes(val)) {
+                    opt.style.display = "none";
+                    opt.disabled = true;
+                } else {
+                    opt.style.display = "block";
+                    opt.disabled = false;
+                    if (!primoValido) primoValido = val;
+                }
+            }
+
+            if (primoValido) {
+                if (!eventiGiornoCorrente.includes(selectEvento.value)) {
+                    // Mantiene l'evento selezionato se è ancora disponibile
+                } else {
+                    selectEvento.value = primoValido;
+                }
+            } else {
+                selectEvento.value = "";
+            }
+        }
+
+        document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
 
         async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
@@ -231,6 +291,8 @@
                     document.getElementById('p_data').value = oggi;
                     document.getElementById('r_data').value = oggi;
                     setOrarioAttuale();
+                    
+                    await caricaEventiGiornoRemoti();
                 } else {
                     errorMessage.style.display = 'block';
                 }
@@ -239,8 +301,10 @@
                 alert('Impossibile connettersi al servizio di autenticazione.');
             }
         }
+
         function logout() {
             sessionToken = "";
+            eventiGiornoCorrente = [];
             document.getElementById('iframeDashboard').src = "about:blank";
             document.getElementById('iframeImpostazioni').src = "about:blank";
             document.getElementById('companyCode').value = "";
@@ -248,11 +312,8 @@
             document.getElementById('loginSection').style.display = 'block';
             window.close();
         }
-
         async function generaPDF(evt) {
-            
-            const MAKE_WEBHOOK_URL = 'https://hook.eu1.make.com/e8cxdpq8m5eon1e2kspt04yrzumy58yl';
-            
+            const MAKE_WEBHOOK_URL = 'https://make.com';
             const annoSelezionato = document.getElementById('pdfAnno').value;
             const btn = evt.currentTarget;
             const vecchioTesto = btn.innerText;
@@ -305,26 +366,77 @@
             evt.currentTarget.className += " active";
         }
 
-
         document.getElementById('companyCode').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { checkCode(); }
         });
 
-        // Form Presenze
+        // Form Presenze con controlli Duplicati, Festivi e Orari standard
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            const dataStringa = document.getElementById('p_data').value;
+            const eventoSel = document.getElementById('p_evento').value;
+            const ora = parseInt(document.getElementById('p_ore').value) || 0;
+            const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
+            const orarioDecimale = ora + (minuto / 60);
+
+            // 1. BLOCCO ROBUSTO DUPLICATI: Controllo di sicurezza bloccante
+            if (eventiGiornoCorrente.includes(eventoSel)) {
+                alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi da questo o da un altro dispositivo.`);
+                return;
+            }
+
+            // 2. FINESTRA DI DIALOGO GIORNI FESTIVI (SABATO E DOMENICA)
+            const dataSelezionata = new Date(dataStringa);
+            const giornoSettimana = dataSelezionata.getDay(); // 0 = Domenica, 6 = Sabato
+            
+            if (giornoSettimana === 0 || giornoSettimana === 6) {
+                const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento in questo giorno festivo?`);
+                if (!confermaFestivo) {
+                    return; // Interrompe il processo se si preme "Annulla"
+                }
+            }
+
+            // 3. FINESTRA DI DIALOGO PER GLI ORARI INSOLITI
+            let orarioInsolito = false;
+            let messaggioAvviso = "";
+
+            if (eventoSel === "Ingresso" && orarioDecimale < 7) {
+                orarioInsolito = true;
+                messaggioAvviso = "Stai inserendo un INGRESSO prima delle ore 07:00.";
+            } else if (eventoSel === "Inizio Pausa" && (orarioDecimale < 12 || orarioDecimale > 14)) {
+                orarioInsolito = true;
+                messaggioAvviso = "Stai inserendo un INIZIO PAUSA fuori dalla fascia standard (12:00 - 14:00).";
+            } else if (eventoSel === "Fine Pausa" && (orarioDecimale < 12.5 || orarioDecimale > 14.5)) {
+                orarioInsolito = true;
+                messaggioAvviso = "Stai inserendo una FINE PAUSA fuori dalla fascia standard (12:30 - 14:30).";
+            } else if (eventoSel === "Uscita" && orarioDecimale < 10) {
+                orarioInsolito = true;
+                messaggioAvviso = "Stai inserendo un'USCITA anticipata prima delle ore 10:00.";
+            }
+
+            if (orarioInsolito) {
+                const confermaOrario = confirm(`${messaggioAvviso}\nL'orario inserito risulta insolito rispetto ai parametri aziendali.\n\nVuoi confermare e inviare comunque la registrazione?`);
+                if (!confermaOrario) {
+                    return; // Interrompe il processo se si preme "Annulla"
+                }
+            }
+
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true;
             submitBtn.innerText = 'Invio in corso...';
+            
             const payload = {
                 tipo: "presenze",
                 token: sessionToken,
-                data: document.getElementById('p_data').value,
-                evento: document.getElementById('p_evento').value,
-                ore: parseInt(document.getElementById('p_ore').value),
-                minuti: parseInt(document.getElementById('p_minuti').value),
+                data: dataStringa,
+                evento: eventoSel,
+                ore: ora,
+                minuti: minuto,
                 note: document.getElementById('p_note').value
             };
+            
             try {
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
@@ -336,6 +448,7 @@
                     document.getElementById('formPresenze').reset();
                     document.getElementById('p_data').value = getOggiInLocale();
                     setOrarioAttuale();
+                    await caricaEventiGiornoRemoti(); // Aggiorna subito la lista dal server per aggiornare i blocchi
                 } else { 
                     alert('Errore lato server o sessione non valida.'); 
                 }
@@ -381,4 +494,5 @@
                 submitBtn.innerText = 'Invia assenza';
             }
         });
+
     </script>
