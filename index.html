@@ -171,11 +171,10 @@
     </div>
 
     <script>
-              const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
+        const WORKER_URL = 'https://workers.dev';
         let sessionToken = "";
-        let eventiGiornoCorrente = []; // Memorizza gli eventi già salvati sul server per la data scelta
+        let eventiGiornoCorrente = [];
 
-        // Generazione automatica delle Opzioni Ore (00-23)
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
             let opt = document.createElement('option');
@@ -184,7 +183,6 @@
             selectOre.appendChild(opt);
         }
 
-        // Generazione automatica delle Opzioni Minuti (00-59)
         const selectMinuti = document.getElementById('p_minuti');
         for (let i = 0; i < 60; i++) {
             let opt = document.createElement('option');
@@ -197,17 +195,16 @@
             const d = new Date();
             const offset = d.getTimezoneOffset();
             const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T');
+            return localDate.toISOString().split('T')[0]; // CORRETTO: Ritorna una stringa di testo pulita
         }
 
         function setOrarioAttuale() {
             const oraCorrente = new Date().getHours();
-            const DiagnosticMinuto = new Date().getMinutes();
+            const minutoCorrente = new Date().getMinutes();
             document.getElementById('p_ore').value = oraCorrente;
-            document.getElementById('p_minuti').value = DiagnosticMinuto;
+            document.getElementById('p_minuti').value = minutoCorrente;
         }
 
-        // 🕒 Sincronizzazione con il database remoto per evitare inserimenti doppi tra più dispositivi
         async function caricaEventiGiornoRemoti() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
@@ -228,13 +225,12 @@
                     eventiGiornoCorrente = [];
                 }
             } catch (error) {
-                console.error("Errore di sincronizzazione dal server:", error);
+                console.error("Errore sincronizzazione server:", error);
                 eventiGiornoCorrente = [];
             }
             aggiornaOpzioniEvento();
         }
 
-        // ⚙️ Nasconde nella tendina le voci già registrate sul server
         function aggiornaOpzioniEvento() {
             const selectEvento = document.getElementById('p_evento');
             const opzioni = selectEvento.options;
@@ -256,7 +252,7 @@
 
             if (primoValido) {
                 if (!eventiGiornoCorrente.includes(selectEvento.value)) {
-                    // Mantiene l'evento selezionato se è ancora disponibile
+                    // Mantiene stabile
                 } else {
                     selectEvento.value = primoValido;
                 }
@@ -298,7 +294,7 @@
                 }
             } catch (error) {
                 console.error('Errore Auth:', error);
-                alert('Impossibile connettersi al servizio di autenticazione.');
+                alert('Impossibile connettersi al servicio di autenticazione.');
             }
         }
 
@@ -325,10 +321,7 @@
                 const response = await fetch(MAKE_WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        token: sessionToken,
-                        anno: annoSelezionato 
-                    })
+                    body: JSON.stringify({ token: sessionToken, anno: annoSelezionato })
                 });
 
                 if (response.ok) {
@@ -370,7 +363,6 @@
             if (e.key === 'Enter') { checkCode(); }
         });
 
-        // Form Presenze con controlli Duplicati, Festivi e Orari standard
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -380,25 +372,20 @@
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
             const orarioDecimale = ora + (minuto / 60);
 
-            // 1. BLOCCO ROBUSTO DUPLICATI: Controllo di sicurezza bloccante
             if (eventiGiornoCorrente.includes(eventoSel)) {
                 alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi da questo o da un altro dispositivo.`);
                 return;
             }
 
-            // 2. FINESTRA DI DIALOGO GIORNI FESTIVI (SABATO E DOMENICA)
             const dataSelezionata = new Date(dataStringa);
-            const giornoSettimana = dataSelezionata.getDay(); // 0 = Domenica, 6 = Sabato
+            const giornoSettimana = dataSelezionata.getDay(); 
             
             if (giornoSettimana === 0 || giornoSettimana === 6) {
                 const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
                 const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento in questo giorno festivo?`);
-                if (!confermaFestivo) {
-                    return; // Interrompe il processo se si preme "Annulla"
-                }
+                if (!confermaFestivo) return;
             }
 
-            // 3. FINESTRA DI DIALOGO PER GLI ORARI INSOLITI
             let orarioInsolito = false;
             let messaggioAvviso = "";
 
@@ -418,9 +405,7 @@
 
             if (orarioInsolito) {
                 const confermaOrario = confirm(`${messaggioAvviso}\nL'orario inserito risulta insolito rispetto ai parametri aziendali.\n\nVuoi confermare e inviare comunque la registrazione?`);
-                if (!confermaOrario) {
-                    return; // Interrompe il processo se si preme "Annulla"
-                }
+                if (!confermaOrario) return;
             }
 
             const submitBtn = e.target.querySelector('button');
@@ -448,7 +433,7 @@
                     document.getElementById('formPresenze').reset();
                     document.getElementById('p_data').value = getOggiInLocale();
                     setOrarioAttuale();
-                    await caricaEventiGiornoRemoti(); // Aggiorna subito la lista dal server per aggiornare i blocchi
+                    await caricaEventiGiornoRemoti(); 
                 } else { 
                     alert('Errore lato server o sessione non valida.'); 
                 }
@@ -460,7 +445,6 @@
             }
         });
 
-        // Form Registro Assenze
         document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = e.target.querySelector('button');
