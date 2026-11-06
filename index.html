@@ -474,7 +474,7 @@
                 if (checkResponse.ok) {
                     const checkData = await checkResponse.json();
                     if (checkData.esiste) {
-                        alert(`Errore bloccante: è già presente un'assenza registrata (Ferie/Permesso/Malattia) nella data del ${dataRegistroGrist}.`);
+                        alert(`E' già presente un'assenza registrata (Ferie/Permesso/Malattia) nella data del ${dataRegistroGrist}.`);
                         submitBtn.disabled = false;
                         submitBtn.innerText = 'Invia assenza';
                         return; // Blocca l'invio e interrompe la funzione
