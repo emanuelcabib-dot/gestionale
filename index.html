@@ -139,7 +139,7 @@
                             <option value="Ferie rettificate">Ferie rettificate</option>
                             <option value="Permesso">Permesso</option>
                             <option value="Permessi liquidati">Permessi liquidati</option>
-                            <option value="Permessi rettificati">Permessi rettificati</option>
+                            <option value="Permessi rettificati">Permessi rettificatiest</option>
                             <option value="Malattia">Malattia</option>
                         </select>
                     </div>
@@ -191,9 +191,10 @@
 
         function getOggiInLocale() {
             const d = new Date();
-            const offset = d.getTimezoneOffset();
-            const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T')[0];
+            const anno = d.getFullYear();
+            const mese = String(d.getMonth() + 1).padStart(2, '0');
+            const giorno = String(d.getDate()).padStart(2, '0');
+            return `${anno}-${mese}-${giorno}`;
         }
 
         function setOrarioAttuale() {
@@ -208,6 +209,10 @@
             const dataSel = document.getElementById('p_data').value;
             if (!dataSel) return;
             
+            // CONVERSIONE: AAAA-MM-DD -> GG/MM/AAAA per Grist
+            const [anno, mese, giorno] = dataSel.split('-');
+            const dataFormatoGrist = `${giorno}/${mese}/${anno}`;
+            
             try {
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
@@ -215,7 +220,7 @@
                     body: JSON.stringify({
                         tipo: "get_presenze",
                         token: sessionToken,
-                        data: dataSel
+                        data: dataFormatoGrist
                     })
                 });
                 if (response.ok) {
@@ -250,21 +255,14 @@
                 }
             }
 
-            if (primoValido) {
-                if (!eventiGiornoCorrente.includes(selectEvento.value)) {
-                    // Mantiene stabile la selezione
-                } else {
-                    selectEvento.value = primoValido;
-                }
-            } else {
-                selectEvento.value = "";
+            if (eventiGiornoCorrente.includes(selectEvento.value) || !selectEvento.value) {
+                selectEvento.value = primoValido || "";
             }
         }
 
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
         document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
         document.getElementById('p_minuti').addEventListener('change', aggiornaOpzioniEvento);
-
         async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
             const errorMessage = document.getElementById('errorMessage');
@@ -311,6 +309,7 @@
             document.getElementById('loginSection').style.display = 'block';
             window.close();
         }
+
         async function generaPDF(evt) {
             const MAKE_WEBHOOK_URL = 'https://make.com';
             const annoSelezionato = document.getElementById('pdfAnno').value;
@@ -365,7 +364,6 @@
         document.getElementById('companyCode').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { checkCode(); }
         });
-
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -376,7 +374,7 @@
             const orarioDecimale = ora + (minuto / 60);
 
             if (eventiGiornoCorrente.includes(eventoSel)) {
-                alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi da questo o da un altro dispositivo.`);
+                alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi.`);
                 return;
             }
 
@@ -385,7 +383,7 @@
             
             if (giornoSettimana === 0 || giornoSettimana === 6) {
                 const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
-                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento in questo giorno festivo?`);
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento?`);
                 if (!confermaFestivo) return;
             }
 
@@ -407,7 +405,7 @@
             }
 
             if (orarioInsolito) {
-                const confermaOrario = confirm(`${messaggioAvviso}\nL'orario inserito risulta insolito rispetto ai parametri aziendali.\n\nVuoi confermare e inviare comunque la registrazione?`);
+                const confermaOrario = confirm(`${messaggioAvviso}\nVuoi confermare e inviare comunque la registrazione?`);
                 if (!confermaOrario) return;
             }
 
@@ -415,10 +413,13 @@
             submitBtn.disabled = true;
             submitBtn.innerText = 'Invio in corso...';
             
+            const [annoP, meseP, giornoP] = dataStringa.split('-');
+            const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
+
             const payload = {
                 tipo: "presenze",
                 token: sessionToken,
-                data: dataStringa,
+                data: dataPresenzaGrist,
                 evento: eventoSel,
                 ore: ora,
                 minuti: minuto,
@@ -434,9 +435,9 @@
                 if (response.ok) {
                     alert('Presenza registrata con successo!');
                     document.getElementById('formPresenze').reset();
-                    document.getElementById('p_data').value = dataStringa; 
+                    document.getElementById('p_data').value = getOggiInLocale();
                     setOrarioAttuale();
-                    await caricaEventiGiornoRemoti(); 
+                    await caricaEventiGiornoRemoti();
                 } else { 
                     alert('Errore lato server o sessione non valida.'); 
                 }
@@ -453,10 +454,15 @@
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true;
             submitBtn.innerText = 'Invio in corso...';
+            
+            const dataRegistroRaw = document.getElementById('r_data').value;
+            const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
+            const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
+
             const payload = {
                 tipo: "registro",
                 token: sessionToken,
-                data: document.getElementById('r_data').value,
+                data: dataRegistroGrist,
                 tipoAssenza: document.getElementById('r_tipo').value,
                 quantita: parseFloat(document.getElementById('r_quantita').value),
                 note: document.getElementById('r_note').value
@@ -484,4 +490,6 @@
     </script>
 </body>
 </html>
+
+
 
