@@ -139,7 +139,7 @@
                             <option value="Ferie rettificate">Ferie rettificate</option>
                             <option value="Permesso">Permesso</option>
                             <option value="Permessi liquidati">Permessi liquidati</option>
-                            <option value="Permessi rettificati">Permessi rettificatiest</option>
+                            <option value="Permessi rettificati">Permessi rettificate</option>
                             <option value="Malattia">Malattia</option>
                         </select>
                     </div>
@@ -474,7 +474,7 @@
                 if (checkResponse.ok) {
                     const checkData = await checkResponse.json();
                     if (checkData.esiste) {
-                        alert(`Errore bloccante: è già presente un'assenza registrata (Ferie/Permesso/Malattia) nella data del ${dataRegistroGrist}.`);
+                        alert(`è già presente un'assenza registrata (Ferie/Permesso/Malattia) nella data del ${dataRegistroGrist}.`);
                         submitBtn.disabled = false;
                         submitBtn.innerText = 'Invia assenza';
                         return; // Blocca l'invio e interrompe la funzione
