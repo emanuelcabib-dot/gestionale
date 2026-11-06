@@ -175,6 +175,7 @@
         let sessionToken = "";
         let eventiGiornoCorrente = [];
 
+        // Generazione automatica delle Opzioni Ore (00-23)
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
             let opt = document.createElement('option');
@@ -183,6 +184,7 @@
             selectOre.appendChild(opt);
         }
 
+        // Generazione automatica delle Opzioni Minuti (00-59)
         const selectMinuti = document.getElementById('p_minuti');
         for (let i = 0; i < 60; i++) {
             let opt = document.createElement('option');
@@ -195,7 +197,7 @@
             const d = new Date();
             const offset = d.getTimezoneOffset();
             const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T')[0]; // CORRETTO: Ritorna una stringa di testo pulita
+            return localDate.toISOString().split('T')[0]; // Ritorna stringa pulita AAAA-MM-DD
         }
 
         function setOrarioAttuale() {
@@ -205,9 +207,12 @@
             document.getElementById('p_minuti').value = minutoCorrente;
         }
 
+        // 🕒 Sincronizzazione centralizzata con Grist per il blocco duplicati remoti
         async function caricaEventiGiornoRemoti() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
+            if (!dataSel) return;
+            
             try {
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
@@ -231,6 +236,7 @@
             aggiornaOpzioniEvento();
         }
 
+        // ⚙️ Nasconde visibilmente dalla bacheca le opzioni già registrate su Grist
         function aggiornaOpzioniEvento() {
             const selectEvento = document.getElementById('p_evento');
             const opzioni = selectEvento.options;
@@ -252,15 +258,16 @@
 
             if (primoValido) {
                 if (!eventiGiornoCorrente.includes(selectEvento.value)) {
-                    // Mantiene stabile
+                    // Mantiene la stabilità di selezione corrente
                 } else {
                     selectEvento.value = primoValido;
                 }
             } else {
-                selectEvento.value = "";
+                selectEvento.value = ""; // Giornata completata
             }
         }
 
+        // Aggiorna lo storico duplicati non appena l'utente cambia manualmente il giorno sul calendario
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
 
         async function checkCode() {
@@ -283,18 +290,20 @@
 
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('mainPanel').style.display = 'flex';
+                    
                     const oggi = getOggiInLocale();
                     document.getElementById('p_data').value = oggi;
                     document.getElementById('r_data').value = oggi;
                     setOrarioAttuale();
                     
+                    // Avvia forzatamente il controllo duplicati iniziale per la giornata odierna
                     await caricaEventiGiornoRemoti();
                 } else {
                     errorMessage.style.display = 'block';
                 }
             } catch (error) {
                 console.error('Errore Auth:', error);
-                alert('Impossibile connettersi al servicio di autenticazione.');
+                alert('Impossibile connettersi al servizio di autenticazione.');
             }
         }
 
@@ -372,6 +381,7 @@
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
             const orarioDecimale = ora + (minuto / 60);
 
+            // Blocco di sicurezza tassativo sui duplicati remoti
             if (eventiGiornoCorrente.includes(eventoSel)) {
                 alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi da questo o da un altro dispositivo.`);
                 return;
@@ -433,7 +443,7 @@
                     document.getElementById('formPresenze').reset();
                     document.getElementById('p_data').value = getOggiInLocale();
                     setOrarioAttuale();
-                    await caricaEventiGiornoRemoti(); 
+                    await caricaEventiGiornoRemoti(); // Forza l'allineamento immediato dal database Grist
                 } else { 
                     alert('Errore lato server o sessione non valida.'); 
                 }
@@ -478,5 +488,4 @@
                 submitBtn.innerText = 'Invia assenza';
             }
         });
-
     </script>
