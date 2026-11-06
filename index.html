@@ -171,7 +171,7 @@
     </div>
 
     <script>
-        const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
+               const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
         let sessionToken = "";
         let eventiGiornoCorrente = [];
 
@@ -197,7 +197,7 @@
             const d = new Date();
             const offset = d.getTimezoneOffset();
             const localDate = new Date(d.getTime() - (offset * 60 * 1000));
-            return localDate.toISOString().split('T')[0]; // Ritorna stringa pulita AAAA-MM-DD
+            return localDate.toISOString().split('T')[0]; // FISSO: Estrae la stringa di testo pulita AAAA-MM-DD
         }
 
         function setOrarioAttuale() {
@@ -267,8 +267,10 @@
             }
         }
 
-        // Aggiorna lo storico duplicati non appena l'utente cambia manualmente il giorno sul calendario
+        // Aggiorna lo storico duplicati non appena l'utente interagisce con calendario e orari
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
+        document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
+        document.getElementById('p_minuti').addEventListener('change', aggiornaOpzioniEvento);
 
         async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
@@ -488,4 +490,5 @@
                 submitBtn.innerText = 'Invia assenza';
             }
         });
+
     </script>
