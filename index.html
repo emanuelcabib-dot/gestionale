@@ -448,48 +448,94 @@ async function salvaEGeneraPDF() {
         const resJson = await response.json();
         
         if (response.ok && resJson.success) {
-            // Genera il PDF sul browser usando il testo inviato dal Worker
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             let page = pdfDoc.addPage([595.28, 841.89]);
+            
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            const fontTitolo = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-            page.drawText(`REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`, { x: 50, y: 780, size: 18, font: fontTitolo, color: rgb(0.13, 0.59, 0.95) });
-            page.drawLine({ start: { x: 50, y: 765 }, end: { x: 545, y: 765 }, thickness: 2, color: rgb(0.13, 0.59, 0.95) });
+            // Estrazione pulita dei dati dal testo del report eliminando i divisori testuali grezzi
+            const testo = resJson.testoReport;
+            const estraiValore = (chiave) => {
+                const regex = new RegExp(chiave + "\\s*:\\s*([^\\n]+)");
+                const match = testo.match(regex);
+                return match ? match[1].trim() : '0';
+            };
 
-            const righe = resJson.testoReport.split('\n');
-            let yCoord = 730;
-            const limiteMargineDestro = 520;
-            const deltaAltezza = 16;
+            const ferieMaturate = estraiValore("Ferie maturate nel mese");
+            const ferieGodute = estraiValore("Ferie godute \\(vacanze reali\\)");
+            const ferieLiquidate = estraiValore("Ferie liquidate/pagate");
+            const saldoFerie = estraiValore("SALDO FERIE A FINE MESE");
 
-            for (const riga of righe) {
-                let stringaAttuale = '';
-                const parole = riga.split(' ');
-                for (const parola of parole) {
-                    const tentativo = stringaAttuale + parola + ' ';
-                    const larghezzaTest = fontNormale.widthOfTextAtSize(tentativo, 11);
-                    if (larghezzaTest > limiteMargineDestro && stringaAttuale !== '') {
-                        if (yCoord < 50) {
-                            page = pdfDoc.addPage([595.28, 841.89]);
-                            yCoord = 800;
-                        }
-                        page.drawText(stringaAttuale, { x: 50, y: yCoord, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
-                        yCoord -= deltaAltezza;
-                        stringaAttuale = parola + ' ';
-                    } else {
-                        stringaAttuale = tentativo;
-                    }
-                }
-                if (stringaAttuale !== '') {
-                    if (yCoord < 50) {
-                        page = pdfDoc.addPage([595.28, 841.89]);
-                        yCoord = 800;
-                    }
-                    page.drawText(stringaAttuale, { x: 50, y: yCoord, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
-                    yCoord -= deltaAltezza;
-                }
-            }
+            const permessiMaturati = estraiValore("Permessi maturati nel mese");
+            const permessiFatti = estraiValore("Permessi fatti \\(ore assenza\\)");
+            const permessiLiquidati = estraiValore("Permessi liquidati/pagate");
+            const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE");
+
+            const malattiaGiorni = estraiValore("Giorni di malattia nel mese");
+
+            // Intestazione moderna ad alto contrasto (Blunotte aziendale)
+            page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
+            page.drawText("PROSPETTO RIEPILOGATIVO AZIENDALE", { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
+            page.drawText(`REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`, { x: 45, y: 770, size: 22, font: fontBold, color: rgb(1, 1, 1) });
+
+            let y = 680;
+
+            // Renderizzatore dinamico delle sezioni a blocchi visivi (Box con bordo sinistro evidenziato)
+            const disegnaSezione = (titoloSezione, righeDati, voceSaldo) => {
+                const altezzaBox = 45 + (righeDati.length * 22) + 35;
+                
+                // Sfondo del box
+                page.drawRectangle({ x: 45, y: y - altezzaBox, width: 505.28, height: altezzaBox, color: rgb(0.96, 0.97, 0.98) });
+                // Linea di accento azzurra
+                page.drawRectangle({ x: 45, y: y - altezzaBox, width: 4, height: altezzaBox, color: rgb(0.2, 0.6, 0.86) });
+
+                // Titolo Sezione
+                page.drawText(titoloSezione.toUpperCase(), { x: 65, y: y - 28, size: 12, font: fontBold, color: rgb(0.17, 0.24, 0.31) });
+                
+                let rigaY = y - 53;
+                righeDati.forEach(riga => {
+                    page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontNormale, color: rgb(0.4, 0.45, 0.5) });
+                    page.drawText(riga.valore, { x: 400, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
+                    rigaY -= 22;
+                });
+
+                // Separatore interno prima del saldo finale
+                page.drawLine({ start: { x: 65, y: rigaY + 12 }, end: { x: 525, y: rigaY + 12 }, thickness: 0.5, color: rgb(0.85, 0.87, 0.89) });
+
+                // Totale saldo evidenziato in verde
+                page.drawText(voceSaldo.label, { x: 65, y: rigaY, size: 11, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
+                page.drawText(voceSaldo.valore, { x: 400, y: rigaY, size: 12, font: fontBold, color: rgb(0.18, 0.64, 0.34) });
+
+                y -= (altezzaBox + 25);
+            };
+
+            // Sezione Ferie
+            const datiFerie = [
+                { label: "Ferie maturate nel periodo", valore: ferieMaturate },
+                { label: "Ferie godute (giorni effettivi)", valore: ferieGodute }
+            ];
+            if (ferieLiquidate !== '0') datiFerie.push({ label: "Ferie liquidate in busta paga", valore: ferieLiquidate });
+            disegnaSezione("Consuntivo Annuo Ferie", datiFerie, { label: "Saldo ferie disponibile a fine mese", valore: saldoFerie });
+
+            // Sezione Permessi
+            const datiPermessi = [
+                { label: "Permessi maturati nel periodo", valore: permessiMaturati },
+                { label: "Permessi fruiti (ore totali)", valore: permessiFatti }
+            ];
+            if (permessiLiquidati !== '0') datiPermessi.push({ label: "Permessi liquidati in busta paga", valore: permessiLiquidati });
+            disegnaSezione("Consuntivo Annuo Permessi", datiPermessi, { label: "Saldo permessi residui a fine mese", valore: saldoPermessi });
+
+            // Sezione Malattia
+            disegnaSezione("Eventi e Certificati Medici", 
+                [{ label: "Giorni di assenza per malattia giustificata", valore: malattiaGiorni }], 
+                { label: "Totale giornate di malattia nel mese", valore: malattiaGiorni.replace("giorni", "").trim() + " giorni" }
+            );
+
+            // Piè di pagina formale fisso
+            page.drawLine({ start: { x: 45, y: 50 }, end: { x: 550, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+            page.drawText("Documento digitale generato automaticamente dal sistema gestionale.", { x: 45, y: 38, size: 8, font: fontNormale, color: rgb(0.6, 0.65, 0.7) });
 
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -512,6 +558,7 @@ async function salvaEGeneraPDF() {
         btn.innerText = 'Genera PDF'; 
     }
 }
+
     </script>
 </body>
 </html>
