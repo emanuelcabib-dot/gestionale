@@ -71,16 +71,7 @@
                 <button class="tab-btn" onclick="openSection(event, 'dashboard')">Dashboard di riepilogo</button>
                 <button class="tab-btn" onclick="openSection(event, 'impostazioni')">Impostazioni parametri</button>
                 <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
-                    <label for="pdfAnno" style="display:block; color:#bdc3c7; font-size:12px; margin-bottom:5px;">Seleziona Anno Report:</label>
-                    <select id="pdfAnno" style="width:100%; padding:8px; border-radius:4px; border:none; background-color:#34495e; color:white; font-size:14px; margin-bottom:10px;">
-                        <option value="TUTTI">Tutti gli anni</option>
-                        <option value="2023">2023</option>
-                        <option value="2024">2024</option>
-                        <option value="2025">2025</option>
-                        <option value="2026">2026</option>
-                    </select>
-                    <button class="tab-btn" onclick="generaPDF(event)" style="padding:10px 0; color:#2ecc71; font-weight:bold; background:none; border:none; text-align:left; width:100%;">📥 Scarica PDF</button>
-                    <button class="tab-btn" onclick="logout()" style="padding:10px 0; color:#e74c3c; font-weight:bold; background:none; border:none; text-align:left; width:100%; margin-top:5px;">Esci</button>
+                    <button class="tab-btn" onclick="logout()" style="padding:10px 0; color:#e74c3c; font-weight:bold; background:none; border:none; text-align:left; width:100%;">Esci</button>
                 </div>
             </div>
         </div>
@@ -144,8 +135,10 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="r_quantita">Quantità:</label>
-                        <input type="number" id="r_quantita" step="0.1" min="0" placeholder="Es. ore o giorni" required>
+                        <label for="r_quantita">Quantità (ore o giorni):</label>
+                        <select id="r_quantita" required>
+                            <!-- Generato via Script da 1 a 8 -->
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="r_note">Note:</label>
@@ -189,6 +182,15 @@
             selectMinuti.appendChild(opt);
         }
 
+        // Generazione tendina Quantità da 1 a 8 per modulo assenze
+        const selectQuantita = document.getElementById('r_quantita');
+        for (let i = 1; i <= 8; i++) {
+            let opt = document.createElement('option');
+            opt.value = i;
+            opt.innerText = i;
+            selectQuantita.appendChild(opt);
+        }
+
         function getOggiInLocale() {
             const d = new Date();
             const anno = d.getFullYear();
@@ -209,7 +211,6 @@
             const dataSel = document.getElementById('p_data').value;
             if (!dataSel) return;
             
-            // CONVERSIONE: AAAA-MM-DD -> GG/MM/AAAA per Grist
             const [anno, mese, giorno] = dataSel.split('-');
             const dataFormatoGrist = `${giorno}/${mese}/${anno}`;
             
@@ -263,6 +264,7 @@
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
         document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
         document.getElementById('p_minuti').addEventListener('change', aggiornaOpzioniEvento);
+
         async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
             const errorMessage = document.getElementById('errorMessage');
@@ -310,44 +312,6 @@
             window.close();
         }
 
-        async function generaPDF(evt) {
-            const MAKE_WEBHOOK_URL = 'https://make.com';
-            const annoSelezionato = document.getElementById('pdfAnno').value;
-            const btn = evt.currentTarget;
-            const vecchioTesto = btn.innerText;
-            
-            btn.disabled = true;
-            btn.innerText = '⏳ Generazione...';
-
-            try {
-                const response = await fetch(MAKE_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: sessionToken, anno: annoSelezionato })
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `Report_Ferie_${annoSelezionato}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                } else {
-                    alert('Errore lato server durante la creazione del PDF.');
-                }
-            } catch (error) {
-                console.error('Errore PDF:', error);
-                alert('Impossibile connettersi al servizio di generazione.');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = vecchioTesto;
-            }
-        }
-
         function openSection(evt, sectionId) {
             const sections = document.getElementsByClassName("section");
             for (let i = 0; i < sections.length; i++) { 
@@ -364,6 +328,7 @@
         document.getElementById('companyCode').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { checkCode(); }
         });
+
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -383,7 +348,8 @@
             
             if (giornoSettimana === 0 || giornoSettimana === 6) {
                 const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
-                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento?`);
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.
+Vuoi confermare l'inserimento?`);
                 if (!confermaFestivo) return;
             }
 
@@ -405,7 +371,8 @@
             }
 
             if (orarioInsolito) {
-                const confermaOrario = confirm(`${messaggioAvviso}\nVuoi confermare e inviare comunque la registrazione?`);
+                const confermaOrario = confirm(`${messaggioAvviso}
+Vuoi confermare e inviare comunque la registrazione?`);
                 if (!confermaOrario) return;
             }
 
@@ -456,6 +423,22 @@
             submitBtn.innerText = 'Verifica in corso...';
             
             const dataRegistroRaw = document.getElementById('r_data').value;
+            
+            // CONTROLLO SABATO E DOMENICA PER LE ASSENZE
+            const dataSelezionata = new Date(dataRegistroRaw);
+            const giornoSettimana = dataSelezionata.getDay(); 
+            
+            if (giornoSettimana === 0 || giornoSettimana === 6) {
+                const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di assenza di ${nomeGiorno}.
+Vuoi confermare l'inserimento?`);
+                if (!confermaFestivo) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = 'Invia assenza';
+                    return;
+                }
+            }
+
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
@@ -477,7 +460,7 @@
                         alert(`è già presente un'assenza registrata (Ferie/Permesso/Malattia) nella data del ${dataRegistroGrist}.`);
                         submitBtn.disabled = false;
                         submitBtn.innerText = 'Invia assenza';
-                        return; // Blocca l'invio e interrompe la funzione
+                        return; 
                     }
                 } else {
                     console.error("Impossibile completare la verifica dei duplicati.");
@@ -517,6 +500,3 @@
     </script>
 </body>
 </html>
-
-
-
