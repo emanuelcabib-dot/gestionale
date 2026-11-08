@@ -426,30 +426,92 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        async function salvaEGeneraPDF() {
-            if (!sessionToken) { alert("Sessione non valida. Effettua l'accesso."); return; }
-            const annoSel = document.getElementById('rep_anno').value;
-            const meseSel = document.getElementById('rep_mese').value;
-            const btn = document.getElementById('btnReport');
-            btn.disabled = true;
-            btn.innerText = 'Generazione...';
-            const testoDefault = `Report Mensile ufficiale generato per il periodo di ${meseSel} ${annoSel}.`;
-            try {
-                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel, testoReport: testoDefault }) });
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `Report_${meseSel}_${annoSel}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    a.remove();
-                } else { const errData = await response.json(); alert(`Errore: ${errData.errore || "Impossibile scaricare il PDF."}`); }
-            } catch (error) { console.error("Errore:", error); alert("Errore di comunicazione."); }
-            finally { btn.disabled = false; btn.innerText = 'Genera PDF'; }
+async function salvaEGeneraPDF() {
+    if (!sessionToken) { alert("Sessione non valida. Effettua l'accesso."); return; }
+    const annoSel = document.getElementById('rep_anno').value;
+    const meseSel = document.getElementById('rep_mese').value;
+    const btn = document.getElementById('btnReport');
+    
+    btn.disabled = true;
+    btn.innerText = 'Generazione...';
+    
+    try {
+        // Inviamo solo anno e mese. Il Worker calcola la formula in tempo reale e salva tutto su Grist.
+        const response = await fetch(WORKER_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) 
+        });
+        
+        if (response.ok) {
+            const resJson = await response.json();
+            
+            // Generazione istantanea del PDF nel browser tramite la stringa calcolata restituita dal Worker
+            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+            const pdfDoc = await PDFDocument.create();
+            let page = pdfDoc.addPage([595.28, 841.89]);
+            const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const fontTitolo = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+            page.drawText(`REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`, { x: 50, y: 780, size: 18, font: fontTitolo, color: rgb(0.13, 0.59, 0.95) });
+            page.drawLine({ start: { x: 50, y: 765 }, end: { x: 545, y: 765 }, thickness: 2, color: rgb(0.13, 0.59, 0.95) });
+
+            const righe = resJson.testoReport.split('\n');
+            let yCoord = 730;
+            const limiteMargineDestro = 520;
+            const deltaAltezza = 16;
+
+            for (const riga of righe) {
+                let stringaAttuale = '';
+                const parole = riga.split(' ');
+                for (const parola of parole) {
+                    const tentativo = stringaAttuale + parola + ' ';
+                    const larghezzaTest = fontNormale.widthOfTextAtSize(tentativo, 11);
+                    if (larghezzaTest > limiteMargineDestro && stringaAttuale !== '') {
+                        if (yCoord < 50) {
+                            page = pdfDoc.addPage([595.28, 841.89]);
+                            yCoord = 800;
+                        }
+                        page.drawText(stringaAttuale, { x: 50, y: yCoord, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
+                        yCoord -= deltaAltezza;
+                        stringaAttuale = parola + ' ';
+                    } else {
+                        stringaAttuale = tentativo;
+                    }
+                }
+                if (stringaAttuale !== '') {
+                    if (yCoord < 50) {
+                        page = pdfDoc.addPage([595.28, 841.89]);
+                        yCoord = 800;
+                    }
+                    page.drawText(stringaAttuale, { x: 50, y: yCoord, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
+                    yCoord -= deltaAltezza;
+                }
+            }
+
+            // Download forzato del documento
+            const pdfBytes = await pdfDoc.save();
+            const blob = new Blob([pdfBytes], { type: "application/pdf" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Report_${resJson.mese}_${resJson.anno}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+        } else { 
+            const errData = await response.json(); 
+            alert(`Errore: ${errData.error || "Impossibile elaborare il report."}`); 
         }
+    } catch (error) { 
+        console.error("Errore:", error); 
+        alert("Errore durante la generazione grafica del PDF."); 
+    } finally { 
+        btn.disabled = false; 
+        btn.innerText = 'Genera PDF'; 
+    }
+}
     </script>
 </body>
 </html>
