@@ -436,17 +436,16 @@ async function salvaEGeneraPDF() {
     btn.innerText = 'Generazione...';
     
     try {
-        // Inviamo solo anno e mese. Il Worker calcola la formula in tempo reale e salva tutto su Grist.
         const response = await fetch(WORKER_URL, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) 
         });
         
-        if (response.ok) {
-            const resJson = await response.json();
-            
-            // Generazione istantanea del PDF nel browser tramite la stringa calcolata restituita dal Worker
+        const resJson = await response.json();
+        
+        if (response.ok && resJson.success) {
+            // Genera il PDF sul browser usando il testo inviato dal Worker
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             let page = pdfDoc.addPage([595.28, 841.89]);
@@ -489,7 +488,6 @@ async function salvaEGeneraPDF() {
                 }
             }
 
-            // Download forzato del documento
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
             const url = window.URL.createObjectURL(blob);
@@ -501,8 +499,7 @@ async function salvaEGeneraPDF() {
             window.URL.revokeObjectURL(url);
             a.remove();
         } else { 
-            const errData = await response.json(); 
-            alert(`Errore: ${errData.error || "Impossibile elaborare il report."}`); 
+            alert(`Errore: ${resJson.error || "Impossibile elaborare il report."}`); 
         }
     } catch (error) { 
         console.error("Errore:", error); 
