@@ -452,21 +452,21 @@ Vuoi confermare l'inserimento?`);
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-const estraiValore = (chiave) => {
-    // CORREZIONE: raddoppiate le barre retroverse per preservare \s e \n nel costruttore RegExp
-    const regex = new RegExp(chiave + "\\s*:\\s*([^\\n]+)");
-    const match = testoMappato.match(regex);
-    return match ? match[1].trim() : '0';
-};
+            // CORREZIONE: regex con barre raddoppiate e cattura corretta del gruppo 1 tramite match[1]
+            const estraiValore = (chiave) => {
+                const regex = new RegExp(chiave + "\\s*:\\s*([^\\n\r]+)");
+                const match = testoMappato.match(regex);
+                return (match && match[1]) ? match[1].trim() : '0';
+            };
 
-
+            // Mappature flessibili per estrarre sia report mensili che annuali
             const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
-            const ferieGodute = estraiValore("Ferie godute \(vacanze reali\)") !== '0' ? estraiValore("Ferie godute \(vacanze reali\)") : estraiValore("Ferie godute nell'anno");
+            const ferieGodute = estraiValore("Ferie godute \\(vacanze reali\\)") !== '0' ? estraiValore("Ferie godute \\(vacanze reali\\)") : estraiValore("Ferie godute nell'anno");
             const ferieLiquidate = estraiValore("Ferie liquidate/pagate");
             const saldoFerie = estraiValore("SALDO FERIE A FINE MESE") !== '0' ? estraiValore("SALDO FERIE A FINE MESE") : estraiValore("SALDO FERIE A FINE ANNO");
 
             const permessiMaturati = estraiValore("Permessi maturati nel mese") !== '0' ? estraiValore("Permessi maturati nel mese") : estraiValore("Permessi maturati nell'anno");
-            const permessiFatti = estraiValore("Permessi fatti \(ore assenza\)") !== '0' ? estraiValore("Permessi fatti \(ore assenza\)") : estraiValore("Permessi fruiti nell'anno");
+            const permessiFatti = estraiValore("Permessi fatti \\(ore assenza\\)") !== '0' ? estraiValore("Permessi fatti \\(ore assenza\\)") : estraiValore("Permessi fruiti nell'anno");
             const permessiLiquidati = estraiValore("Permessi liquidati/pagate");
             const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE") !== '0' ? estraiValore("SALDO PERMESSI A FINE MESE") : estraiValore("SALDO PERMESSI A FINE ANNO");
 
@@ -529,57 +529,6 @@ const estraiValore = (chiave) => {
             a.click();
             window.URL.revokeObjectURL(url);
             a.remove();
-        }
-
-        async function salvaEGeneraPDF() {
-            if (!sessionToken) { alert("Sessione non valida. Effettua l'accesso."); return; }
-            const annoSel = document.getElementById('rep_anno').value;
-            const meseSel = document.getElementById('rep_mese').value;
-            const btn = document.getElementById('btnReport');
-            btn.disabled = true; btn.innerText = 'Generazione...';
-            
-            try {
-                const response = await fetch(WORKER_URL, { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) 
-                });
-                const resJson = await response.json();
-                if (response.ok && resJson.success) {
-                    await buildPdfFromText(
-                        "PROSPETTO RIEPILOGATIVO AZIENDALE",
-                        `REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`,
-                        resJson.testoReport,
-                        `Report_${resJson.mese}_${resJson.anno}.pdf`
-                    );
-                } else { alert(`Errore: ${resJson.error || "Impossibile elaborare il report."}`); }
-            } catch (error) { console.error("Errore:", error); alert("Errore durante la generazione grafica del PDF."); }
-            finally { btn.disabled = false; btn.innerText = 'Genera PDF Mensile'; }
-        }
-
-        async function generaPDFAnnuale() {
-            if (!sessionToken) { alert("Sessione non valida. Effettua l'accesso."); return; }
-            const annoSel = document.getElementById('rep_anno_annual').value;
-            const btn = document.getElementById('btnReportAnnual');
-            btn.disabled = true; btn.innerText = 'Generazione...';
-            
-            try {
-                const response = await fetch(WORKER_URL, { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) 
-                });
-                const resJson = await response.json();
-                if (response.ok && resJson.success) {
-                    await buildPdfFromText(
-                        "PROSPETTO RIEPILOGATIVO ANNUALE",
-                        `REPORT ANNUALE COMPLESSIVO: ANNO ${resJson.anno}`,
-                        resJson.testoReport,
-                        `Report_Annuale_${resJson.anno}.pdf`
-                    );
-                } else { alert(`Errore: ${resJson.error || "Nessun report annuale trovato per questo anno su Grist."}`); }
-            } catch (error) { console.error("Errore:", error); alert("Errore durante il recupero o la generazione grafica del PDF."); }
-            finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale'; }
         }
     </script>
 </body>
