@@ -398,7 +398,7 @@ Vuoi confermare e inviare comunque la registrazione?`);
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
-            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minutes: minuto, note: document.getElementById('p_note').value };
+            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
