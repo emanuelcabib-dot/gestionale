@@ -400,10 +400,7 @@
                     document.getElementById('r_data').value = oggi;
                     setOrarioAttuale();
                     await caricaEventiGiornoRemoti();
-                    await aggiornaStatoFormAssenze(); // <-- AGGIUNGI QUESTA RIGA QUI
-                } else {
-                    errorMessage.style.display = 'block';
-
+                    await aggiornaStatoFormAssenze(); 
                 } else {
                     errorMessage.style.display = 'block';
                 }
