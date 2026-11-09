@@ -213,7 +213,7 @@
     <script>
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
         let sessionToken = "";
-        let eventiGiornoCorrente = [];
+        let eventosGiornoCorrente = [];
 
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
@@ -268,13 +268,13 @@
                 });
                 if (response.ok) {
                     const data = await response.json();
-                    eventiGiornoCorrente = data.eventi || [];
+                    eventosGiornoCorrente = data.eventi || [];
                 } else {
-                    eventiGiornoCorrente = [];
+                    eventosGiornoCorrente = [];
                 }
             } catch (error) {
                 console.error("Errore server:", error);
-                eventiGiornoCorrente = [];
+                eventosGiornoCorrente = [];
             }
             aggiornaOpzioniEvento();
         }
@@ -286,7 +286,7 @@
             for (let i = 0; i < opzioni.length; i++) {
                 const opt = opzioni[i];
                 const val = opt.value;
-                if (eventiGiornoCorrente.includes(val)) {
+                if (eventosGiornoCorrente.includes(val)) {
                     opt.style.display = "none";
                     opt.disabled = true;
                 } else {
@@ -295,7 +295,7 @@
                     if (!primoValido) primoValido = val;
                 }
             }
-            if (eventiGiornoCorrente.includes(selectEvento.value) || !selectEvento.value) {
+            if (eventosGiornoCorrente.includes(selectEvento.value) || !selectEvento.value) {
                 selectEvento.value = primoValido || "";
             }
         }
@@ -336,7 +336,7 @@
 
         function logout() {
             sessionToken = "";
-            eventiGiornoCorrente = [];
+            eventosGiornoCorrente = [];
             document.getElementById('iframeDashboard').src = "about:blank";
             document.getElementById('iframeImpostazioni').src = "about:blank";
             document.getElementById('companyCode').value = "";
@@ -366,7 +366,7 @@
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
             const orarioDecimale = ora + (minuto / 60);
 
-            if (eventiGiornoCorrente.includes(eventoSel)) {
+            if (eventosGiornoCorrente.includes(eventoSel)) {
                 alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi.`);
                 return;
             }
@@ -398,10 +398,19 @@ Vuoi confermare e inviare comunque la registrazione?`);
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
-const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
-try {
-    const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-
+            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
+            try {
+                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (response.ok) {
+                    alert('Presenza registrata con successo!');
+                    document.getElementById('formPresenze').reset();
+                    document.getElementById('p_data').value = getOggiInLocale();
+                    setOrarioAttuale();
+                    await caricaEventiGiornoRemoti();
+                } else { alert('Errore server o sessione non valida.'); }
+            } catch (error) { alert('Impossibile connettersi al servizio.'); }
+            finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
+        });
 
         document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -443,13 +452,11 @@ Vuoi confermare l'inserimento?`);
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-const estraiValore = (chiave) => {
-    // CORREZIONE: raddoppiate le barre retroverse per preservare \s e \n nel costruttore RegExp
-    const regex = new RegExp(chiave + "\\s*:\\s*([^\\n]+)");
-    const match = testoMappato.match(regex);
-    return match ? match[1].trim() : '0';
-};
-
+            const estraiValore = (chiave) => {
+                const regex = new RegExp(chiave + "\s*:\s*([^\n]+)");
+                const match = testoMappato.match(regex);
+                return match ? match[1].trim() : '0';
+            };
 
             const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
             const ferieGodute = estraiValore("Ferie godute \(vacanze reali\)") !== '0' ? estraiValore("Ferie godute \(vacanze reali\)") : estraiValore("Ferie godute nell'anno");
