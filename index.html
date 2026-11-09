@@ -490,105 +490,111 @@ Vuoi confermare l'inserimento?`);
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
-            const { PDFDocument, StandardFonts, rgb } = PDFLib;
-            const pdfDoc = await PDFDocument.create();
-            let page = pdfDoc.addPage([595.28, 841.89]);
-            
-            const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-const estraiValore = (chiave) => {
-    // Rende la ricerca flessibile per parentesi e simboli, prendendo tutto ciò che sta dopo i due punti
-    // fino alla fine della riga o alla parola chiave 'giorni'/'ore'
-    const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*([^\\n\\r]+)");
-    const match = testoMappato.match(regex);
+async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
+    const { PDFDocument, StandardFonts, rgb } = PDFLib;
+    const pdfDoc = await PDFDocument.create();
+    let page = pdfDoc.addPage([595.28, 841.89]);
     
-    if (match) {
-        let valore = match[1].trim();
-        // Pulisce il valore rimuovendo le diciture finali (giorni, ore, gg) e i segni + o -
-        valore = valore.replace(/(giorni|ore|gg|ore assenza|vacanze reali)/gi, '').trim();
-        valore = valore.replace(/^[+-]\s*/, '').trim(); 
-        return valore || '0';
-    }
-    return '0';
-};
+    const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-
-
-            // ESTRAZIONE VALORI COMPATIBILE CON I FILTRI AVANZATI DI REGEX
-            const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
-            const ferieGodute = estraiValore("Ferie godute (vacanze reali)") !== '0' ? estraiValore("Ferie godute (vacanze reali)") : estraiValore("Ferie godute nell'anno");
-            const ferieLiquidate = estraiValore("Ferie liquidate/pagate");
-            const saldoFerie = estraiValore("SALDO FERIE A FINE MESE") !== '0' ? estraiValore("SALDO FERIE A FINE MESE") : estraiValore("SALDO FERIE A FINE ANNO");
-
-            const permessiMaturati = estraiValore("Permessi maturati nel mese") !== '0' ? estraiValore("Permessi maturati nel mese") : estraiValore("Permessi maturati nell'anno");
-            const permessiFatti = estraiValore("Permessi fatti (ore assenza)") !== '0' ? estraiValore("Permessi fatti (ore assenza)") : estraiValore("Permessi fruiti nell'anno");
-            const permessiLiquidati = estraiValore("Permessi liquidati/pagati");
-            const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE") !== '0' ? estraiValore("SALDO PERMESSI A FINE MESE") : estraiValore("SALDO PERMESSI A FINE ANNO");
-
-            const malattiaGiorni = estraiValore("Giorni di malattia nel mese") !== '0' ? estraiValore("Giorni di malattia nel mese") : estraiValore("Giorni di malattia nell'anno");
-
-
-            page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
-            page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
-            page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
-
-            let y = 680;
-
-            const disegnaSezione = (titoloSezione, righeDati, voceSaldo) => {
-                const altezzaBox = 45 + (righeDati.length * 22) + 35;
-                page.drawRectangle({ x: 45, y: y - altezzaBox, width: 505.28, height: altezzaBox, color: rgb(0.96, 0.97, 0.98) });
-                page.drawRectangle({ x: 45, y: y - altezzaBox, width: 4, height: altezzaBox, color: rgb(0.2, 0.6, 0.86) });
-                page.drawText(titoloSezione.toUpperCase(), { x: 65, y: y - 28, size: 12, font: fontBold, color: rgb(0.17, 0.24, 0.31) });
-                
-                let rigaY = y - 53;
-                righeDati.forEach(riga => {
-                    page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontNormale, color: rgb(0.4, 0.45, 0.5) });
-                    page.drawText(riga.valore, { x: 400, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
-                    rigaY -= 22;
-                });
-
-                page.drawLine({ start: { x: 65, y: rigaY + 12 }, end: { x: 525, y: rigaY + 12 }, thickness: 0.5, color: rgb(0.85, 0.87, 0.89) });
-                page.drawText(voceSaldo.label, { x: 65, y: rigaY, size: 11, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
-                page.drawText(voceSaldo.valore, { x: 400, y: rigaY, size: 12, font: fontBold, color: rgb(0.18, 0.64, 0.34) });
-                y -= (altezzaBox + 25);
-            };
-
-            const datiFerie = [
-                { label: "Ferie maturate nel periodo", valore: ferieMaturate },
-                { label: "Ferie godute (giorni effettivi)", valore: ferieGodute }
-            ];
-            if (ferieLiquidate !== '0') datiFerie.push({ label: "Ferie liquidate in busta paga", valore: ferieLiquidate });
-            disegnaSezione("Consuntivo Ferie", datiFerie, { label: "Saldo ferie disponibile", valore: saldoFerie });
-
-            const datiPermessi = [
-                { label: "Permessi maturati nel periodo", valore: permessiMaturati },
-                { label: "Permessi fruiti (ore totali)", valore: permessiFatti }
-            ];
-            if (permessiLiquidati !== '0') datiPermessi.push({ label: "Permessi liquidati in busta paga", valore: permessiLiquidati });
-            disegnaSezione("Consuntivo Permessi", datiPermessi, { label: "Saldo permessi residui", valore: saldoPermessi });
-
-            disegnaSezione("Eventi e Certificati Medici", 
-                [{ label: "Giorni di assenza per malattia giustificata", valore: malattiaGiorni }], 
-                { label: "Totale giornate di malattia nel periodo", valore: malattiaGiorni.replace("giorni", "").trim() + " giorni" }
-            );
-
-            page.drawLine({ start: { x: 45, y: 50 }, end: { x: 550, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
-            page.drawText("Documento digitale generato automaticamente dal sistema gestionale.", { x: 45, y: 38, size: 8, font: fontNormale, color: rgb(0.6, 0.65, 0.7) });
-
-            const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: "application/pdf" });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = nomeFile;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
+    const estraiValore = (chiave) => {
+        const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*([^\\n\\r]+)");
+        const match = testoMappato.match(regex);
+        
+        if (match) {
+            let valore = match[1].trim();
+            valore = valore.replace(/(giorni|ore|gg|ore assenza|vacanze reali)/gi, '').trim();
+            valore = valore.replace(/^[+-]\s*/, '').trim(); 
+            return valore || '0';
         }
+        return '0';
+    };
+
+    // Nuova funzione per estrarre la dicitura esatta tra parentesi per le rettifiche
+    const estraiRettificaTesto = (chiave) => {
+        const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*\\(([^)]+)\\)");
+        const match = testoMappato.match(regex);
+        return match ? match[1].trim() : '';
+    };
+
+    // ESTRAZIONE VALORI COMPATIBILE CON I FILTRI AVANZATI DI REGEX
+    const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
+    const ferieGodute = estraiValore("Ferie godute (vacanze reali)") !== '0' ? estraiValore("Ferie godute (vacanze reali)") : estraiValore("Ferie godute nell'anno");
+    const ferieLiquidate = estraiValore("Ferie liquidate/pagate");
+    const rettificaFerieTesto = estraiRettificaTesto("Rettifiche ferie del mese");
+    const saldoFerie = estraiValore("SALDO FERIE A FINE MESE") !== '0' ? estraiValore("SALDO FERIE A FINE MESE") : estraiValore("SALDO FERIE A FINE ANNO");
+
+    const permessiMaturati = estraiValore("Permessi maturati nel mese") !== '0' ? estraiValore("Permessi maturati nel mese") : estraiValore("Permessi maturati nell'anno");
+    const permessiFatti = estraiValore("Permessi fatti (ore assenza)") !== '0' ? estraiValore("Permessi fatti (ore assenza)") : estraiValore("Permessi fruiti nell'anno");
+    const permessiLiquidati = estraiValore("Permessi liquidati/pagati");
+    const rettificaPermessiTesto = estraiRettificaTesto("Rettifiche permessi del mese");
+    const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE") !== '0' ? estraiValore("SALDO PERMESSI A FINE MESE") : estraiValore("SALDO PERMESSI A FINE ANNO");
+
+    const malattiaGiorni = estraiValore("Giorni di malattia nel mese") !== '0' ? estraiValore("Giorni di malattia nel mese") : estraiValore("Giorni di malattia nell'anno");
+
+    page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
+    page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
+    page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+
+    let y = 680;
+
+    const disegnaSezione = (titoloSezione, righeDati, voceSaldo) => {
+        const altezzaBox = 45 + (righeDati.length * 22) + 35;
+        page.drawRectangle({ x: 45, y: y - altezzaBox, width: 505.28, height: altezzaBox, color: rgb(0.96, 0.97, 0.98) });
+        page.drawRectangle({ x: 45, y: y - altezzaBox, width: 4, height: altezzaBox, color: rgb(0.2, 0.6, 0.86) });
+        page.drawText(titoloSezione.toUpperCase(), { x: 65, y: y - 28, size: 12, font: fontBold, color: rgb(0.17, 0.24, 0.31) });
+        
+        let rigaY = y - 53;
+        righeDati.forEach(riga => {
+            page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontNormale, color: rgb(0.4, 0.45, 0.5) });
+            page.drawText(riga.valore, { x: 400, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
+            rigaY -= 22;
+        });
+
+        page.drawLine({ start: { x: 65, y: rigaY + 12 }, end: { x: 525, y: rigaY + 12 }, thickness: 0.5, color: rgb(0.85, 0.87, 0.89) });
+        page.drawText(voceSaldo.label, { x: 65, y: rigaY, size: 11, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
+        page.drawText(voceSaldo.valore, { x: 400, y: rigaY, size: 12, font: fontBold, color: rgb(0.18, 0.64, 0.34) });
+        y -= (altezzaBox + 25);
+    };
+
+    const datiFerie = [
+        { label: "Ferie maturate nel periodo", valore: ferieMaturate },
+        { label: "Ferie godute (giorni effettivi)", valore: ferieGodute }
+    ];
+    if (ferieLiquidate !== '0') datiFerie.push({ label: "Ferie liquidate in busta paga", valore: ferieLiquidate });
+    if (rettificaFerieTesto !== '') datiFerie.push({ label: "Rettifiche del mese", valore: rettificaFerieTesto });
+    disegnaSezione("Consuntivo Ferie", datiFerie, { label: "Saldo ferie disponibile", valore: saldoFerie });
+
+    const datiPermessi = [
+        { label: "Permessi maturati nel periodo", valore: permessiMaturati },
+        { label: "Permessi fruiti (ore totali)", valore: permessiFatti }
+    ];
+    if (permessiLiquidati !== '0') datiPermessi.push({ label: "Permessi liquidate in busta paga", valore: permessiLiquidati });
+    if (rettificaPermessiTesto !== '') datiPermessi.push({ label: "Rettifiche del mese", valore: rettificaPermessiTesto });
+    disegnaSezione("Consuntivo Permessi", datiPermessi, { label: "Saldo permessi residui", valore: saldoPermessi });
+
+    disegnaSezione("Eventi e Certificati Medici", 
+        [{ label: "Giorni di assenza per malattia giustificata", valore: malattiaGiorni }], 
+        { label: "Totale giornate di malattia nel periodo", valore: malattiaGiorni.replace("giorni", "").trim() + " giorni" }
+    );
+
+    page.drawLine({ start: { x: 45, y: 50 }, end: { x: 550, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+    page.drawText("Documento digitale generato automaticamente dal sistema gestionale.", { x: 45, y: 38, size: 8, font: fontNormale, color: rgb(0.6, 0.65, 0.7) });
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeFile;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+}
 
         async function salvaEGeneraPDF() {
             if (!sessionToken) { alert("Sessione non valida. Effettua l'accesso."); return; }
