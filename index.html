@@ -521,7 +521,8 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
                 continue;
             }
             
-            const matchRiga = lineaPulita.match(/^(.+?)\s*:\s*(.*)$/);
+            // REGEX CORRETTA: Riconosce i due punti anche con i caratteri speciali [+/-]
+            const matchRiga = lineaPulita.match(/^([^:]+?)\s*:\s*(.*)$/);
             if (matchRiga && sezioneCorrente) {
                 const etichetta = matchRiga[1].trim();
                 const valore = matchRiga[2].trim();
@@ -566,7 +567,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
                 coloreValore = rgb(0.9, 0.49, 0.13); // Colore Arancione per evidenziare la rettifica
             }
             
-            page.drawText(riga.valore, { x: 320, y: rigaY, size: 10, font: fontBold, color: coloreValore });
+            page.drawText(riga.valore, { x: 310, y: rigaY, size: 10, font: fontBold, color: coloreValore });
             rigaY -= 22;
         });
 
