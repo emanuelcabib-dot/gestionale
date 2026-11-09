@@ -498,7 +498,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // FUNZIONE DI PARSING CORRETTA: Identifica la riga e divide solo sull'ultimo separatore coerente di Grist
+    // LOGICA DI PARSING RIDEFINITA: Estrae prioritariamente ogni riga strutturata "Chiave : Valore"
     const analizzaTestoGrist = (testo) => {
         const linee = testo.split('\n');
         const sezioni = {
@@ -509,35 +509,41 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         
         let sezioneCorrente = null;
         
-        linee.forEach(linea => {
-            const lineaPulita = linea.trim();
-            if (!lineaPulita || lineaPulita.startsWith('---') || lineaPulita.startsWith('===')) return;
+        for (let i = 0; i < linee.length; i++) {
+            const lineaPulita = linee[i].trim();
+            if (!lineaPulita) continue;
             
-            // Rilevamento cambi sezione
-            if (lineaPulita.includes("MOVIMENTI FERIE")) { sezioneCorrente = sezioni.ferie; return; }
-            if (lineaPulita.includes("MOVIMENTI PERMESSI")) { sezioneCorrente = sezioni.permessi; return; }
-            if (lineaPulita.includes("MALATTIE DEL MESE")) { sezioneCorrente = sezioni.malattia; return; }
+            // 1. Rilevamento dei cambi sezione (Ignora i divisori generici)
+            if (lineaPulita.includes("MOVIMENTI FERIE")) { sezioneCorrente = sezioni.ferie; continue; }
+            if (lineaPulita.includes("MOVIMENTI PERMESSI")) { sezioneCorrente = sezioni.permessi; continue; }
+            if (lineaPulita.includes("MALATTIE DEL MESE")) { sezioneCorrente = sezioni.malattia; continue; }
             
-            // REGEX AVANZATA: Isola la chiave prima dei due punti finali e il valore successivo, preservando i caratteri speciali come [+/-]
+            // Salta i separatori di layout che non contengono i due punti informativi
+            if ((lineaPulita.startsWith('---') || lineaPulita.startsWith('===')) && !lineaPulita.includes(':')) {
+                continue;
+            }
+            
+            // 2. REGEX SICURA: Divide accuratamente la stringa al primo riscontro dei due punti validi
             const matchRiga = lineaPulita.match(/^(.+?)\s*:\s*(.*)$/);
             if (matchRiga && sezioneCorrente) {
                 const etichetta = matchRiga[1].trim();
                 const valore = matchRiga[2].trim();
                 
+                // Isola la riga di chiusura saldo se contiene i tre caratteri freccia >>>
                 if (etichetta.includes(">>>")) {
                     sezioneCorrente.saldo = { label: etichetta.replace(">>>", "").trim(), valore: valore };
                 } else {
                     sezioneCorrente.righe.push({ label: etichetta, valore: valore });
                 }
             }
-        });
+        }
         return sezioni;
     };
 
-    // Estrazione dati strutturata da Grist
+    // Estrazione e mappatura speculare dell'albero testuale di Grist
     const datiGrist = analizzaTestoGrist(testoMappato);
 
-    // --- COSTRUZIONE LAYOUT PDF ---
+    // --- COSTRUZIONE STRUTTURA GRAFICA PDF ---
     page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
     page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
     page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
@@ -571,10 +577,11 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         y -= (altezzaBox + 20);
     };
 
-    // Disegna le tre sezioni in sequenza esatta
+    // Rendering sequenziale dei blocchi informativi nel documento
     disegnaSezioneGrafica(datiGrist.ferie);
     disegnaSezioneGrafica(datiGrist.permessi);
     
+    // Forzatura strutturale per il box malattie
     if (datiGrist.malattia.righe.length > 0 && !datiGrist.malattia.saldo) {
         const ultimaRiga = datiGrist.malattia.righe[datiGrist.malattia.righe.length - 1];
         datiGrist.malattia.saldo = { label: "Totale registrato nel periodo", valore: ultimaRiga.valore };
