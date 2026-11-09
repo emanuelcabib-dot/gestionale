@@ -398,19 +398,10 @@ Vuoi confermare e inviare comunque la registrazione?`);
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
-            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minutes: minuto, note: document.getElementById('p_note').value };
-            try {
-                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (response.ok) {
-                    alert('Presenza registrata con successo!');
-                    document.getElementById('formPresenze').reset();
-                    document.getElementById('p_data').value = getOggiInLocale();
-                    setOrarioAttuale();
-                    await caricaEventiGiornoRemoti();
-                } else { alert('Errore server o sessione non valida.'); }
-            } catch (error) { alert('Impossibile connettersi al servizio.'); }
-            finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
-        });
+const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
+try {
+    const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
 
         document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
