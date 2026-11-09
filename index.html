@@ -493,12 +493,12 @@ Vuoi confermare l'inserimento?`);
 async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
     const { PDFDocument, StandardFonts, rgb } = PDFLib;
     const pdfDoc = await PDFDocument.create();
-    let page = pdfDoc.addPage([595.28, 841.89]);
+    let page = pdfDoc.addPage();
     
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // FUNZIONE DI PARSING RIGIDA: Converte il testo di Grist in un array di oggetti puliti
+    // FUNZIONE DI PARSING CORRETTA: Identifica la riga e divide solo sull'ultimo separatore coerente di Grist
     const analizzaTestoGrist = (testo) => {
         const linee = testo.split('\n');
         const sezioni = {
@@ -518,11 +518,11 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             if (lineaPulita.includes("MOVIMENTI PERMESSI")) { sezioneCorrente = sezioni.permessi; return; }
             if (lineaPulita.includes("MALATTIE DEL MESE")) { sezioneCorrente = sezioni.malattia; return; }
             
-            // Analisi delle righe con i due punti
-            if (lineaPulita.includes(":") && sezioneCorrente) {
-                const parti = lineaPulita.split(":");
-                const etichetta = parti[0].trim();
-                const valore = parti.slice(1).join(":").trim(); // Gestisce eventuali due punti successivi
+            // REGEX AVANZATA: Isola la chiave prima dei due punti finali e il valore successivo, preservando i caratteri speciali come [+/-]
+            const matchRiga = lineaPulita.match(/^(.+?)\s*:\s*(.*)$/);
+            if (matchRiga && sezioneCorrente) {
+                const etichetta = matchRiga[1].trim();
+                const valore = matchRiga[2].trim();
                 
                 if (etichetta.includes(">>>")) {
                     sezioneCorrente.saldo = { label: etichetta.replace(">>>", "").trim(), valore: valore };
@@ -537,7 +537,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     // Estrazione dati strutturata da Grist
     const datiGrist = analizzaTestoGrist(testoMappato);
 
-    // --- COSTRUZIONE GRAFICA LAYOUT PDF ---
+    // --- COSTRUZIONE LAYOUT PDF ---
     page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
     page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
     page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
@@ -550,22 +550,18 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         const haSaldo = sezioneData.saldo !== null;
         const altezzaBox = 45 + (sezioneData.righe.length * 22) + (haSaldo ? 35 : 15);
         
-        // Sfondo e bordo sinistro azzurro
         page.drawRectangle({ x: 45, y: y - altezzaBox, width: 505.28, height: altezzaBox, color: rgb(0.96, 0.97, 0.98) });
         page.drawRectangle({ x: 45, y: y - altezzaBox, width: 4, height: altezzaBox, color: rgb(0.2, 0.6, 0.86) });
         
-        // Titolo Sezione (es: MOVIMENTI FERIE DI QUESTO MESE)
         page.drawText(sezioneData.titolo, { x: 65, y: y - 28, size: 11, font: fontBold, color: rgb(0.17, 0.24, 0.31) });
         
         let rigaY = y - 53;
-        // Ciclo dinamico su TUTTE le sottovoci trovate nel testo
         sezioneData.righe.forEach(riga => {
             page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontNormale, color: rgb(0.3, 0.35, 0.4) });
             page.drawText(riga.valore, { x: 380, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
             rigaY -= 22;
         });
 
-        // Riga di saldo finale della sezione (se presente)
         if (haSaldo) {
             page.drawLine({ start: { x: 65, y: rigaY + 12 }, end: { x: 525, y: rigaY + 12 }, thickness: 0.5, color: rgb(0.85, 0.87, 0.89) });
             page.drawText(sezioneData.saldo.label, { x: 65, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
@@ -579,14 +575,12 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     disegnaSezioneGrafica(datiGrist.ferie);
     disegnaSezioneGrafica(datiGrist.permessi);
     
-    // Per la malattia, se non c'è una riga di saldo dedicata, usiamo l'ultima voce come totale visivo
     if (datiGrist.malattia.righe.length > 0 && !datiGrist.malattia.saldo) {
         const ultimaRiga = datiGrist.malattia.righe[datiGrist.malattia.righe.length - 1];
         datiGrist.malattia.saldo = { label: "Totale registrato nel periodo", valore: ultimaRiga.valore };
     }
     disegnaSezioneGrafica(datiGrist.malattia);
 
-    // Piè di pagina fisso
     page.drawLine({ start: { x: 45, y: 50 }, end: { x: 550, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
     page.drawText("Documento digitale generato automaticamente dal sistema gestionale.", { x: 45, y: 38, size: 8, font: fontNormale, color: rgb(0.6, 0.65, 0.7) });
 
