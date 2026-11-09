@@ -330,6 +330,54 @@
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
         document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
         document.getElementById('p_minuti').addEventListener('change', aggiornaOpzioniEvento);
+        document.getElementById('r_data').addEventListener('change', aggiornaStatoFormAssenze);
+
+        async function aggiornaStatoFormAssenze() {
+            if (!sessionToken) return;
+            const dataSel = document.getElementById('r_data').value;
+            if (!dataSel) return;
+            
+            const [anno, mese, giorno] = dataSel.split('-');
+            const dataFormatoGrist = `${giorno}/${mese}/${anno}`;
+            
+            const selectTipo = document.getElementById('r_tipo');
+            const selectQuantita = document.getElementById('r_quantita');
+            const textareaNote = document.getElementById('r_note');
+            const btnSubmit = document.querySelector('#formRegistro .btn-submit');
+
+            try {
+                // Sfruttiamo la chiamata preesistente nel tuo codice per controllare se esiste già un'assenza
+                const checkResponse = await fetch(WORKER_URL, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataFormatoGrist }) 
+                });
+                
+                if (checkResponse.ok) {
+                    const checkData = await checkResponse.json();
+                    
+                    if (checkData.esiste) {
+                        // Se esiste già un'assenza, disabilita i campi (tranne la data)
+                        selectTipo.disabled = true;
+                        selectQuantita.disabled = true;
+                        textareaNote.disabled = true;
+                        btnSubmit.disabled = true;
+                        
+                        // Mostra l'avviso popup
+                        alert(`Attenzione: È già presente un'assenza registrata nella data del ${dataFormatoGrist}. Non sono consentiti ulteriori inserimenti.`);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error("Errore nel controllo assenze:", error);
+            }
+
+            // Se non ci sono assenze (o in caso di errore di rete), sblocca i campi
+            selectTipo.disabled = false;
+            selectQuantita.disabled = false;
+            textareaNote.disabled = false;
+            btnSubmit.disabled = false;
+        }
 
         async function checkCode() {
             const codeInput = document.getElementById('companyCode').value;
@@ -352,6 +400,10 @@
                     document.getElementById('r_data').value = oggi;
                     setOrarioAttuale();
                     await caricaEventiGiornoRemoti();
+                    await aggiornaStatoFormAssenze(); // <-- AGGIUNGI QUESTA RIGA QUI
+                } else {
+                    errorMessage.style.display = 'block';
+
                 } else {
                     errorMessage.style.display = 'block';
                 }
