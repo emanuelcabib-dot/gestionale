@@ -366,7 +366,8 @@
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
             const orarioDecimale = ora + (minuto / 60);
 
-            if (eventosGiornoCorrente.includes(eventoSel)) {
+            // CORRETTO: cambiato da eventosGiornoCorrente a eventiGiornoCorrente
+            if (eventiGiornoCorrente.includes(eventoSel)) {
                 alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi.`);
                 return;
             }
@@ -398,6 +399,7 @@ Vuoi confermare e inviare comunque la registrazione?`);
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
+            // CORRETTO: minuti
             const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -453,18 +455,19 @@ Vuoi confermare l'inserimento?`);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
             const estraiValore = (chiave) => {
-                const regex = new RegExp(chiave + "\s*:\s*([^\n]+)");
+                const chiaveProtetta = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(chiaveProtetta + "\\s*:\\s*([^\\n]+)");
                 const match = testoMappato.match(regex);
-                return match ? match[1].trim() : '0';
+                return match && match[1] ? match[1].trim() : '0';
             };
 
             const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
-            const ferieGodute = estraiValore("Ferie godute \(vacanze reali\)") !== '0' ? estraiValore("Ferie godute \(vacanze reali\)") : estraiValore("Ferie godute nell'anno");
+            const ferieGodute = estraiValore("Ferie godute (vacanze reali)") !== '0' ? estraiValore("Ferie godute (vacanze reali)") : estraiValore("Ferie godute nell'anno");
             const ferieLiquidate = estraiValore("Ferie liquidate/pagate");
             const saldoFerie = estraiValore("SALDO FERIE A FINE MESE") !== '0' ? estraiValore("SALDO FERIE A FINE MESE") : estraiValore("SALDO FERIE A FINE ANNO");
 
             const permessiMaturati = estraiValore("Permessi maturati nel mese") !== '0' ? estraiValore("Permessi maturati nel mese") : estraiValore("Permessi maturati nell'anno");
-            const permessiFatti = estraiValore("Permessi fatti \(ore assenza\)") !== '0' ? estraiValore("Permessi fatti \(ore assenza\)") : estraiValore("Permessi fruiti nell'anno");
+            const permessiFatti = estraiValore("Permessi fatti (ore assenza)") !== '0' ? estraiValore("Permessi fatti (ore assenza)") : estraiValore("Permessi fruiti nell'anno");
             const permessiLiquidati = estraiValore("Permessi liquidati/pagate");
             const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE") !== '0' ? estraiValore("SALDO PERMESSI A FINE MESE") : estraiValore("SALDO PERMESSI A FINE ANNO");
 
