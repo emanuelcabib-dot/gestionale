@@ -366,7 +366,6 @@
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
             const orarioDecimale = ora + (minuto / 60);
 
-            // CORRETTO: Cambiato 'eventiGiornoCorrente' in 'eventosGiornoCorrente'
             if (eventosGiornoCorrente.includes(eventoSel)) {
                 alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi.`);
                 return;
@@ -375,7 +374,8 @@
             const giornoSettimana = dataSelezionata.getDay(); 
             if (giornoSettimana === 0 || giornoSettimana === 6) {
                 const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
-                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento?`);
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.
+Vuoi confermare l'inserimento?`);
                 if (!confermaFestivo) return;
             }
 
@@ -387,7 +387,8 @@
             else if (eventoSel === "Uscita" && orarioDecimale < 10) { orarioInsolito = true; messaggioAvviso = "Stai inserendo un'USCITA anticipata prima delle ore 10:00."; }
 
             if (orarioInsolito) {
-                const confermaOrario = confirm(`${messaggioAvviso}\nVuoi confermare e inviare comunque la registrazione?`);
+                const confermaOrario = confirm(`${messaggioAvviso}
+Vuoi confermare e inviare comunque la registrazione?`);
                 if (!confermaOrario) return;
             }
 
@@ -397,7 +398,7 @@
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
-            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minutes: minuto, note: document.getElementById('p_note').value };
+            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
@@ -411,7 +412,39 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
         });
 
+        document.getElementById('formRegistro').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!sessionToken) { alert("Sessione non valida. Effettua l'accesso."); return; }
 
+            const dataStringa = document.getElementById('r_data').value;
+            const tipoAssenza = document.getElementById('r_tipo').value;
+            const quantitaVal = parseInt(document.getElementById('r_quantita').value) || 0;
+            const noteText = document.getElementById('r_note').value;
+
+            const submitBtn = e.target.querySelector('button');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Invio in corso...';
+
+            const [annoR, meseR, giornoR] = dataStringa.split('-');
+            const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
+
+            const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, r_tipo: tipoAssenza, quantita: quantitaVal, note: noteText };
+
+            try {
+                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (response.ok) {
+                    alert('Assenza/permesso inviato con successo!');
+                    document.getElementById('formRegistro').reset();
+                    document.getElementById('r_data').value = getOggiInLocale();
+                } else { alert('Errore server durante il salvataggio dell'assenza.'); }
+            } catch (error) { 
+                console.error("Errore invio assenza:", error);
+                alert('Impossibile connettersi al servizio.'); 
+            } finally { 
+                submitBtn.disabled = false; 
+                submitBtn.innerText = 'Invia assenza'; 
+            }
+        });
 
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
@@ -422,8 +455,8 @@
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
             const estraiValore = (chiave) => {
-                const chiaveProtetta = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const regex = new RegExp(chiaveProtetta + "\\s*:\\s*([^\\n]+)");
+                const chiaveProtetta = chiave.replace(/[-\/\^$*+?.()|[\]{}]/g, '\$&');
+                const regex = new RegExp(chiaveProtetta + "\s*:\s*([^\n]+)");
                 const match = testoMappato.match(regex);
                 return match && match[1] ? match[1].trim() : '0';
             };
