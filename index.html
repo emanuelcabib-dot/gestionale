@@ -499,13 +499,22 @@ Vuoi confermare l'inserimento?`);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
 const estraiValore = (chiave) => {
-    // Questa regex cerca la chiave ignorando i simboli [+] o [-] iniziali
-    // e cattura solo il numero decimale (es. 2.16 o -4.5) dopo i due punti
-    const regex = new RegExp("(?:\\s*[-+\\[\\]\\/*\\s]*)\\s*" + chiave + "\\s*:\\s*([-+]?\\d+(?:[.,]\\d+)?)");
+    // Rende la ricerca flessibile per parentesi e simboli, prendendo tutto ciò che sta dopo i due punti
+    // fino alla fine della riga o alla parola chiave 'giorni'/'ore'
+    const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*([^\\n\\r]+)");
     const match = testoMappato.match(regex);
-    return match ? match[1].trim() : '0';
+    
+    if (match) {
+        let valore = match[1].trim();
+        // Pulisce il valore rimuovendo le diciture finali (giorni, ore, gg) e i segni + o -
+        valore = valore.replace(/(giorni|ore|gg|ore assenza|vacanze reali)/gi, '').trim();
+        valore = valore.replace(/^[+-]\s*/, '').trim(); 
+        return valore || '0';
+    }
+    return '0';
 };
-;
+
 
 
             const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
