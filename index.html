@@ -280,20 +280,33 @@
         }
 
         function aggiornaOpzioniEvento() {
+            // Elementi modulo Timbratura
             const selectEvento = document.getElementById('p_evento');
             const selectOre = document.getElementById('p_ore');
             const selectMinuti = document.getElementById('p_minuti');
             const textareaNote = document.getElementById('p_note');
             const btnSubmit = document.querySelector('#formPresenze .btn-submit');
             
+            // Elementi modulo Ferie, permessi e malattia
+            const selectTipoAssenza = document.getElementById('r_tipo');
+            const selectQuantita = document.getElementById('r_quantita');
+            const textareaNoteAssenza = document.getElementById('r_note');
+            const btnSubmitAssenza = document.querySelector('#formRegistro .btn-submit');
+            
             // Controlla se l'uscita è già stata registrata per la giornata selezionata
             if (eventiGiornoCorrente.includes("Uscita")) {
-                // Disabilita tutti i campi del form ad eccezione della data
+                // Disabilita tutti i campi del form presenze ad eccezione della data
                 selectEvento.disabled = true;
                 selectOre.disabled = true;
                 selectMinuti.disabled = true;
                 textareaNote.disabled = true;
                 btnSubmit.disabled = true;
+                
+                // Disabilita tutti i campi del form ferie/assente ad eccezione della data
+                selectTipoAssenza.disabled = true;
+                selectQuantita.disabled = true;
+                textareaNoteAssenza.disabled = true;
+                btnSubmitAssenza.disabled = true;
                 
                 // Comunica l'avviso all'utente
                 alert("Attenzione: Per questa giornata è già stata registrata la timbratura di Uscita. Non sono consentite ulteriori modifiche.");
@@ -306,6 +319,11 @@
             selectMinuti.disabled = false;
             textareaNote.disabled = false;
             btnSubmit.disabled = false;
+
+            selectTipoAssenza.disabled = false;
+            selectQuantita.disabled = false;
+            textareaNoteAssenza.disabled = false;
+            btnSubmitAssenza.disabled = false;
 
             // Logica standard preesistente per nascondere i singoli eventi già inseriti
             const opzioni = selectEvento.options;
@@ -326,6 +344,7 @@
                 selectEvento.value = primoValido || "";
             }
         }
+
 
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
         document.getElementById('p_ore').addEventListener('change', aggiornaOpzioniEvento);
