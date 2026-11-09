@@ -498,7 +498,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // LOGICA DI PARSING RIDEFINITA: Estrae prioritariamente ogni riga strutturata "Chiave : Valore"
+    // LOGICA DI PARSING POTENZIATA
     const analizzaTestoGrist = (testo) => {
         const linee = testo.split('\n');
         const sezioni = {
@@ -513,23 +513,19 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             const lineaPulita = linee[i].trim();
             if (!lineaPulita) continue;
             
-            // 1. Rilevamento dei cambi sezione (Ignora i divisori generici)
             if (lineaPulita.includes("MOVIMENTI FERIE")) { sezioneCorrente = sezioni.ferie; continue; }
             if (lineaPulita.includes("MOVIMENTI PERMESSI")) { sezioneCorrente = sezioni.permessi; continue; }
             if (lineaPulita.includes("MALATTIE DEL MESE")) { sezioneCorrente = sezioni.malattia; continue; }
             
-            // Salta i separatori di layout che non contengono i due punti informativi
             if ((lineaPulita.startsWith('---') || lineaPulita.startsWith('===')) && !lineaPulita.includes(':')) {
                 continue;
             }
             
-            // 2. REGEX SICURA: Divide accuratamente la stringa al primo riscontro dei due punti validi
             const matchRiga = lineaPulita.match(/^(.+?)\s*:\s*(.*)$/);
             if (matchRiga && sezioneCorrente) {
                 const etichetta = matchRiga[1].trim();
                 const valore = matchRiga[2].trim();
                 
-                // Isola la riga di chiusura saldo se contiene i tre caratteri freccia >>>
                 if (etichetta.includes(">>>")) {
                     sezioneCorrente.saldo = { label: etichetta.replace(">>>", "").trim(), valore: valore };
                 } else {
@@ -540,7 +536,6 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         return sezioni;
     };
 
-    // Estrazione e mappatura speculare dell'albero testuale di Grist
     const datiGrist = analizzaTestoGrist(testoMappato);
 
     // --- COSTRUZIONE STRUTTURA GRAFICA PDF ---
@@ -564,7 +559,14 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         let rigaY = y - 53;
         sezioneData.righe.forEach(riga => {
             page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontNormale, color: rgb(0.3, 0.35, 0.4) });
-            page.drawText(riga.valore, { x: 380, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
+            
+            // Colore specifico se si tratta di una riga di rettifica
+            let coloreValore = rgb(0.11, 0.16, 0.24);
+            if (riga.label.includes("Rettifiche")) {
+                coloreValore = rgb(0.9, 0.49, 0.13); // Colore Arancione per evidenziare la rettifica
+            }
+            
+            page.drawText(riga.valore, { x: 320, y: rigaY, size: 10, font: fontBold, color: coloreValore });
             rigaY -= 22;
         });
 
@@ -577,11 +579,9 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         y -= (altezzaBox + 20);
     };
 
-    // Rendering sequenziale dei blocchi informativi nel documento
     disegnaSezioneGrafica(datiGrist.ferie);
     disegnaSezioneGrafica(datiGrist.permessi);
     
-    // Forzatura strutturale per il box malattie
     if (datiGrist.malattia.righe.length > 0 && !datiGrist.malattia.saldo) {
         const ultimaRiga = datiGrist.malattia.righe[datiGrist.malattia.righe.length - 1];
         datiGrist.malattia.saldo = { label: "Totale registrato nel periodo", valore: ultimaRiga.valore };
