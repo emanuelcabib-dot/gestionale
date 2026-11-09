@@ -493,46 +493,38 @@ Vuoi confermare l'inserimento?`);
 async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
     const { PDFDocument, StandardFonts, rgb } = PDFLib;
     const pdfDoc = await PDFDocument.create();
-    let page = pdfDoc.addPage();
+    let page = pdfDoc.addPage([595.28, 841.89]);
     
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // FUNZIONE DI CLONAZIONE COMPLETA DA GRIST: Estrae la riga esatta e pulisce solo il nome dell'unità (giorni/ore)
-    const clonaDaGrist = (chiave) => {
+    // FUNZIONE DI ESTRAZIONE RIGIDA DI GRIST: Prende esattamente il testo dopo i due punti
+    const clonaRigaGrist = (chiave) => {
         const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        // Cattura tutto ciò che c'è dopo i due punti fino alla fine della riga
         const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*(.*)", "i");
         const match = testoMappato.match(regex);
-        
-        if (match && match[1]) {
-            let rigaValore = match[1].trim();
-            // Pulisce le diciture fisse finali per motivi di spazio grafico nel PDF
-            rigaValore = rigaValore.replace(/\s*(giorni|giorni\s*|ore|ore\s*|gg|gg\s*)$/i, '');
-            return rigaValore.trim();
-        }
-        return '';
+        return match ? match[1].trim() : '';
     };
 
-    // --- ESTRAZIONE RIGIDA DELLE RIGHE DI GRIST ---
-    // Sezione Ferie
-    const ferieMaturate = clonaDaGrist("Ferie maturate nel mese") || clonaDaGrist("Ferie maturate nell'anno");
-    const ferieGodute = clonaDaGrist("Ferie godute \\(vacanze reali\\)") || clonaDaGrist("Ferie godute nell'anno");
-    const ferieLiquidate = clonaDaGrist("Ferie liquidate\\/pagate");
-    const ferieRettificate = clonaDaGrist("Rettifiche ferie del mese");
-    const saldoFerie = clonaDaGrist("SALDO FERIE A FINE MESE") || clonaDaGrist("SALDO FERIE A FINE ANNO");
+    // --- 1. MAPPATURA DIRETTA DEI DATI COMPATIBILI CON L'OUTPUT DI GRIST ---
+    // Comparto Ferie
+    const ferieMaturate = clonaRigaGrist("\\[\\+\\] Ferie maturate nel mese") || clonaRigaGrist("Ferie maturate nell'anno");
+    const ferieGodute = clonaRigaGrist("\\[-\\] Ferie godute \\(vacanze reali\\)") || clonaRigaGrist("Ferie godute nell'anno");
+    const ferieLiquidate = clonaRigaGrist("\\[-\\] Ferie liquidate\\/pagate");
+    const ferieRettificate = clonaRigaGrist("\\[\\+\\/-\\] Rettifiche ferie del mese");
+    const saldoFerie = clonaRigaGrist(">>> SALDO FERIE A FINE MESE") || clonaRigaGrist("SALDO FERIE A FINE ANNO");
 
-    // Sezione Permessi
-    const permessiMaturati = clonaDaGrist("Permessi maturati nel mese") || clonaDaGrist("Permessi maturati nell'anno");
-    const permessiFatti = clonaDaGrist("Permessi fatti \\(ore assenza\\)") || clonaDaGrist("Permessi fruiti nell'anno");
-    const permessiLiquidati = clonaDaGrist("Permessi liquidati\\/pagate");
-    const permessiRettificati = clonaDaGrist("Rettifiche permessi del mese");
-    const saldoPermessi = clonaDaGrist("SALDO PERMESSI A FINE MESE") || clonaDaGrist("SALDO PERMESSI A FINE ANNO");
+    // Comparto Permessi
+    const permessiMaturati = clonaRigaGrist("\\[\\+\\] Permessi maturati nel mese") || clonaRigaGrist("Permessi maturati nell'anno");
+    const permessiFatti = clonaRigaGrist("\\[-\\] Permessi fatti \\(ore assenza\\)") || clonaRigaGrist("Permessi fruiti nell'anno");
+    const permessiLiquidati = clonaRigaGrist("\\[-\\] Permessi liquidati\\/pagate");
+    const permessiRettificati = clonaRigaGrist("\\[\\+\\/-\\] Rettifiche permessi del mese");
+    const saldoPermessi = clonaRigaGrist(">>> SALDO PERMESSI A FINE MESE") || clonaRigaGrist("SALDO PERMESSI A FINE ANNO");
 
-    // Sezione Malattia
-    const malattiaGiorni = clonaDaGrist("Giorni di malattia nel mese") || clonaDaGrist("Giorni di malattia nell'anno");
+    // Comparto Malattia
+    const malattiaGiorni = clonaRigaGrist("\\* Giorni di malattia nel mese") || clonaRigaGrist("Giorni di malattia nell'anno");
 
-    // --- COSTRUZIONE GRAFICA LAYOUT PDF ---
+    // --- 2. DISEGNO DEL LAYOUT GRAFICO DEL PDF ---
     page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
     page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
     page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
@@ -558,29 +550,29 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         y -= (altezzaBox + 25);
     };
 
-    // --- COMPILAZIONE COMPARTIMENTO FERIE ---
+    // --- 3. COMPILAZIONE BLOCCO FERIE ---
     const datiFerie = [];
-    if (ferieMaturate !== '') datiFerie.push({ label: "Ferie maturate nel periodo", valore: ferieMaturate });
-    if (ferieGodute !== '') datiFerie.push({ label: "Ferie godute (vacanze reali)", valore: ferieGodute });
-    if (ferieLiquidate !== '') datiFerie.push({ label: "Ferie liquidate/pagate", valore: ferieLiquidate });
-    if (ferieRettificate !== '') datiFerie.push({ label: "Rettifiche ferie del mese", valore: ferieRettificate }); // Mostra (Stornati 1.0 gg) o simile in riga dedicata
+    if (ferieMaturate !== '') datiFerie.push({ label: "[+] Ferie maturate nel mese", valore: ferieMaturate });
+    if (ferieGodute !== '') datiFerie.push({ label: "[-] Ferie godute (vacanze reali)", valore: ferieGodute });
+    if (ferieLiquidate !== '') datiFerie.push({ label: "[-] Ferie liquidate/pagate", valore: ferieLiquidate });
+    if (ferieRettificate !== '') datiFerie.push({ label: "[+/-] Rettifiche ferie del mese", valore: ferieRettificate });
     
-    disegnaSezione("Consuntivo Ferie", datiFerie, { label: "Saldo ferie disponibile", valore: saldoFerie + " giorni" });
+    disegnaSezione("MOVIMENTI FERIE DI QUESTO MESE", datiFerie, { label: "SALDO FERIE A FINE MESE", valore: saldoFerie });
 
-    // --- COMPILAZIONE COMPARTIMENTO PERMESSI ---
+    // --- 4. COMPILAZIONE BLOCCO PERMESSI ---
     const datiPermessi = [];
-    if (permessiMaturati !== '') datiPermessi.push({ label: "Permessi maturati nel periodo", valore: permessiMaturati });
-    if (permessiFatti !== '') datiPermessi.push({ label: "Permessi fruiti (ore assenza)", valore: permessiFatti });
-    if (permessiLiquidati !== '') datiPermessi.push({ label: "Permessi liquidati/pagate", valore: permessiLiquidati });
-    if (permessiRettificati !== '') datiPermessi.push({ label: "Rettifiche permessi del mese", valore: permessiRettificati }); // Riga dedicata autonoma
+    if (permessiMaturati !== '') datiPermessi.push({ label: "[+] Permessi maturati nel mese", valore: permessiMaturati });
+    if (permessiFatti !== '') datiPermessi.push({ label: "[-] Permessi fatti (ore assenza)", valore: permessiFatti });
+    if (permessiLiquidati !== '') datiPermessi.push({ label: "[-] Permessi liquidati/pagati", valore: permessiLiquidati });
+    if (permessiRettificati !== '') datiPermessi.push({ label: "[+/-] Rettifiche permessi del mese", valore: permessiRettificati });
     
-    disegnaSezione("Consuntivo Permessi", datiPermessi, { label: "Saldo permessi residui", valore: saldoPermessi + " ore" });
+    disegnaSezione("MOVIMENTI PERMESSI DI QUESTO MESE", datiPermessi, { label: "SALDO PERMESSI A FINE MESE", valore: saldoPermessi });
 
-    // --- COMPILAZIONE COMPARTIMENTO MALATTIA ---
+    // --- 5. COMPILAZIONE BLOCCO MALATTIE ---
     const datiMalattia = [];
-    if (malattiaGiorni !== '') datiMalattia.push({ label: "Giorni di assenza per malattia giustificata", valore: malattiaGiorni });
+    if (malattiaGiorni !== '') datiMalattia.push({ label: "* Giorni di malattia nel mese", valore: malattiaGiorni });
     
-    disegnaSezione("Eventi e Certificati Medici", datiMalattia, { label: "Totale giornate di malattia nel periodo", valore: malattiaGiorni + " giorni" });
+    disegnaSezione("MALATTIE DEL MESE", datiMalattia, { label: "Totale giornate di malattia nel periodo", valore: malattiaGiorni });
 
     // Piè di pagina
     page.drawLine({ start: { x: 45, y: 50 }, end: { x: 550, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
