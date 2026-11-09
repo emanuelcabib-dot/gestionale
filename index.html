@@ -517,17 +517,19 @@ const estraiValore = (chiave) => {
 
 
 
+            // ESTRAZIONE VALORI COMPATIBILE CON I FILTRI AVANZATI DI REGEX
             const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
-            const ferieGodute = estraiValore("Ferie godute \(vacanze reali\)") !== '0' ? estraiValore("Ferie godute \(vacanze reali\)") : estraiValore("Ferie godute nell'anno");
+            const ferieGodute = estraiValore("Ferie godute (vacanze reali)") !== '0' ? estraiValore("Ferie godute (vacanze reali)") : estraiValore("Ferie godute nell'anno");
             const ferieLiquidate = estraiValore("Ferie liquidate/pagate");
             const saldoFerie = estraiValore("SALDO FERIE A FINE MESE") !== '0' ? estraiValore("SALDO FERIE A FINE MESE") : estraiValore("SALDO FERIE A FINE ANNO");
 
             const permessiMaturati = estraiValore("Permessi maturati nel mese") !== '0' ? estraiValore("Permessi maturati nel mese") : estraiValore("Permessi maturati nell'anno");
-            const permessiFatti = estraiValore("Permessi fatti \(ore assenza\)") !== '0' ? estraiValore("Permessi fatti \(ore assenza\)") : estraiValore("Permessi fruiti nell'anno");
-            const permessiLiquidati = estraiValore("Permessi liquidati/pagate");
+            const permessiFatti = estraiValore("Permessi fatti (ore assenza)") !== '0' ? estraiValore("Permessi fatti (ore assenza)") : estraiValore("Permessi fruiti nell'anno");
+            const permessiLiquidati = estraiValore("Permessi liquidati/pagati");
             const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE") !== '0' ? estraiValore("SALDO PERMESSI A FINE MESE") : estraiValore("SALDO PERMESSI A FINE ANNO");
 
             const malattiaGiorni = estraiValore("Giorni di malattia nel mese") !== '0' ? estraiValore("Giorni di malattia nel mese") : estraiValore("Giorni di malattia nell'anno");
+
 
             page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
             page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
