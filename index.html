@@ -281,6 +281,33 @@
 
         function aggiornaOpzioniEvento() {
             const selectEvento = document.getElementById('p_evento');
+            const selectOre = document.getElementById('p_ore');
+            const selectMinuti = document.getElementById('p_minuti');
+            const textareaNote = document.getElementById('p_note');
+            const btnSubmit = document.querySelector('#formPresenze .btn-submit');
+            
+            // Controlla se l'uscita è già stata registrata per la giornata selezionata
+            if (eventiGiornoCorrente.includes("Uscita")) {
+                // Disabilita tutti i campi del form ad eccezione della data
+                selectEvento.disabled = true;
+                selectOre.disabled = true;
+                selectMinuti.disabled = true;
+                textareaNote.disabled = true;
+                btnSubmit.disabled = true;
+                
+                // Comunica l'avviso all'utente
+                alert("Attenzione: Per questa giornata è già stata registrata la timbratura di Uscita. Non sono consentite ulteriori modifiche.");
+                return; // Esce dalla funzione interrompendo la logica standard
+            }
+
+            // Ripristina lo stato abilitato se l'uscita non è presente (es. cambio data)
+            selectEvento.disabled = false;
+            selectOre.disabled = false;
+            selectMinuti.disabled = false;
+            textareaNote.disabled = false;
+            btnSubmit.disabled = false;
+
+            // Logica standard preesistente per nascondere i singoli eventi già inseriti
             const opzioni = selectEvento.options;
             let primoValido = null;
             for (let i = 0; i < opzioni.length; i++) {
