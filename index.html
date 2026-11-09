@@ -366,7 +366,6 @@
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
             const orarioDecimale = ora + (minuto / 60);
 
-            // CORRETTO: cambiato da eventosGiornoCorrente a eventiGiornoCorrente
             if (eventiGiornoCorrente.includes(eventoSel)) {
                 alert(`Errore tassativo: l'evento "${eventoSel}" è già stato registrato oggi.`);
                 return;
@@ -375,8 +374,7 @@
             const giornoSettimana = dataSelezionata.getDay(); 
             if (giornoSettimana === 0 || giornoSettimana === 6) {
                 const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
-                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.
-Vuoi confermare l'inserimento?`);
+                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di ${nomeGiorno}.\nVuoi confermare l'inserimento?`);
                 if (!confermaFestivo) return;
             }
 
@@ -388,8 +386,7 @@ Vuoi confermare l'inserimento?`);
             else if (eventoSel === "Uscita" && orarioDecimale < 10) { orarioInsolito = true; messaggioAvviso = "Stai inserendo un'USCITA anticipata prima delle ore 10:00."; }
 
             if (orarioInsolito) {
-                const confermaOrario = confirm(`${messaggioAvviso}
-Vuoi confermare e inviare comunque la registrazione?`);
+                const confermaOrario = confirm(`${messaggioAvviso}\nVuoi confermare e inviare comunque la registrazione?`);
                 if (!confermaOrario) return;
             }
 
@@ -399,7 +396,6 @@ Vuoi confermare e inviare comunque la registrazione?`);
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
-            // CORRETTO: minuti
             const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -414,37 +410,6 @@ Vuoi confermare e inviare comunque la registrazione?`);
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
         });
 
-        document.getElementById('formRegistro').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const submitBtn = e.target.querySelector('button');
-            submitBtn.disabled = true;
-            submitBtn.innerText = 'Verifica in corso...';
-            const dataRegistroRaw = document.getElementById('r_data').value;
-            const dataSelezionata = new Date(dataRegistroRaw);
-            const giornoSettimana = dataSelezionata.getDay(); 
-            if (giornoSettimana === 0 || giornoSettimana === 6) {
-                const nomeGiorno = giornoSettimana === 6 ? "Sabato" : "Domenica";
-                const confermaFestivo = confirm(`Attenzione: Stai inserendo una registrazione di assenza di ${nomeGiorno}.
-Vuoi confermare l'inserimento?`);
-                if (!confermaFestivo) { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; return; }
-            }
-            const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
-            const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
-
-            try {
-                const checkResponse = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist }) });
-                if (checkResponse.ok) {
-                    const checkData = await checkResponse.json();
-                    if (checkData.esiste) { alert(`è già presente un'assenza registrata nella data del ${dataRegistroGrist}.`); submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; return; }
-                }
-                submitBtn.innerText = 'Invio in corso...';
-                const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, tipoAssenza: document.getElementById('r_tipo').value, quantita: parseFloat(document.getElementById('r_quantita').value), note: document.getElementById('r_note').value };
-                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (response.ok) { alert('Richiesta registrata con successo!'); document.getElementById('formRegistro').reset(); document.getElementById('r_data').value = getOggiInLocale(); }
-                else { alert('Errore server o sessione non valida.'); }
-            } catch (error) { alert('Impossibile connettersi.'); }
-            finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
-        });
 
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
