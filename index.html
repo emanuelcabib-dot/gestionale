@@ -493,58 +493,86 @@ Vuoi confermare l'inserimento?`);
 async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
     const { PDFDocument, StandardFonts, rgb } = PDFLib;
     const pdfDoc = await PDFDocument.create();
-    let page = pdfDoc.addPage([595.28, 841.89]);
+    let page = pdfDoc.addPage();
     
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // FUNZIONE DI ESTRAZIONE MIGLIORATA: Cattura esattamente il valore numerico finale, preservando segno e decimali
-    const estraiValore = (chiave) => {
+    // Estrattore numerico puro (rimuove segni dal testo di Grist per fare i calcoli da zero nel JS)
+    const estraiNumeroPuro = (chiave) => {
         const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        // Cerca la chiave e cattura il numero (compreso di eventuale segno + o - e decimali) prima di 'giorni' o 'ore'
         const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*([+-]?\\s*\\d+(?:\\.\\d+)?)");
         const match = testoMappato.match(regex);
-        
         if (match) {
-            let valore = match[1].replace(/\s+/g, ''); // Rimuove spazi interni
-            // Rimuoviamo il segno visivo + o - solo per l'esposizione in tabella (i calcoli li fa già Grist)
-            valore = valore.replace(/^[+-]/, '');
-            return valore.trim();
+            const pulito = match[1].replace(/\s+/g, '').replace(/^[+-]/, '');
+            return parseFloat(pulito) || 0;
         }
-        return '0';
+        return 0;
     };
 
-    // Estrattore specifico per il testo delle rettifiche es: "Stornati 1.0 gg" o "Stornate 1.0 ore"
-    const estraiRettificaTesto = (chiave) => {
+    // Estrattore specifico per capire se nel testo esiste la riga della rettifica
+    const haRettifica = (chiave) => {
         const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*\\(([^)]+)\\)");
-        const match = testoMappato.match(regex);
-        return match ? match[1].trim() : '';
+        const regex = new RegExp(chiaveSanitizzata, "i");
+        return regex.test(testoMappato);
     };
 
-    // 1. ESTRAZIONE DATI COMPLETA E STRUTTURATA (Allineata al testo Grist)
-    const ferieMaturate = estraiValore("Ferie maturate nel mese");
-    const ferieGodute = estraiValore("Ferie godute \\(vacanze reali\\)");
-    const ferieLiquidate = estraiValore("Ferie liquidate\\/pagate");
-    const rettificaFerieTesto = estraiRettificaTesto("Rettifiche ferie del mese");
-    const saldoFerie = estraiValore("SALDO FERIE A FINE MESE");
+    // --- 1. CONTEGGI E CALCOLO SEGNO REALE: FERIE ---
+    const ferieMaturate = estraiNumeroPuro("Ferie maturate nel mese");
+    const ferieGodute = estraiNumeroPuro("Ferie godute \\(vacanze reali\\)");
+    const ferieLiquidate = estraiNumeroPuro("Ferie liquidate\\/pagate");
+    const saldoFerieGrist = estraiNumeroPuro("SALDO FERIE A FINE MESE");
+    
+    // Calcoliamo il saldo parziale senza la rettifica per scoprire il suo segno reale
+    // Formula teorica: Maturate - Godute - Liquidate
+    const saldoParzialeFerie = ferieMaturate - ferieGodute - ferieLiquidate;
+    
+    // Il valore della rettifica è la differenza matematica necessaria per raggiungere il saldo di Grist
+    let valoreRettificaFerie = 0;
+    let stringaRettificaFerie = "";
+    
+    if (haRettifica("Rettifiche ferie del mese")) {
+        // Se il saldo reale di Grist è maggiore del parziale, la rettifica ha aggiunto ore/giorni (+), altrimenti ha stornato (-)
+        // Usiamo un approccio di tolleranza decimale per evitare problemi di floating point
+        const differenza = saldoFerieGrist - saldoParzialeFerie;
+        if (Math.abs(differenza) > 0.001) {
+            valoreRettificaFerie = differenza;
+            stringaRettificaFerie = (valoreRettificaFerie > 0 ? "+" : "") + valoreRettificaFerie.toFixed(2);
+        } else {
+            stringaRettificaFerie = "0.00";
+        }
+    }
 
-    const permessiMaturati = estraiValore("Permessi maturati nel mese");
-    const permessiFatti = estraiValore("Permessi fatti \\(ore assenza\\)");
-    const permessiLiquidati = estraiValore("Permessi liquidati\\/pagate");
-    const rettificaPermessiTesto = estraiRettificaTesto("Rettifiche permessi del mese");
-    const saldoPermessi = estraiValore("SALDO PERMESSI A FINE MESE");
+    // --- 2. CONTEGGI E CALCOLO SEGNO REALE: PERMESSI ---
+    const permessiMaturati = estraiNumeroPuro("Permessi maturati nel mese");
+    const permessiFatti = estraiNumeroPuro("Permessi fatti \\(ore assenza\\)");
+    const permessiLiquidati = estraiNumeroPuro("Permessi liquidati\\/pagate");
+    const saldoPermessiGrist = estraiNumeroPuro("SALDO PERMESSI A FINE MESE");
+    
+    const saldoParzialePermessi = permessiMaturati - permessiFatti - permessiLiquidati;
+    
+    let valoreRettificaPermessi = 0;
+    let stringaRettificaPermessi = "";
+    
+    if (haRettifica("Rettifiche permessi del mese")) {
+        const differenzaPermessi = saldoPermessiGrist - saldoParzialePermessi;
+        if (Math.abs(differenzaPermessi) > 0.001) {
+            valoreRettificaPermessi = differenzaPermessi;
+            stringaRettificaPermessi = (valoreRettificaPermessi > 0 ? "+" : "") + valoreRettificaPermessi.toFixed(2);
+        } else {
+            stringaRettificaPermessi = "0.00";
+        }
+    }
 
-    const malattiaGiorni = estraiValore("Giorni di malattia nel mese");
+    const malattiaGiorni = estraiNumeroPuro("Giorni di malattia nel mese");
 
-    // Layout della pagina
+    // --- TRACCIAMENTO GRAFICO PDF ---
     page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
     page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
     page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
 
     let y = 680;
 
-    // Generatore dinamico di sezioni grafiche
     const disegnaSezione = (titoloSezione, righeDati, voceSaldo) => {
         const altezzaBox = 45 + (righeDati.length * 22) + 35;
         page.drawRectangle({ x: 45, y: y - altezzaBox, width: 505.28, height: altezzaBox, color: rgb(0.96, 0.97, 0.98) });
@@ -564,28 +592,37 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         y -= (altezzaBox + 25);
     };
 
-    // 2. COSTRUZIONE COMPARTIMENTO FERIE
+    // --- COSTRUZIONE TABELLA FERIE ---
     const datiFerie = [
-        { label: "Ferie maturate nel periodo (giorni)", valore: ferieMaturate },
-        { label: "Ferie godute (giorni effettivi)", valore: ferieGodute }
+        { label: "Ferie maturate nel periodo (+)", valore: "+" + ferieMaturate.toFixed(2) },
+        { label: "Ferie godute (vacanze reali) (-)", valore: "-" + ferieGodute.toFixed(2) }
     ];
-    if (ferieLiquidate !== '0' && ferieLiquidate !== '') datiFerie.push({ label: "Ferie liquidate in busta paga", valore: ferieLiquidate });
-    if (rettificaFerieTesto !== '') datiFerie.push({ label: "Rettifiche del mese (Storni)", valore: rettificaFerieTesto });
-    disegnaSezione("Consuntivo Ferie", datiFerie, { label: "Saldo ferie disponibile", valore: saldoFerie + " giorni" });
+    if (ferieLiquidate > 0) {
+        datiFerie.push({ label: "Ferie liquidate/pagate (-)", valore: "-" + ferieLiquidate.toFixed(2) });
+    }
+    if (stringaRettificaFerie !== "") {
+        // Mostra la rettifica nella sua riga nativa e con il segno matematico preciso
+        datiFerie.push({ label: "Rettifiche ferie del mese (+/-)", valore: stringaRettificaFerie });
+    }
+    disegnaSezione("Consuntivo Ferie", datiFerie, { label: "Saldo ferie disponibile", valore: saldoFerieGrist.toFixed(2) + " giorni" });
 
-    // 3. COSTRUZIONE COMPARTIMENTO PERMESSI
+    // --- COSTRUZIONE TABELLA PERMESSI ---
     const datiPermessi = [
-        { label: "Permessi maturati nel periodo (ore)", valore: permessiMaturati },
-        { label: "Permessi fruiti (ore totali)", valore: permessiFatti }
+        { label: "Permessi maturati nel periodo (+)", valore: "+" + permessiMaturati.toFixed(2) },
+        { label: "Permessi fruiti (ore totali) (-)", valore: "-" + permessiFatti.toFixed(2) }
     ];
-    if (permessiLiquidati !== '0' && permessiLiquidati !== '') datiPermessi.push({ label: "Permessi liquidati in busta paga", valore: permessiLiquidati });
-    if (rettificaPermessiTesto !== '') datiPermessi.push({ label: "Rettifiche del mese (Storni)", valore: rettificaPermessiTesto });
-    disegnaSezione("Consuntivo Permessi", datiPermessi, { label: "Saldo permessi residui", valore: saldoPermessi + " ore" });
+    if (permessiLiquidati > 0) {
+        datiPermessi.push({ label: "Permessi liquidati/pagate (-)", valore: "-" + permessiLiquidati.toFixed(2) });
+    }
+    if (stringaRettificaPermessi !== "") {
+        datiPermessi.push({ label: "Rettifiche permessi del mese (+/-)", valore: stringaRettificaPermessi });
+    }
+    disegnaSezione("Consuntivo Permessi", datiPermessi, { label: "Saldo permessi residui", valore: saldoPermessiGrist.toFixed(2) + " ore" });
 
-    // 4. COSTRUZIONE COMPARTIMENTO MALATTIA
+    // --- COSTRUZIONE TABELLA MALATTIA ---
     disegnaSezione("Eventi e Certificati Medici", 
-        [{ label: "Giorni di assenza per malattia giustificata", valore: malattiaGiorni }], 
-        { label: "Totale giornate di malattia nel periodo", valore: malattiaGiorni + " giorni" }
+        [{ label: "Giorni di assenza per malattia giustificata", valore: malattiaGiorni.toFixed(2) }], 
+        { label: "Totale giornate di malattia nel periodo", valore: malattiaGiorni.toFixed(0) + " giorni" }
     );
 
     // Piè di pagina
