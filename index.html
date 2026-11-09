@@ -499,11 +499,13 @@ Vuoi confermare l'inserimento?`);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
 const estraiValore = (chiave) => {
-    // CORREZIONE: raddoppiate le barre retroverse per preservare \s e \n nel costruttore RegExp
-    const regex = new RegExp(chiave + "\\s*:\\s*([^\\n]+)");
+    // Questa regex cerca la chiave ignorando i simboli [+] o [-] iniziali
+    // e cattura solo il numero decimale (es. 2.16 o -4.5) dopo i due punti
+    const regex = new RegExp("(?:\\s*[-+\\[\\]\\/*\\s]*)\\s*" + chiave + "\\s*:\\s*([-+]?\\d+(?:[.,]\\d+)?)");
     const match = testoMappato.match(regex);
     return match ? match[1].trim() : '0';
 };
+;
 
 
             const ferieMaturate = estraiValore("Ferie maturate nel mese") !== '0' ? estraiValore("Ferie maturate nel mese") : estraiValore("Ferie maturate nell'anno");
