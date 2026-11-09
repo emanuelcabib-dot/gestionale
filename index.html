@@ -498,19 +498,24 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    const estraiValore = (chiave) => {
-        const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*([^\\n\\r]+)");
-        const match = testoMappato.match(regex);
-        
-        if (match) {
-            let valore = match[1].trim();
-            valore = valore.replace(/(giorni|ore|gg|ore assenza|vacanze reali)/gi, '').trim();
-            valore = valore.replace(/^[+-]\s*/, '').trim(); 
-            return valore || '0';
-        }
-        return '0';
-    };
+const estraiValore = (chiave) => {
+    // Esegue l'escape dei caratteri speciali nelle chiavi
+    const chiaveSanitizzata = chiave.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    
+    // Questa nuova RegEx isola solo il valore numerico decimale (es: 29.47 o -1.0)
+    // ignorando spazi multipli e qualsiasi testo successivo come "giorni" o "ore"
+    const regex = new RegExp(chiaveSanitizzata + "\\s*:\\s*([-+]?\\s*\\d+(?:\\.\\d+)?)");
+    const match = testoMappato.match(regex);
+    
+    if (match) {
+        // Prende il gruppo numerico pulito, rimuovendo eventuali spazi tra il segno e la cifra
+        let valore = match[1].replace(/\s+/g, '');
+        // Rimuove il segno "+" o "-" iniziale per non destabilizzare la formattazione grafica del PDF
+        valore = valore.replace(/^[+-]/, '');
+        return valore.trim() || '0';
+    }
+    return '0';
+};
 
     // Nuova funzione per estrarre la dicitura esatta tra parentesi per le rettifiche
     const estraiRettificaTesto = (chiave) => {
