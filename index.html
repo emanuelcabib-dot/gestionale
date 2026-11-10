@@ -293,27 +293,7 @@
             const textareaNoteAssenza = document.getElementById('r_note');
             const btnSubmitAssenza = document.querySelector('#formRegistro .btn-submit');
             
-            // Controlla se l'uscita è già stata registrata per la giornata selezionata
-            if (eventiGiornoCorrente.includes("Uscita")) {
-                // Disabilita tutti i campi del form presenze ad eccezione della data
-                selectEvento.disabled = true;
-                selectOre.disabled = true;
-                selectMinuti.disabled = true;
-                textareaNote.disabled = true;
-                btnSubmit.disabled = true;
-                
-                // Disabilita tutti i campi del form ferie/assente ad eccezione della data
-                selectTipoAssenza.disabled = true;
-                selectQuantita.disabled = true;
-                textareaNoteAssenza.disabled = true;
-                btnSubmitAssenza.disabled = true;
-                
-                // Comunica l'avviso all'utente
-                alert("Attenzione: Per questa giornata è già stata registrata la timbratura di Uscita. Non sono consentite ulteriori modifiche.");
-                return; // Esce dalla funzione interrompendo la logica standard
-            }
-
-            // Ripristina lo stato abilitato se l'uscita non è presente (es. cambio data)
+            // RIPRISTINO DELLO STATO ABILITATO DI BASE PER ENTRAMBI I MODULI
             selectEvento.disabled = false;
             selectOre.disabled = false;
             selectMinuti.disabled = false;
@@ -325,7 +305,21 @@
             textareaNoteAssenza.disabled = false;
             btnSubmitAssenza.disabled = false;
 
-            // Logica standard preesistente per nascondere i singoli eventi già inseriti
+            // Controlla se l'uscita è già stata registrata per la giornata selezionata
+            if (eventiGiornoCorrente.includes("Uscita")) {
+                // DISABILITA SOLO I CAMPI DEL FORM PRESENZE (TIMBRATURA)
+                selectEvento.disabled = true;
+                selectOre.disabled = true;
+                selectMinuti.disabled = true;
+                textareaNote.disabled = true;
+                btnSubmit.disabled = true;
+                
+                // Comunica l'avviso all'utente focalizzato solo sulla timbratura
+                alert("Attenzione: Per questa giornata è già stata completata la timbratura. Non sono consentite ulteriori timbrature.");
+                return; // Esce per mantenere bloccata la timbratura, lasciando il modulo assenze abilitato
+            }
+
+            // Logica standard preesistente per nascondere i singoli eventi già inseriti nel modulo timbratura
             const opzioni = selectEvento.options;
             let primoValido = null;
             for (let i = 0; i < opzioni.length; i++) {
