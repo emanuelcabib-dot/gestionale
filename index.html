@@ -123,7 +123,8 @@
                 <button class="tab-btn" onclick="openSection(event, 'ferie')">Ferie, permessi e malattia</button>
                 <button class="tab-btn" onclick="openSection(event, 'report_panel')">Report</button>
                 <button class="tab-btn" onclick="openSection(event, 'dashboard')">Dashboard di riepilogo</button>
-                <button class="tab-btn" onclick="openSection(event, 'impostazioni')">Impostazioni parametri</button>
+<button class="tab-btn" onclick="openSection(event, 'impostazioni')">Impostazioni parametri</button>
+                <button class="tab-btn" onclick="openSection(event, 'storico_panel'); caricaTabellaStorico();">Storico e Modifiche</button>
                 <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
                     <button class="tab-btn" onclick="logout()" style="padding:10px 0; color:#e74c3c; font-weight:bold; background:none; border:none; text-align:left; width:100%;">Esci</button>
                 </div>
@@ -259,9 +260,52 @@
                 <p>Impostazione parametri ferie/permessi.</p>
                 <iframe id="iframeImpostazioni" src="about:blank"></iframe>
             </div>
-        </div>
-    </div>
+
+
+                    <!-- NUOVA SEZIONE: STORICO E MODIFICHE -->
+            <div id="storico_panel" class="section">
+                <h2>Storico e Modifica Registrazioni</h2>
+                <p>Di seguito sono elencati gli ultimi inserimenti salvati. Clicca su 📝 <b>Modifica</b> per correggere i dati.</p>
+                
+                <h3>Ultime Timbrature Giornata</h3>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; background:white; margin-top:10px; font-size:14px; text-align:left; border: 1px solid #e0e0e0;">
+                        <thead>
+                            <tr style="background:#2c3e50; color:white;">
+                                <th style="padding:10px;">Data</th>
+                                <th style="padding:10px;">Evento</th>
+                                <th style="padding:10px;">Orario</th>
+                                <th style="padding:10px;">Note</th>
+                                <th style="padding:10px;">Azione</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabellaStoricoPresenze">
+                            <tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessun dato caricato. Effettua l'accesso.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 style="margin-top:40px;">Ultime Assenze (Ferie, Permessi, Malattia)</h3>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; background:white; margin-top:10px; font-size:14px; text-align:left; border: 1px solid #e0e0e0;">
+                        <thead>
+                            <tr style="background:#2c3e50; color:white;">
+                                <th style="padding:10px;">Data</th>
+                                <th style="padding:10px;">Tipo Assenza</th>
+                                <th style="padding:10px;">Quantità</th>
+                                <th style="padding:10px;">Note</th>
+                                <th style="padding:10px;">Azione</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabellaStoricoAssenze">
+                            <tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessun dato caricato. Effettua l'accesso.</td></tr>
+                        </tbody>
+                    </table>
+                </div> 
+            </div>
+    </div> 
     <script>
+
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
         let sessionToken = "";
         let eventiGiornoCorrente = [];
@@ -489,7 +533,7 @@ if (orarioInsolito) {
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataPresenzaGrist = `${giornoP}/${meseP}/${annoP}`;
 
-            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value };
+            const payload = { tipo: "presenze", token: sessionToken, data: dataPresenzaGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value, id_riga: idRigaInModificaPresenze };
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
@@ -498,6 +542,10 @@ if (orarioInsolito) {
                     document.getElementById('p_data').value = getOggiInLocale();
                     setOrarioAttuale();
                     await caricaEventiGiornoRemoti();
+idRigaInModificaPresenze = null;
+document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
+document.querySelector('#formPresenze .btn-submit').style.background = '#2ecc71';
+
                 } else { mostraAlert('Errore server o sessione non valida.'); }
             } catch (error) { mostraAlert('Impossibile connettersi al servizio.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
@@ -526,10 +574,19 @@ if (giornoSettimana === 0 || giornoSettimana === 6) {
                     if (checkData.esiste) { mostraAlert(`è già presente un'assenza registrata nella data del ${dataRegistroGrist}.`); submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; return; }
                 }
                 submitBtn.innerText = 'Invio in corso...';
-                const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, tipoAssenza: document.getElementById('r_tipo').value, quantita: parseFloat(document.getElementById('r_quantita').value), note: document.getElementById('r_note').value };
+                const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, tipoAssenza: document.getElementById('r_tipo').value, quantita: parseFloat(document.getElementById('r_quantita').value), note: document.getElementById('r_note').value, id_riga: idRigaInModificaAssenze };
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (response.ok) { mostraAlert('Richiesta registrata con successo!'); document.getElementById('formRegistro').reset(); document.getElementById('r_data').value = getOggiInLocale(); }
-                else { mostraAlert('Errore server o sessione non valida.'); }
+                if (response.ok) { 
+                    mostraAlert('Richiesta registrata con successo!'); 
+                    document.getElementById('formRegistro').reset(); 
+                    document.getElementById('r_data').value = getOggiInLocale(); 
+                    idRigaInModificaAssenze = null;
+                    document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
+                    document.querySelector('#formRegistro .btn-submit').style.background = '#e67e22';
+                } else { 
+                    mostraAlert('Errore server o sessione non valida.'); 
+                }
+
             } catch (error) { mostraAlert('Impossibile connettersi.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
@@ -698,6 +755,130 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante il recupero o la generazione grafica del PDF."); }
             finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale'; }
         }
+        // VARIABILI DI STATO PER LA MODIFICA
+        let idRigaInModificaPresenze = null;
+        let idRigaInModificaAssenze = null;
+
+        // FUNZIONE PER LEGGERE I DATI DAL WORKER E GENERARE LE TABELLE DI STORICO
+        async function caricaTabellaStorico() {
+            if (!sessionToken) return;
+            const tPresenze = document.getElementById("tabellaStoricoPresenze");
+            const tAssenze = document.getElementById("tabellaStoricoAssenze");
+            
+            tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center;">Caricamento in corso...</td></tr>';
+            tAssenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center;">Caricamento in corso...</td></tr>';
+
+            try {
+                const response = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken })
+                });
+                
+                if (response.ok) {
+                    const res = await response.json();
+                    
+                    // Renderizza Timbrature
+                    if (res.presenze && res.presenze.length > 0) {
+                        tPresenze.innerHTML = res.presenze.map(r => {
+                            let dataLeggibile = typeof r.fields.Data === 'number' ? new Date(r.fields.Data * 1000).toLocaleDateString('it-IT') : r.fields.Data;
+                            return `
+                                <tr style="border-bottom:1px solid #e0e0e0;">
+                                    <td style="padding:10px;">${dataLeggibile}</td>
+                                    <td style="padding:10px;"><span style="background:#e1f5fe; color:#0288d1; padding:3px 8px; border-radius:12px; font-weight:bold; font-size:12px;">${r.fields.Evento}</span></td>
+                                    <td style="padding:10px; font-weight:bold;">${r.fields.Ora}:${r.fields.Minuti}</td>
+                                    <td style="padding:10px; color:#555;">${r.fields.Note || '-'}</td>
+                                    <td style="padding:10px;"><button onclick="attivaModificaPresenza(${r.id}, '${r.fields.Data}', '${r.fields.Evento}', ${parseInt(r.fields.Ora)}, ${parseInt(r.fields.Minuti)}, '${r.fields.Note ? r.fields.Note.replace(/'/g, "\\'") : ""}')" style="background:#3498db; color:white; padding:5px 10px; font-size:12px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
+                                </tr>`;
+                        }).join('');
+                    } else {
+                        tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna timbratura recente trovata.</td></tr>';
+                    }
+
+                    // Renderizza Assenze
+                    if (res.assenze && res.assenze.length > 0) {
+                        tAssenze.innerHTML = res.assenze.map(r => {
+                            let dataLeggibile = typeof r.fields.Data === 'number' ? new Date(r.fields.Data * 1000).toLocaleDateString('it-IT') : r.fields.Data;
+                            return `
+                                <tr style="border-bottom:1px solid #e0e0e0;">
+                                    <td style="padding:10px;">${dataLeggibile}</td>
+                                    <td style="padding:10px;"><span style="background:#fff3e0; color:#e65100; padding:3px 8px; border-radius:12px; font-weight:bold; font-size:12px;">${r.fields.Tipo_Assenza}</span></td>
+                                    <td style="padding:10px; font-weight:bold;">${r.fields.Quantita}</td>
+                                    <td style="padding:10px; color:#555;">${r.fields.Note || '-'}</td>
+                                    <td style="padding:10px;"><button onclick="attivaModificaAssenza(${r.id}, '${r.fields.Data}', '${r.fields.Tipo_Assenza}', ${r.fields.Quantita}, '${r.fields.Note ? r.fields.Note.replace(/'/g, "\\'") : ""}')" style="background:#e67e22; color:white; padding:5px 10px; font-size:12px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
+                                </tr>`;
+                        }).join('');
+                    } else {
+                        tAssenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna assenza recente trovata.</td></tr>';
+                    }
+                } else {
+                    mostraAlert("Errore durante il recupero dei dati remoti dallo storico.");
+                }
+            } catch (err) {
+                console.error(err);
+                tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#e74c3c;">Connessione fallita.</td></tr>';
+            }
+        }
+
+        // COPIALAVORO NEI CAMPI DELLA TIMBRATURA
+        function attivaModificaPresenza(id, data, evento, ora, minuti, note) {
+            idRigaInModificaPresenze = id;
+            
+            if (data.includes("/")) {
+                const [gg, mm, aa] = data.split("/");
+                document.getElementById('p_data').value = `${aa}-${mm.padStart(2, '0')}-${gg.padStart(2, '0')}`;
+            } else {
+                document.getElementById('p_data').value = data;
+            }
+            
+            document.getElementById('p_evento').value = evento;
+            document.getElementById('p_ore').value = ora;
+            document.getElementById('p_minuti').value = minuti;
+            document.getElementById('p_note').value = note;
+            
+            const btn = document.querySelector('#formPresenze .btn-submit');
+            btn.innerText = "💾 Salva Modifica Rigo";
+            btn.style.background = "#3498db";
+            
+            document.getElementById("storico_panel").style.display = "none";
+            document.getElementById("timbratura").style.display = "block";
+            
+            const tabButtons = document.getElementsByClassName("tab-btn");
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].className = tabButtons[i].className.replace(" active", "");
+                if(tabButtons[i].getAttribute("onclick").includes("'timbratura'")) tabButtons[i].className += " active";
+            }
+        }
+
+        // COPIALAVORO NEI CAMPI DELLE ASSENZE
+        function attivaModificaAssenza(id, data, tipoAssenza, quantita, note) {
+            idRigaInModificaAssenze = id;
+            
+            if (data.includes("/")) {
+                const [gg, mm, aa] = data.split("/");
+                document.getElementById('r_data').value = `${aa}-${mm.padStart(2, '0')}-${gg.padStart(2, '0')}`;
+            } else {
+                document.getElementById('r_data').value = data;
+            }
+            
+            document.getElementById('r_tipo').value = tipoAssenza;
+            document.getElementById('r_quantita').value = quantita;
+            document.getElementById('r_note').value = note;
+            
+            const btn = document.querySelector('#formRegistro .btn-submit');
+            btn.innerText = "💾 Salva Modifica Assenza";
+            btn.style.background = "#2980b9";
+            
+            document.getElementById("storico_panel").style.display = "none";
+            document.getElementById("ferie").style.display = "block";
+            
+            const tabButtons = document.getElementsByClassName("tab-btn");
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].className = tabButtons[i].className.replace(" active", "");
+                if(tabButtons[i].getAttribute("onclick").includes("'ferie'")) tabButtons[i].className += " active";
+            }
+        }
+
     </script>
 </body>
 </html>
