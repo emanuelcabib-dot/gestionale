@@ -265,7 +265,17 @@
                     <!-- NUOVA SEZIONE: STORICO E MODIFICHE -->
             <div id="storico_panel" class="section">
                 <h2>Storico e Modifica Registrazioni</h2>
-                <p>Di seguito sono elencati gli ultimi inserimenti salvati. Clicca su 📝 <b>Modifica</b> per correggere i dati.</p>
+                <p>Seleziona l'anno per visualizzare tutte le registrazioni e clicca su 📝 <b>Modifica</b> per correggere i dati.</p>
+                
+                <div class="form-group" style="max-width: 220px; margin-top: 15px;">
+                    <label for="storico_anno">Filtra per Anno:</label>
+                    <select id="storico_anno" onchange="caricaTabellaStorico()">
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                    </select>
+                </div>
+
                 
                 <h3>Ultime Timbrature Giornata</h3>
                 <div style="overflow-x:auto;">
@@ -764,15 +774,28 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             if (!sessionToken) return;
             const tPresenze = document.getElementById("tabellaStoricoPresenze");
             const tAssenze = document.getElementById("tabellaStoricoAssenze");
+            const annoScelto = document.getElementById("storico_anno").value;
             
-            tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center;">Caricamento in corso...</td></tr>';
-            tAssenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center;">Caricamento in corso...</td></tr>';
+            tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center;">Caricamento anno ' + annoScelto + ' in corso...</td></tr>';
+            tAssenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center;">Caricamento anno ' + annoScelto + ' in corso...</td></tr>';
+
+            // Formatta correttamente la data da mostrare nella colonna della tabella
+            const formattaDataTabella = (val) => {
+                if (typeof val === 'number') {
+                    const d = new Date(val * 1000);
+                    const gg = String(d.getUTCDate()).padStart(2, '0');
+                    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                    const aa = d.getUTCFullYear();
+                    return `${gg}/${mm}/${aa}`;
+                }
+                return val;
+            };
 
             try {
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken })
+                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: annoScelto })
                 });
                 
                 if (response.ok) {
@@ -781,7 +804,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
                     // Renderizza Timbrature
                     if (res.presenze && res.presenze.length > 0) {
                         tPresenze.innerHTML = res.presenze.map(r => {
-                            let dataLeggibile = typeof r.fields.Data === 'number' ? new Date(r.fields.Data * 1000).toLocaleDateString('it-IT') : r.fields.Data;
+                            let dataLeggibile = formattaDataTabella(r.fields.Data);
                             return `
                                 <tr style="border-bottom:1px solid #e0e0e0;">
                                     <td style="padding:10px;">${dataLeggibile}</td>
@@ -792,13 +815,13 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
                                 </tr>`;
                         }).join('');
                     } else {
-                        tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna timbratura recente trovata.</td></tr>';
+                        tPresenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna timbratura trovata per il ' + annoScelto + '.</td></tr>';
                     }
 
                     // Renderizza Assenze
                     if (res.assenze && res.assenze.length > 0) {
                         tAssenze.innerHTML = res.assenze.map(r => {
-                            let dataLeggibile = typeof r.fields.Data === 'number' ? new Date(r.fields.Data * 1000).toLocaleDateString('it-IT') : r.fields.Data;
+                            let dataLeggibile = formattaDataTabella(r.fields.Data);
                             return `
                                 <tr style="border-bottom:1px solid #e0e0e0;">
                                     <td style="padding:10px;">${dataLeggibile}</td>
@@ -809,7 +832,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
                                 </tr>`;
                         }).join('');
                     } else {
-                        tAssenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna assenza recente trovata.</td></tr>';
+                        tAssenze.innerHTML = '<tr><td colspan="5" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna assenza trovata per il ' + annoScelto + '.</td></tr>';
                     }
                 } else {
                     mostraAlert("Errore durante il recupero dei dati remoti dallo storico.");
