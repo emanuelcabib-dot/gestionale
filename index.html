@@ -155,13 +155,13 @@
                 <button class="mobile-btn-icon" onclick="toggleMobileMenu()">☰</button>
             </div>
             <div class="mobile-dropdown-menu" id="mobileDropdownMenu">
-                <button class="tab-btn active" onclick="openSection(event, 'home'); toggleMobileMenu();">🏠 Riepilogo e Avvisi</button>
-                <button class="tab-btn" onclick="openSection(event, 'timbratura'); toggleMobileMenu();">🕒 Timbratura giornata</button>
-                <button class="tab-btn" onclick="openSection(event, 'ferie'); toggleMobileMenu();">🌴 Ferie, permessi e malattia</button>
-                <button class="tab-btn" onclick="openSection(event, 'report_panel'); toggleMobileMenu();">📄 Report</button>
-                <button class="tab-btn" onclick="openSection(event, 'dashboard'); toggleMobileMenu();">📊 Dashboard grafica</button>
-                <button class="tab-btn" onclick="openSection(event, 'impostazioni'); toggleMobileMenu();">⚙️ Impostazioni parametri</button>
-                <button class="tab-btn" onclick="openSection(event, 'storico_panel'); caricaTabellaStorico(); toggleMobileMenu();">📜 Storico e Modifiche</button>
+                <button class="tab-btn active" onclick="navigaASezione('home'); toggleMobileMenu();">🏠 Riepilogo e Avvisi</button>
+                <button class="tab-btn" onclick="navigaASezione('timbratura'); toggleMobileMenu();">🕒 Timbratura giornata</button>
+                <button class="tab-btn" onclick="navigaASezione('ferie'); toggleMobileMenu();">🌴 Ferie, permessi e malattia</button>
+                <button class="tab-btn" onclick="navigaASezione('report_panel'); toggleMobileMenu();">📄 Report</button>
+                <button class="tab-btn" onclick="navigaASezione('dashboard'); toggleMobileMenu();">📊 Dashboard grafica</button>
+                <button class="tab-btn" onclick="navigaASezione('impostazioni'); toggleMobileMenu();">⚙️ Impostazioni parametri</button>
+                <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico(); toggleMobileMenu();">📜 Storico e Modifiche</button>
                 <button class="tab-btn" onclick="logout()" style="color:#e74c3c; font-weight:bold;">🚪 Esci</button>
             </div>
         </div>
@@ -170,13 +170,13 @@
         <div class="sidebar">
             <h1>Pannello Controllo Lavoro</h1>
             <div class="sidebar-menu">
-                <button class="tab-btn active" onclick="openSection(event, 'home')">🏠 Riepilogo e Avvisi</button>
-                <button class="tab-btn" onclick="openSection(event, 'timbratura')">🕒 Timbratura giornata</button>
-                <button class="tab-btn" onclick="openSection(event, 'ferie')">🌴 Ferie, permessi e malattia</button>
-                <button class="tab-btn" onclick="openSection(event, 'report_panel')">📄 Report</button>
-                <button class="tab-btn" onclick="openSection(event, 'dashboard')">📊 Dashboard grafica</button>
-                <button class="tab-btn" onclick="openSection(event, 'impostazioni')">⚙️ Impostazioni parametri</button>
-                <button class="tab-btn" onclick="openSection(event, 'storico_panel'); caricaTabellaStorico();">📜 Storico e Modifiche</button>
+                <button class="tab-btn active" onclick="navigaASezione('home')">🏠 Riepilogo e Avvisi</button>
+                <button class="tab-btn" onclick="navigaASezione('timbratura')">🕒 Timbratura giornata</button>
+                <button class="tab-btn" onclick="navigaASezione('ferie')">🌴 Ferie, permessi e malattia</button>
+                <button class="tab-btn" onclick="navigaASezione('report_panel')">📄 Report</button>
+                <button class="tab-btn" onclick="navigaASezione('dashboard')">📊 Dashboard grafica</button>
+                <button class="tab-btn" onclick="navigaASezione('impostazioni')">⚙️ Impostazioni parametri</button>
+                <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico();">📜 Storico e Modifiche</button>
                 <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
                     <button class="tab-btn" onclick="logout()" style="padding:10px 0; color:#e74c3c; font-weight:bold; background:none; border:none; text-align:left; width:100%;">🚪 Esci</button>
                 </div>
@@ -481,7 +481,6 @@
         let recordsAvvisiOriginali = [];
         let tipiAssenzaBloccantiCache = new Set();
 
-        // INIZIALIZZAZIONE SELECT ORARI & QUANTITA
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
             let opt = document.createElement('option');
@@ -517,27 +516,42 @@
         }
 
         function openSectionDirect(sectionId) {
-            const sections = document.getElementsByClassName("section");
-            for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
-            document.getElementById(sectionId).style.display = "block";
+            navigaASezione(sectionId);
             document.getElementById('mobileDropdownMenu').style.display = 'none';
-            if (sectionId === 'timbratura') { verificaStatoTimbraturaGiornata(); }
         }
 
-        function openSection(evt, sectionId) {
+        function navigaASezione(sectionId) {
             const sections = document.getElementsByClassName("section");
             for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             const tabButtons = document.getElementsByClassName("tab-btn");
-            for (let i = 0; i < tabButtons.length; i++) { tabButtons[i].className = tabButtons[i].className.replace(" active", ""); }
+            for (let i = 0; i < tabButtons.length; i++) { tabButtons[i].classList.remove("active"); }
             
             document.getElementById(sectionId).style.display = "block";
-            evt.currentTarget.className += " active";
-            document.getElementById('mobileTitle').innerText = evt.currentTarget.innerText.replace(/^[^\w\s]+\s*/, '');
+            
+            // Attiva il pulsante corrispondente nella sidebar/menu se presente
+            for (let i = 0; i < tabButtons.length; i++) {
+                if (tabButtons[i].getAttribute('onclick') && tabButtons[i].getAttribute('onclick').includes(sectionId)) {
+                    tabButtons[i].classList.add("active");
+                }
+            }
 
             if (sectionId === 'home') {
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
+                if (!idRigaInModificaPresenze) {
+                    document.getElementById('p_data').value = getOggiInLocale();
+                    setOrarioAttuale();
+                    document.getElementById('p_evento').value = "Ingresso";
+                    document.getElementById('p_note').value = "";
+                }
                 verificaStatoTimbraturaGiornata();
+            } else if (sectionId === 'ferie') {
+                if (!idRigaInModificaAssenze) {
+                    document.getElementById('r_data').value = getOggiInLocale();
+                    document.getElementById('r_tipo').value = "Ferie";
+                    document.getElementById('r_quantita').value = "8";
+                    document.getElementById('r_note').value = "";
+                }
             }
         }
 
@@ -556,15 +570,15 @@
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('mainPanel').style.display = 'flex';
                     
-                    const oggi = getOggiInLocale();
-                    document.getElementById('p_data').value = oggi;
-                    document.getElementById('r_data').value = oggi;
+                    document.getElementById('p_data').value = getOggiInLocale();
+                    document.getElementById('r_data').value = getOggiInLocale();
 
                     setOrarioAttuale();
                     await caricaConfigurazioneApp();
                     await caricaTipiAssenzaCache();
                     await caricaDatiHome();
                     caricaImpostazioniNative();
+                    navigaASezione('home');
                 } else {
                     errorMessage.style.display = 'block';
                 }
@@ -869,9 +883,9 @@
             tr.className = 'riga-nuova-contrattuale';
             tr.style.borderBottom = '1px solid #e0e0e0';
             tr.innerHTML = `
-                <td style="padding:10px;"><input type="number" class="new_ctr_anno" value="${new Date().getFullYear()}" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
-                <td style="padding:10px;"><input type="text" class="new_ctr_fer" value="25.92" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
-                <td style="padding:10px;"><input type="text" class="new_ctr_perm" value="40" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="number" class="new_ctr_anno" value="" placeholder="Es. 2026" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="text" class="new_ctr_fer" value="" placeholder="Es. 25.92" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="text" class="new_ctr_perm" value="" placeholder="Es. 40" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
             `;
             let table = container.querySelector('table');
             if (!table) {
@@ -963,10 +977,12 @@
                 const anno = riga.querySelector('.new_ctr_anno').value;
                 const ferie = riga.querySelector('.new_ctr_fer').value;
                 const perm = riga.querySelector('.new_ctr_perm').value;
-                await fetch(WORKER_URL, {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tipo: "aggiungi_contrattuali", token: sessionToken, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
-                });
+                if(anno && ferie && perm) {
+                    await fetch(WORKER_URL, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ tipo: "aggiungi_contrattuali", token: sessionToken, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
+                    });
+                }
             }
             mostraAlert("Parametri contrattuali aggiornati con successo!");
             caricaImpostazioniNative();
@@ -1030,7 +1046,6 @@
             caricaImpostazioniNative();
         }
 
-        // VERIFICA E CONTROLLI TIMBRATURA GIORNATA (RIPRISTINATI ED ESEGUITI SOLO QUI)
         async function verificaStatoTimbraturaGiornata() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
@@ -1039,7 +1054,6 @@
             const dataGrist = `${giorno}/${mese}/${anno}`;
 
             try {
-                // 1. Controllo assenze bloccanti
                 const resAss = await fetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
@@ -1051,7 +1065,6 @@
                     }
                 }
 
-                // 2. Controllo eventi esistenti
                 const response = await fetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
@@ -1077,7 +1090,7 @@
 
         document.getElementById('p_data').addEventListener('change', verificaStatoTimbraturaGiornata);
 
-        // INVIO PRESENZE CON BLOCCO ASSENZE
+        // INVIO PRESENZE -> RIMANDA A HOME
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dataStringa = document.getElementById('p_data').value;
@@ -1088,7 +1101,6 @@
             const [annoP, meseP, giornoP] = dataStringa.split('-');
             const dataGrist = `${giornoP}/${meseP}/${annoP}`;
 
-            // Controllo blocco timbratura se esiste assenza bloccante
             try {
                 const resAss = await fetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1110,18 +1122,19 @@
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
-                    if (eventoSel === "Uscita" && !idRigaInModificaPresenze) {
-                        mostraAlert("Registrazione Uscita completata!\n📊 Riepilogo giornata:\n- Ore lavorate registrate con successo.\n- Eventuali straordinari e permessi calcolati nei totali.");
-                    } else {
-                        mostraAlert('Presenza registrata con successo!');
-                    }
-                    tornaAStoricoDaPresenze();
+                    mostraAlert('Presenza registrata con successo!');
+                    navigaASezione('home');
+                    idRigaInModificaPresenze = null;
+                    document.getElementById('formPresenze').reset();
+                    document.getElementById('btnEliminaPresenza').style.display = "none";
+                    document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
+                    document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
                 } else { mostraAlert('Errore server o sessione non valida.'); }
             } catch (error) { mostraAlert('Impossibile connettersi al servizio.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
         });
 
-        // INVIO ASSENZE
+        // INVIO ASSENZE CON CONTROLLO UNICITÀ DATA -> RIMANDA A HOME
         document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = e.target.querySelector('button');
@@ -1130,18 +1143,41 @@
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
+            // Controllo se esiste già un'assenza in questa data (se non siamo in modifica)
+            if (!idRigaInModificaAssenze) {
+                try {
+                    const resCheck = await fetch(WORKER_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist })
+                    });
+                    if (resCheck.ok) {
+                        const dChk = await resCheck.json();
+                        if (dChk.esiste) {
+                            mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
+                            submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
+                            return;
+                        }
+                    }
+                } catch(err) {}
+            }
+
             try {
                 const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, tipoAssenza: document.getElementById('r_tipo').value, quantita: parseFloat(document.getElementById('r_quantita').value), note: document.getElementById('r_note').value, id_riga: idRigaInModificaAssenze };
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) { 
                     mostraAlert('Richiesta registrata con successo!'); 
-                    tornaAStoricoDaAssenze();
+                    navigaASezione('home');
+                    idRigaInModificaAssenze = null;
+                    document.getElementById('formRegistro').reset();
+                    document.getElementById('btnEliminaAssenza').style.display = "none";
+                    document.getElementById('btnAnnullaModificaAssenza').style.display = "none";
+                    document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
                 } else { mostraAlert('Errore server.'); }
             } catch (error) { mostraAlert('Impossibile connettersi.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // GENERAZIONE PDF PERFETTAMENTE FEDELE ALL'ESEMPIO E SENZA ERRORI DI IMPAGINAZIONE
+        // GENERAZIONE PDF PROFESSIONALE CON BLOCCHI A SFONDO COLORATO
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -1149,14 +1185,14 @@
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            let y = 770;
-            
-            // Intestazione con barra verde laterale esatta
-            page.drawRectangle({ x: 40, y: 745, width: 5, height: 40, color: rgb(0.18, 0.8, 0.44) });
-            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 775, size: 9, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
-            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 752, size: 15, font: fontBold, color: rgb(0.15, 0.2, 0.25) });
+            // Sfondo box intestazione
+            page.drawRectangle({ x: 35, y: 730, width: 525, height: 65, color: rgb(0.92, 0.95, 0.98) });
+            page.drawRectangle({ x: 35, y: 730, width: 6, height: 65, color: rgb(0.18, 0.6, 0.85) });
 
-            y = 705;
+            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 768, size: 9, font: fontBold, color: rgb(0.3, 0.4, 0.5) });
+            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 742, size: 14, font: fontBold, color: rgb(0.15, 0.25, 0.35) });
+
+            let y = 690;
             const linee = testoMappato.split('\n');
             for (const linea of linee) {
                 if (y < 60) {
@@ -1168,33 +1204,38 @@
                     continue;
                 }
                 if (linea.startsWith('---') || linea.startsWith('___')) {
-                    page.drawLine({ start: { x: 40, y: y }, end: { x: 555, y: y }, thickness: 0.8, color: rgb(0.85, 0.85, 0.85) });
-                    y -= 14;
+                    page.drawLine({ start: { x: 35, y: y }, end: { x: 560, y: y }, thickness: 1, color: rgb(0.8, 0.85, 0.9) });
+                    y -= 15;
                     continue;
                 }
-                // Gestione righe tabulari / chiave-valore pulite per evitare spezzamenti
+                // Sezione titolo interno con sfondo colorato leggero
+                if (linea === linea.toUpperCase() && linea.trim().length > 0 && !linea.includes(':')) {
+                    y -= 10;
+                    page.drawRectangle({ x: 35, y: y - 3, width: 525, height: 18, color: rgb(0.95, 0.95, 0.95) });
+                    page.drawText(linea, { x: 42, y: y + 2, size: 10, font: fontBold, color: rgb(0.2, 0.3, 0.4) });
+                    y -= 20;
+                    continue;
+                }
+
                 if (linea.includes(':') && !linea.startsWith(' [+]') && !linea.startsWith(' [-]') && !linea.startsWith(' [+/-]')) {
                     const parti = linea.split(':');
                     const etichetta = parti[0].trim();
                     const valore = parti.slice(1).join(':').trim();
-                    page.drawText(etichetta, { x: 40, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
-                    page.drawText(valore, { x: 250, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                    page.drawText(etichetta, { x: 45, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
+                    page.drawText(valore, { x: 280, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
                 } else if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
                     page.drawText(linea, { x: 45, y: y, size: 10, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
                 } else if (linea.startsWith(' >>>') || linea.startsWith(' <<<') || linea.startsWith(' *')) {
                     page.drawText(linea, { x: 40, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-                } else if (linea === linea.toUpperCase() && linea.trim().length > 0) {
-                    y -= 8;
-                    page.drawText(linea, { x: 40, y: y, size: 11, font: fontBold, color: rgb(0.18, 0.35, 0.5) });
                 } else {
                     page.drawText(linea, { x: 40, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
                 }
                 y -= 20;
             }
 
-            // Piè di pagina standard
-            page.drawLine({ start: { x: 40, y: 45 }, end: { x: 555, y: 45 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
-            page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 40, y: 30, size: 8, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
+            // Piè di pagina
+            page.drawLine({ start: { x: 35, y: 40 }, end: { x: 560, y: 40 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+            page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 35, y: 25, size: 8, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
 
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -1381,8 +1422,7 @@
             document.querySelector('#formPresenze .btn-submit').innerText = "💾 Salva Modifica";
             document.getElementById('btnEliminaPresenza').style.display = "inline-block";
             document.getElementById('btnAnnullaModificaPresenza').style.display = "inline-block";
-            document.getElementById("storico_panel").style.display = "none";
-            document.getElementById("timbratura").style.display = "block";
+            navigaASezione('timbratura');
         }
 
         function tornaAStoricoDaPresenze() {
@@ -1393,10 +1433,8 @@
             document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
             document.getElementById('btnEliminaPresenza').style.display = "none";
             document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
-            document.getElementById("timbratura").style.display = "none";
-            document.getElementById("storico_panel").style.display = "block";
+            navigaASezione('storico_panel');
             caricaTabellaStorico();
-            verificaStatoTimbraturaGiornata();
         }
 
         function attivaModificaAssenza(id, data, tipoAssenza, quantita, note) {
@@ -1408,8 +1446,7 @@
             document.querySelector('#formRegistro .btn-submit').innerText = "💾 Salva Modifica";
             document.getElementById('btnEliminaAssenza').style.display = "inline-block";
             document.getElementById('btnAnnullaModificaAssenza').style.display = "inline-block";
-            document.getElementById("storico_panel").style.display = "none";
-            document.getElementById("ferie").style.display = "block";
+            navigaASezione('ferie');
         }
 
         function tornaAStoricoDaAssenze() {
@@ -1419,8 +1456,7 @@
             document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
             document.getElementById('btnEliminaAssenza').style.display = "none";
             document.getElementById('btnAnnullaModificaAssenza').style.display = "none";
-            document.getElementById("ferie").style.display = "none";
-            document.getElementById("storico_panel").style.display = "block";
+            navigaASezione('storico_panel');
             caricaTabellaStorico();
         }
 
