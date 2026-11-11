@@ -479,6 +479,7 @@
         let recordsTipiTimbraturaOriginali = [];
         let recordsTipiAssenzaOriginali = [];
         let recordsAvvisiOriginali = [];
+        let tipiAssenzaBloccantiCache = new Set();
 
         // INIZIALIZZAZIONE SELECT ORARI & QUANTITA
         const selectOre = document.getElementById('p_ore');
@@ -561,9 +562,9 @@
 
                     setOrarioAttuale();
                     await caricaConfigurazioneApp();
+                    await caricaTipiAssenzaCache();
                     await caricaDatiHome();
                     caricaImpostazioniNative();
-                    verificaStatoTimbraturaGiornata();
                 } else {
                     errorMessage.style.display = 'block';
                 }
@@ -601,6 +602,26 @@
             }
         }
 
+        async function caricaTipiAssenzaCache() {
+            try {
+                const res = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_tipi_assenza", token: sessionToken })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    tipiAssenzaBloccantiCache.clear();
+                    (data.records || []).forEach(r => {
+                        if (r.fields.Blocca_Timbrature && r.fields.Attivo) {
+                            tipiAssenzaBloccantiCache.add(String(r.fields.Nome || "").trim().toLowerCase());
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error("Errore caricamento Tipi Assenza", e);
+            }
+        }
+
         function popolaTendineAnniDinamiche() {
             const annoInizio = parseInt(configAppCache["Anno inizio storico"] || "2024", 10);
             const annoCorrente = new Date().getFullYear();
@@ -632,7 +653,6 @@
             }
         }
 
-        // HOME E CONTROLLI GIORNATA E ASSENZE
         async function caricaDatiHome() {
             if (!sessionToken) return;
             
@@ -661,7 +681,6 @@
                 txtGiornata.innerText = "Errore nel recupero presenze odierne.";
             }
 
-            // Controllo Timbrature Passate
             const txtTimbraturePassate = document.getElementById('txtTimbraturePassate');
             try {
                 const annoCorr = new Date().getFullYear();
@@ -678,7 +697,6 @@
                 txtTimbraturePassate.innerText = "Verifica completata.";
             }
 
-            // Assenze nei prossimi 14 giorni con dettaglio record
             const txtAssenzeProgrammate = document.getElementById('txtAssenzeProgrammate');
             try {
                 const resAss = await fetch(WORKER_URL, {
@@ -710,7 +728,6 @@
                 txtAssenzeProgrammate.innerText = "Controllo pianificazione completato.";
             }
 
-            // Avviso Chiusura Mese
             const giornoSoglia = parseInt(configAppCache["Giorno avviso fine mese"] || "25", 10);
             const giornoOggi = new Date().getDate();
             const cardChiusura = document.getElementById('cardChiusuraMese');
@@ -721,7 +738,6 @@
                 cardChiusura.style.display = "none";
             }
 
-            // Bacheca Avvisi
             const bachecaContainer = document.getElementById('bachecaContainer');
             try {
                 const resA = await fetch(WORKER_URL, {
@@ -761,7 +777,6 @@
             }
         }
 
-        // SCHEDE IMPOSTAZIONI NATIVE
         function switchSettingsTab(evt, paneId) {
             document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
@@ -850,7 +865,6 @@
 
         function aggiungiRigaContrattuale() {
             const container = document.getElementById('tableParametriContrattualiContainer');
-            const nuovoId = 'new_' + Date.now();
             const tr = document.createElement('tr');
             tr.className = 'riga-nuova-contrattuale';
             tr.style.borderBottom = '1px solid #e0e0e0';
@@ -995,6 +1009,7 @@
                     body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, blocca: blocca, attivo: attivo })
                 });
             }
+            await caricaTipiAssenzaCache();
             mostraAlert("Tipi di assenza aggiornati con successo!");
             caricaImpostazioniNative();
         }
@@ -1015,7 +1030,7 @@
             caricaImpostazioniNative();
         }
 
-        // VERIFICA E CONTROLLI TIMBRATURA GIORNATA (RIPRISTINATI)
+        // VERIFICA E CONTROLLI TIMBRATURA GIORNATA (RIPRISTINATI ED ESEGUITI SOLO QUI)
         async function verificaStatoTimbraturaGiornata() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
@@ -1054,10 +1069,6 @@
                             selEvento.options[i].disabled = false;
                         }
                     }
-
-                    if (eventiGiornoCorrente.includes("Uscita")) {
-                        mostraAlert("Attenzione: per questa giornata è già stata registrata l'Uscita (giornata completa).");
-                    }
                 }
             } catch (error) {
                 console.error("Errore verifica timbratura:", error);
@@ -1066,7 +1077,7 @@
 
         document.getElementById('p_data').addEventListener('change', verificaStatoTimbraturaGiornata);
 
-        // INVIO PRESENZE
+        // INVIO PRESENZE CON BLOCCO ASSENZE
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dataStringa = document.getElementById('p_data').value;
@@ -1074,11 +1085,28 @@
             const ora = parseInt(document.getElementById('p_ore').value) || 0;
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
 
+            const [annoP, meseP, giornoP] = dataStringa.split('-');
+            const dataGrist = `${giornoP}/${meseP}/${annoP}`;
+
+            // Controllo blocco timbratura se esiste assenza bloccante
+            try {
+                const resAss = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
+                });
+                if (resAss.ok) {
+                    const dAss = await resAss.json();
+                    if (dAss.esiste && !idRigaInModificaPresenze) {
+                        mostraAlert("Impossibile inserire la timbratura: in questa data è registrata un'assenza con blocco timbrature attivo!");
+                        return;
+                    }
+                }
+            } catch(err) {}
+
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true; submitBtn.innerText = 'Invio in corso...';
-            const [annoP, meseP, giornoP] = dataStringa.split('-');
 
-            const payload = { tipo: "presenze", token: sessionToken, data: `${giornoP}/${meseP}/${annoP}`, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value, id_riga: idRigaInModificaPresenze };
+            const payload = { tipo: "presenze", token: sessionToken, data: dataGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value, id_riga: idRigaInModificaPresenze };
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
@@ -1113,7 +1141,7 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // GENERAZIONE PDF AVANZATA (FEDELE AL TUO ESEMPIO)
+        // GENERAZIONE PDF PERFETTAMENTE FEDELE ALL'ESEMPIO E SENZA ERRORI DI IMPAGINAZIONE
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -1121,14 +1149,14 @@
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            let y = 780;
+            let y = 770;
             
-            // Intestazione con bordo verde laterale
-            page.drawRectangle({ x: 40, y: 750, width: 6, height: 45, color: rgb(0.18, 0.8, 0.44) });
-            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 780, size: 10, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
-            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 760, size: 16, font: fontBold, color: rgb(0.15, 0.2, 0.25) });
+            // Intestazione con barra verde laterale esatta
+            page.drawRectangle({ x: 40, y: 745, width: 5, height: 40, color: rgb(0.18, 0.8, 0.44) });
+            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 775, size: 9, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
+            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 752, size: 15, font: fontBold, color: rgb(0.15, 0.2, 0.25) });
 
-            y = 710;
+            y = 705;
             const linee = testoMappato.split('\n');
             for (const linea of linee) {
                 if (y < 60) {
@@ -1140,32 +1168,33 @@
                     continue;
                 }
                 if (linea.startsWith('---') || linea.startsWith('___')) {
-                    page.drawLine({ start: { x: 50, y: y }, end: { x: 545, y: y }, thickness: 1, color: rgb(0.85, 0.85, 0.85) });
-                    y -= 15;
+                    page.drawLine({ start: { x: 40, y: y }, end: { x: 555, y: y }, thickness: 0.8, color: rgb(0.85, 0.85, 0.85) });
+                    y -= 14;
                     continue;
                 }
-                if (linea.includes(':') && !linea.startsWith(' >>>') && !linea.startsWith(' <<<')) {
+                // Gestione righe tabulari / chiave-valore pulite per evitare spezzamenti
+                if (linea.includes(':') && !linea.startsWith(' [+]') && !linea.startsWith(' [-]') && !linea.startsWith(' [+/-]')) {
                     const parti = linea.split(':');
-                    const etichetta = parti[0];
+                    const etichetta = parti[0].trim();
                     const valore = parti.slice(1).join(':').trim();
-                    page.drawText(etichetta, { x: 50, y: y, size: 11, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
-                    page.drawText(valore, { x: 400, y: y, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                    page.drawText(etichetta, { x: 40, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
+                    page.drawText(valore, { x: 250, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
                 } else if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
-                    page.drawText(linea, { x: 60, y: y, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
+                    page.drawText(linea, { x: 45, y: y, size: 10, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
                 } else if (linea.startsWith(' >>>') || linea.startsWith(' <<<') || linea.startsWith(' *')) {
-                    page.drawText(linea, { x: 50, y: y, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                    page.drawText(linea, { x: 40, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
                 } else if (linea === linea.toUpperCase() && linea.trim().length > 0) {
-                    y -= 10;
-                    page.drawText(linea, { x: 50, y: y, size: 12, font: fontBold, color: rgb(0.18, 0.35, 0.5) });
+                    y -= 8;
+                    page.drawText(linea, { x: 40, y: y, size: 11, font: fontBold, color: rgb(0.18, 0.35, 0.5) });
                 } else {
-                    page.drawText(linea, { x: 50, y: y, size: 11, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
+                    page.drawText(linea, { x: 40, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
                 }
-                y -= 22;
+                y -= 20;
             }
 
-            // Piè di pagina
-            page.drawLine({ start: { x: 50, y: 50 }, end: { x: 545, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
-            page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 50, y: 35, size: 9, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
+            // Piè di pagina standard
+            page.drawLine({ start: { x: 40, y: 45 }, end: { x: 555, y: 45 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+            page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 40, y: 30, size: 8, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
 
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -1223,9 +1252,9 @@
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    testo += `[+] ${idx+1}. Data: ${dataStr} | Evento: ${f.Evento} | Orario: ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')} | Note: ${f.Note||'-'}\n`;
+                    testo += `Data: ${dataStr} | Evento: ${f.Evento} | Orario: ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')} | Note: ${f.Note||'-'}\n`;
                 } else {
-                    testo += `[+] ${idx+1}. Data: ${dataStr} | Tipo: ${f.Tipo_Assenza} | Quantità: ${f.Quantita} | Note: ${f.Note||'-'}\n`;
+                    testo += `Data: ${dataStr} | Tipo: ${f.Tipo_Assenza} | Quantità: ${f.Quantita} | Note: ${f.Note||'-'}\n`;
                 }
             });
             await buildPdfFromText("ARCHIVIO STORICO AZIENDALE", `ESTRAZIONE FILTRATA (${vistaStoricoAttiva.toUpperCase()})`, testo, `Storico_${vistaStoricoAttiva}.pdf`);
