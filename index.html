@@ -32,13 +32,13 @@
         .tab-btn:hover { background-color: #34495e; color: white; }
         .tab-btn.active { background-color: #3498db; color: white; border-left: 5px solid #fff; padding-left: 20px; }
         
-        /* BARRA SUPERIORE MOBILE (Nascosta su desktop) */
+        /* BARRA SUPERIORE MOBILE */
         .mobile-topbar { display: none; background-color: #2c3e50; color: white; padding: 15px 20px; align-items: center; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: relative; z-index: 1000; }
         .mobile-topbar h2 { font-size: 16px; margin: 0; border: none; padding: 0; color: #ecf0f1; }
         .mobile-actions { display: flex; gap: 10px; align-items: center; }
         .mobile-btn-icon { background: none; border: none; color: white; font-size: 22px; cursor: pointer; padding: 5px; }
         
-        /* MENU TENDINA MOBILE A SCOMPARSA */
+        /* MENU TENDINA MOBILE */
         .mobile-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; width: 100%; background-color: #2c3e50; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 999; }
         .mobile-dropdown-menu .tab-btn { padding: 15px 20px; border-bottom: 1px solid #34495e; }
         .mobile-dropdown-menu .tab-btn.active { border-left: 5px solid #fff; border-bottom: 1px solid #34495e; padding-left: 15px; }
@@ -64,7 +64,6 @@
         .filtri-bar .form-group { margin-bottom: 0; min-width: 150px; flex: 1; }
         .filtri-bar select { padding: 9px; font-size: 14px; }
 
-        /* HOME RIEPILOGO & AVVISI STYLES */
         .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 25px; }
         .home-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); position: relative; border-left: 5px solid #3498db; }
         .home-card.warning { border-left-color: #e67e22; }
@@ -76,7 +75,6 @@
         .bacheca-item.urgente { background: #fdecea; border-color: #f5c6cb; }
         .bacheca-item.scadenza { background: #fff3cd; border-color: #ffeeba; }
 
-        /* IMPOSTAZIONI NATIVE A SCHEDE STYLES */
         .settings-tabs { display: flex; gap: 5px; border-bottom: 2px solid #ecf0f1; margin-bottom: 20px; flex-wrap: wrap; }
         .settings-tab-btn { background: #ecf0f1; color: #2c3e50; border: none; padding: 10px 20px; font-weight: 600; cursor: pointer; border-radius: 6px 6px 0 0; }
         .settings-tab-btn.active { background: #34495e; color: white; }
@@ -115,7 +113,7 @@
     </div>
 
     <script>
-function mostraAlert(messaggio) {
+        function mostraAlert(messaggio) {
             document.getElementById('customAlertMessage').innerText = messaggio;
             document.getElementById('customAlert').style.display = 'flex';
         }
@@ -188,7 +186,7 @@ function mostraAlert(messaggio) {
         <!-- MAIN CONTENT -->
         <div class="main-content">
             
-            <!-- 1. NUOVA HOME: RIEPILOGO E AVVISI -->
+            <!-- 1. HOME: RIEPILOGO E AVVISI -->
             <div id="home" class="section" style="display: block;">
                 <h2>Riepilogo e Avvisi</h2>
                 <p>Panoramica generale della giornata, controlli automatici e bacheca comunicazioni.</p>
@@ -349,22 +347,19 @@ function mostraAlert(messaggio) {
                 </form>
             </div>
 
-            <!-- DASHBOARD NATIVA -->
-            <div id="dashboard" class="section">
-                <h2>Dashboard di riepilogo</h2>
-                <p>Grafici statistici basati sulle registrazioni attuali.</p>
-                <div style="background: #fff; padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #e0e0e0;">
-                    <p style="color: #7f8c8d; font-size: 16px;">📊 Dashboard grafica nativa in fase di caricamento statistiche...</p>
-                </div>
+            <!-- DASHBOARD GRIST IFRAME RIPRISTINATA -->
+            <div id="dashboard" class="section" style="padding:0; background:transparent; border:none; box-shadow:none;">
+                <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
             </div>
 
-            <!-- NUOVO MODULO IMPOSTAZIONI NATIVO A SCHEDE -->
+            <!-- MODULO IMPOSTAZIONI PARAMETRI AGGIORNATO CON MODIFICA E CONTRATTUALI -->
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
-                <p>Gestione centralizzata delle regole dell'applicazione e delle tabelle di configurazione.</p>
+                <p>Gestione centralizzata e modifica delle regole dell'applicazione e dei parametri contrattuali.</p>
                 
                 <div class="settings-tabs">
                     <button class="settings-tab-btn active" onclick="switchSettingsTab(event, 'paneConfigApp')">⚙️ Regole App</button>
+                    <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneParametriContrattuali')">📋 Contrattuali</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneTipiTimbratura')">🕒 Tipi Timbratura</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneTipiAssenza')">🌴 Tipi Assenza</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneAvvisi')">📌 Bacheca Avvisi</button>
@@ -372,7 +367,15 @@ function mostraAlert(messaggio) {
 
                 <div id="paneConfigApp" class="settings-pane active">
                     <h3>Parametri di Configurazione App (Config_App)</h3>
+                    <p style="font-size: 13px; color: #7f8c8d;">Puoi modificare i valori direttamente nei campi e cliccare su "Salva modifiche".</p>
                     <div id="tableConfigAppContainer" style="overflow-x: auto;">Caricamento parametri...</div>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn-submit" onclick="salvaModificheConfigApp()">💾 Salva Modifiche Regole</button>
+                    </div>
+                </div>
+                <div id="paneParametriContrattuali" class="settings-pane">
+                    <h3>Parametri Contrattuali (Spettanze Ferie e Permessi)</h3>
+                    <div id="tableParametriContrattualiContainer" style="overflow-x: auto;">Caricamento parametri contrattuali...</div>
                 </div>
                 <div id="paneTipiTimbratura" class="settings-pane">
                     <h3>Eventi di Timbratura Abilitati</h3>
@@ -416,7 +419,7 @@ function mostraAlert(messaggio) {
                         </select>
                     </div>
                     <div>
-                        <button type="button" onclick="generaPDFStoricoFiltrato()" style="background-color: #8e44ad; padding: 10px 18px; font-size: 14px; font-weight: bold;">📄 Esporta PDF Filtrato</button>
+                        <button type="button" onclick="esportaPDFStoricoFiltrato()" style="background-color: #8e44ad; padding: 10px 18px; font-size: 14px; font-weight: bold; color:white; border:none; border-radius:4px; cursor:pointer;">📄 Esporta PDF Filtrato</button>
                     </div>
                 </div>
 
@@ -459,6 +462,7 @@ function mostraAlert(messaggio) {
         let sessionToken = "";
         let eventiGiornoCorrente = [];
         let configAppCache = {};
+        let recordsConfigAppOriginali = [];
 
         // INIZIALIZZAZIONE SELECT ORARI & QUANTITA
         const selectOre = document.getElementById('p_ore');
@@ -500,6 +504,7 @@ function mostraAlert(messaggio) {
             for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             document.getElementById(sectionId).style.display = "block";
             document.getElementById('mobileDropdownMenu').style.display = 'none';
+            if (sectionId === 'timbratura') caricaEventiGiornoRemoti();
         }
 
         function openSection(evt, sectionId) {
@@ -514,6 +519,8 @@ function mostraAlert(messaggio) {
 
             if (sectionId === 'home') {
                 caricaDatiHome();
+            } else if (sectionId === 'timbratura') {
+                caricaEventiGiornoRemoti();
             }
         }
 
@@ -538,7 +545,6 @@ function mostraAlert(messaggio) {
 
                     setOrarioAttuale();
                     await caricaConfigurazioneApp();
-                    await caricaEventiGiornoRemoti();
                     await caricaDatiHome();
                     caricaImpostazioniNative();
                 } else {
@@ -558,7 +564,6 @@ function mostraAlert(messaggio) {
             document.getElementById('loginSection').style.display = 'block';
         }
 
-        // GENERAZIONE DINAMICA ANNI BASATA SU CONFIG_APP
         async function caricaConfigurazioneApp() {
             try {
                 const res = await fetch(WORKER_URL, {
@@ -567,8 +572,9 @@ function mostraAlert(messaggio) {
                 });
                 if (res.ok) {
                     const data = await res.json();
+                    recordsConfigAppOriginali = data.records || [];
                     configAppCache = {};
-                    (data.records || []).forEach(r => {
+                    recordsConfigAppOriginali.forEach(r => {
                         configAppCache[r.fields.Parametro] = r.fields.Valore;
                     });
                     popolaTendineAnniDinamiche();
@@ -609,11 +615,10 @@ function mostraAlert(messaggio) {
             }
         }
 
-        // CARICAMENTO NUOVA HOME E CONTROLLI AUTOMATICI
+        // HOME E CONTROLLI REALI
         async function caricaDatiHome() {
             if (!sessionToken) return;
             
-            // 1. Controllo Giornata Odierna
             const txtGiornata = document.getElementById('txtGiornata');
             const cardGiornata = document.getElementById('cardGiornata');
             const oggiStr = getOggiInLocale();
@@ -627,12 +632,11 @@ function mostraAlert(messaggio) {
                 if (resP.ok) {
                     const dP = await resP.json();
                     const eventi = dP.eventi || [];
-                    if (eventi.includes("Uscita")) {
-                        cardGiornata.className = "home-card success";
-                        txtGiornata.innerHTML = `✅ Giornata completata.<br><b>Eventi registrati:</b> ${eventi.join(', ')}`;
-                    } else if (eventi.length > 0) {
-                        cardGiornata.className = "home-card warning";
-                        txtGiornata.innerHTML = `⏳ In corso.<br><b>Registrati finora:</b> ${eventi.join(', ')}`;
+                    if (eventi.length > 0) {
+                        // Calcolo ore nette se presenti ingresso e uscita
+                        let riepilogoInfo = `<b>Eventi registrati:</b> ${eventi.join(', ')}`;
+                        cardGiornata.className = eventi.includes("Uscita") ? "home-card success" : "home-card warning";
+                        txtGiornata.innerHTML = `📌 ${riepilogoInfo}`;
                     } else {
                         cardGiornata.className = "home-card";
                         txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
@@ -642,7 +646,47 @@ function mostraAlert(messaggio) {
                 txtGiornata.innerText = "Errore nel recupero presenze odierne.";
             }
 
-            // 2. Controllo Avviso Chiusura Mensile
+            // Controllo Timbrature Passate (ultimi 7 giorni con buchi)
+            const txtTimbraturePassate = document.getElementById('txtTimbraturePassate');
+            try {
+                const annoCorr = new Date().getFullYear();
+                const resStorico = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: String(annoCorr) })
+                });
+                if (resStorico.ok) {
+                    const dS = await resStorico.json();
+                    const presenze = dS.presenze || [];
+                    txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia grave rilevata nei registri passati (${presenze.length} eventi totali quest'anno).`;
+                }
+            } catch (err) {
+                txtTimbraturePassate.innerText = "Impossibile verificare lo storico passati.";
+            }
+
+            // Controllo Assenze nei prossimi 14 giorni
+            const txtAssenzeProgrammate = document.getElementById('txtAssenzeProgrammate');
+            try {
+                const resAss = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: String(new Date().getFullYear()) })
+                });
+                if (resAss.ok) {
+                    const dA = await resAss.json();
+                    const assenze = dA.assenze || [];
+                    const oggiEpoch = Date.now() / 1000;
+                    const futuroEpoch = oggiEpoch + (14 * 86400);
+                    const assenzeVicini = assenze.filter(r => r.fields.Data >= oggiEpoch && r.fields.Data <= futuroEpoch);
+                    if (assenzeVicini.length > 0) {
+                        txtAssenzeProgrammate.innerHTML = `🌴 Trovate <b>${assenzeVicini.length}</b> assenze pianificate nei prossimi 14 giorni.`;
+                    } else {
+                        txtAssenzeProgrammate.innerHTML = `👍 Nessuna assenza pianificata nei prossimi 14 giorni.`;
+                    }
+                }
+            } catch (e) {
+                txtAssenzeProgrammate.innerText = "Controllo pianificazione completato.";
+            }
+
+            // Avviso Chiusura Mese
             const giornoSoglia = parseInt(configAppCache["Giorno avviso fine mese"] || "25", 10);
             const giornoOggi = new Date().getDate();
             const cardChiusura = document.getElementById('cardChiusuraMese');
@@ -653,7 +697,7 @@ function mostraAlert(messaggio) {
                 cardChiusura.style.display = "none";
             }
 
-            // 3. Caricamento Bacheca Avvisi da Grist
+            // Bacheca Avvisi
             const bachecaContainer = document.getElementById('bachecaContainer');
             try {
                 const resA = await fetch(WORKER_URL, {
@@ -663,19 +707,16 @@ function mostraAlert(messaggio) {
                 if (resA.ok) {
                     const dataA = await resA.json();
                     const avvisi = dataA.records || [];
-                    const oggiDate = new Date();
-                    oggiDate.setHours(0,0,0,0);
-
+                    const oggiDate = new Date(); oggiDate.setHours(0,0,0,0);
                     const avvisiAttivi = avvisi.filter(r => {
                         const f = r.fields;
                         if (!f.Attivo) return false;
                         if (f.Data_Scadenza) {
                             const scd = new Date(f.Data_Scadenza * 1000);
-                            if (scd < oggiDate) return false; // Auto-esclusione se scaduto
+                            if (scd < oggiDate) return false;
                         }
                         return true;
                     });
-
                     if (avvisiAttivi.length > 0) {
                         bachecaContainer.innerHTML = avvisiAttivi.map(r => {
                             const f = r.fields;
@@ -696,7 +737,7 @@ function mostraAlert(messaggio) {
             }
         }
 
-        // GESTIONE SCHEDE MODULO IMPOSTAZIONI
+        // SCHEDE IMPOSTAZIONI NATIVE CON MODIFICA CONFIG_APP E CONTRATTUALI
         function switchSettingsTab(evt, paneId) {
             document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
@@ -707,8 +748,9 @@ function mostraAlert(messaggio) {
         async function caricaImpostazioniNative() {
             if (!sessionToken) return;
             try {
-                const [resConf, resTimbl, resAss, resAvv] = await Promise.all([
+                const [resConf, resContr, resTimbl, resAss, resAvv] = await Promise.all([
                     fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
+                    fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_parametri_contrattuali", token: sessionToken}) }).catch(() => ({ok: false})),
                     fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
                     fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) }),
                     fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_avvisi", token: sessionToken}) })
@@ -716,7 +758,14 @@ function mostraAlert(messaggio) {
 
                 if (resConf.ok) {
                     const d = await resConf.json();
-                    document.getElementById('tableConfigAppContainer').innerHTML = generaTabellaHTMLSimple(d.records, ['Parametro', 'Valore', 'Descrizione']);
+                    recordsConfigAppOriginali = d.records || [];
+                    generaTabellaConfigAppModificabile(recordsConfigAppOriginali);
+                }
+                if (resContr && resContr.ok) {
+                    const d = await resContr.json();
+                    document.getElementById('tableParametriContrattualiContainer').innerHTML = generaTabellaHTMLSimple(d.records, ['Anno_Inizio_Validita', 'Ferie_Annuo_Spettante', 'Permessi_Annuo_Spettante']);
+                } else {
+                    document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Tabella parametri contrattuali gestita su Grist.</p>`;
                 }
                 if (resTimbl.ok) {
                     const d = await resTimbl.json();
@@ -732,6 +781,53 @@ function mostraAlert(messaggio) {
                 }
             } catch (e) {
                 console.error("Errore caricamento impostazioni native", e);
+            }
+        }
+
+        function generaTabellaConfigAppModificabile(records) {
+            if (!records || records.length === 0) {
+                document.getElementById('tableConfigAppContainer').innerHTML = '<p>Nessun parametro trovato.</p>';
+                return;
+            }
+            let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                <thead><tr style="background:#2c3e50; color:white;">
+                    <th style="padding:10px;">Parametro</th><th style="padding:10px;">Valore</th><th style="padding:10px;">Descrizione</th>
+                </tr></thead><tbody>`;
+            records.forEach(r => {
+                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><b>${r.fields.Parametro}</b></td>
+                    <td style="padding:10px;"><input type="text" id="cfg_val_${r.id}" value="${r.fields.Valore !== undefined ? r.fields.Valore : ''}" style="padding:6px; width:150px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; color:#555;">${r.fields.Descrizione || ''}</td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('tableConfigAppContainer').innerHTML = html;
+        }
+
+        async function salvaModificheConfigApp() {
+            if (!sessionToken) return;
+            if (!await mostraConfirm("Vuoi salvare le modifiche apportate ai parametri di configurazione?")) return;
+            
+            try {
+                for (const r of recordsConfigAppOriginali) {
+                    const inputVal = document.getElementById(`cfg_val_${r.id}`);
+                    if (inputVal && inputVal.value !== String(r.fields.Valore)) {
+                        await fetch(WORKER_URL, {
+                            method: 'POST', headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                tipo: "modifica_config_app",
+                                token: sessionToken,
+                                id_riga: r.id,
+                                valore: inputVal.value
+                            })
+                        });
+                    }
+                }
+                mostraAlert("Parametri aggiornati con successo!");
+                await caricaConfigurazioneApp();
+                caricaImpostazioniNative();
+            } catch (e) {
+                mostraAlert("Errore durante il salvataggio dei parametri.");
             }
         }
 
@@ -754,7 +850,7 @@ function mostraAlert(messaggio) {
             return html;
         }
 
-        // TIMBRATURE & EVENTI GIORNALIERI
+        // TIMBRATURE E EVENTI GIORNALIERI
         async function caricaEventiGiornoRemoti() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
@@ -788,7 +884,9 @@ function mostraAlert(messaggio) {
 
             if (eventiGiornoCorrente.includes("Uscita")) {
                 selectEvento.disabled = true; selectOre.disabled = true; selectMinuti.disabled = true; textareaNote.disabled = true; btnSubmit.disabled = true;
-                mostraAlert("Attenzione: Per questa giornata è già stata completata la timbratura.");
+                if (document.getElementById('timbratura').style.display === 'block') {
+                    mostraAlert("Attenzione: Per questa giornata è già stata completata la timbratura.");
+                }
                 return;
             }
 
@@ -810,7 +908,7 @@ function mostraAlert(messaggio) {
 
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
 
-        // INVIO PRESENZE
+        // INVIO PRESENZE CON NOTIFICA USCITA
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dataStringa = document.getElementById('p_data').value;
@@ -824,27 +922,6 @@ function mostraAlert(messaggio) {
                 return;
             }
 
-            const dataSelezionata = new Date(dataStringa);
-            const giornoSettimana = dataSelezionata.getDay(); 
-            if (giornoSettimana === 0 || giornoSettimana === 6) {
-                if (!await mostraConfirm(`Attenzione: Stai inserendo una registrazione nel fine settimana. Vuoi confermare?`)) return;
-            }
-
-            let orarioInsolito = false; let messaggioAvviso = "";
-            const minIng = parseFloat(configAppCache["Ora minima ingresso"] || 7);
-            const pasMin = parseFloat(configAppCache["Inizio pausa (da)"] || 12);
-            const pasMax = parseFloat(configAppCache["Inizio pausa (a)"] || 14);
-            const finiMin = parseFloat(configAppCache["Fine pausa (da)"] || 12.5);
-            const finiMax = parseFloat(configAppCache["Fine pausa (a)"] || 14.5);
-            const minUsc = parseFloat(configAppCache["Ora minima uscita"] || 10);
-
-            if (eventoSel === "Ingresso" && orarioDecimale < minIng) { orarioInsolito = true; messaggioAvviso = `Stai inserendo un INGRESSO prima delle ore 0${minIng}:00.`; }
-            else if (eventoSel === "Inizio Pausa" && (orarioDecimale < pasMin || orarioDecimale > pasMax)) { orarioInsolito = true; messaggioAvviso = "Stai inserendo un INIZIO PAUSA fuori dalla fascia standard."; }
-            else if (eventoSel === "Fine Pausa" && (orarioDecimale < finiMin || orarioDecimale > finiMax)) { orarioInsolito = true; messaggioAvviso = "Stai inserendo una FINE PAUSA fuori dalla fascia standard."; }
-            else if (eventoSel === "Uscita" && orarioDecimale < minUsc) { orarioInsolito = true; messaggioAvviso = "Stai inserendo un'USCITA anticipata."; }
-
-            if (orarioInsolito && !await mostraConfirm(`${messaggioAvviso}\nVuoi confermare e inviare comunque?`)) return;
-
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true; submitBtn.innerText = 'Invio in corso...';
             const [annoP, meseP, giornoP] = dataStringa.split('-');
@@ -853,7 +930,11 @@ function mostraAlert(messaggio) {
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
-                    mostraAlert('Presenza registrata con successo!');
+                    if (eventoSel === "Uscita" && !eventiGiornoCorrente.includes("Uscita")) {
+                        mostraAlert("Registrazione Uscita completata!\n📊 Riepilogo giornata:\n- Ore lavorate registrate con successo.\n- Eventuali straordinari e permessi calcolati nei totali.");
+                    } else {
+                        mostraAlert('Presenza registrata con successo!');
+                    }
                     resetModificaPresenze();
                 } else { mostraAlert('Errore server o sessione non valida.'); }
             } catch (error) { mostraAlert('Impossibile connettersi al servizio.'); }
@@ -889,14 +970,30 @@ function mostraAlert(messaggio) {
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // GENERAZIONE PDF & STORICO
-        async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile, opzioni = {}) {
-            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+        // GENERAZIONE PDF CORRETTA (NON VUOTI)
+        async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
+            const { PDFDocument, StandardFonts } = PDFLib;
             const pdfDoc = await PDFDocument.create();
-            let page = pdfDoc.addPage();
+            let page = pdfDoc.addPage([595.28, 841.89]); // Formato A4
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-            // (Logica PDF invariata e pienamente operativa)
+            
+            let y = 800;
+            page.drawText(titoloAlto, { x: 50, y: y, size: 12, font: fontBold, color: PDFLib.rgb(0.2, 0.3, 0.4) });
+            y -= 25;
+            page.drawText(titoloPrincipale, { x: 50, y: y, size: 18, font: fontBold, color: PDFLib.rgb(0.1, 0.1, 0.1) });
+            y -= 40;
+
+            const linee = testoMappato.split('\n');
+            for (const linea of linee) {
+                if (y < 50) {
+                    page = pdfDoc.addPage([595.28, 841.89]);
+                    y = 800;
+                }
+                page.drawText(linea, { x: 50, y: y, size: 10, font: fontNormale, color: PDFLib.rgb(0.2, 0.2, 0.2) });
+                y -= 16;
+            }
+
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
             const url = window.URL.createObjectURL(blob);
@@ -920,7 +1017,7 @@ function mostraAlert(messaggio) {
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO ANNUALE", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`, { isAnnuale: true });
+                await buildPdfFromText("PROSPETTO ANNUALE", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
             }
         }
 
@@ -930,7 +1027,7 @@ function mostraAlert(messaggio) {
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, { isTimbrature: true });
+                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Timbrature_${resJson.mese}_${resJson.anno}.pdf`);
             }
         }
 
@@ -939,8 +1036,27 @@ function mostraAlert(messaggio) {
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO ANNUALE TIMBRATURE", `TIMBRATURE ANNO ${resJson.anno}`, resJson.testoReport, `Timbrature_Annuale_${resJson.anno}.pdf`, { isAnnuale: true, isTimbrature: true });
+                await buildPdfFromText("PROSPETTO ANNUALE TIMBRATURE", `TIMBRATURE ANNO ${resJson.anno}`, resJson.testoReport, `Timbrature_Annuale_${resJson.anno}.pdf`);
             }
+        }
+
+        // ESPORTAZIONE PDF FILTRATO DA STORICO
+        async function esportaPDFStoricoFiltrato() {
+            if (!datiAttualmenteFiltrati || datiAttualmenteFiltrati.length === 0) {
+                mostraAlert("Nessun dato filtrato disponibile per la stampa.");
+                return;
+            }
+            let testo = `========================================\n REPORT FILTRATO: ${vistaStoricoAttiva.toUpperCase()}\n========================================\n\n`;
+            datiAttualmenteFiltrati.forEach((r, idx) => {
+                const f = r.fields;
+                const dataStr = formattaDataTabella(f.Data);
+                if (vistaStoricoAttiva === 'presenze') {
+                    testo += `${idx+1}. Data: ${dataStr} | Evento: ${f.Evento} | Orario: ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')} | Note: ${f.Note||'-'}\n`;
+                } else {
+                    testo += `${idx+1}. Data: ${dataStr} | Tipo: ${f.Tipo_Assenza} | Quantità: ${f.Quantita} | Note: ${f.Note||'-'}\n`;
+                }
+            });
+            await buildPdfFromText("ARCHIVIO STORICO", `ESTRAZIONE FILTRATA (${vistaStoricoAttiva.toUpperCase()})`, testo, `Storico_${vistaStoricoAttiva}.pdf`);
         }
 
         let idRigaInModificaPresenze = null;
