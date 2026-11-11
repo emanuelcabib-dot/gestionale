@@ -231,14 +231,16 @@
                 <h3>Generazione Report Mensile</h3>
                 <p>Seleziona anno e mese per sovrascrivere il record Grist e scaricare il PDF.</p>
                 <form id="formReport" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
-                    <div class="form-group">
+                     <div class="form-group">
                         <label for="rep_anno">Anno:</label>
                         <select id="rep_anno" required>
-                            <option value="2026">2026</option>
+                            <option value="TUTTI">Tutti gli anni</option>
+                            <option value="2026" selected>2026</option>
                             <option value="2025">2025</option>
                             <option value="2024">2024</option>
                         </select>
                     </div>
+
                     <div class="form-group">
                         <label for="rep_mese">Mese:</label>
                         <select id="rep_mese" required>
@@ -644,7 +646,7 @@ if (giornoSettimana === 0 || giornoSettimana === 6) {
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
+async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile, opzioni = {}) {
     const { PDFDocument, StandardFonts, rgb } = PDFLib;
     const pdfDoc = await PDFDocument.create();
     let page = pdfDoc.addPage();
@@ -652,13 +654,27 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // LOGICA DI PARSING POTENZIATA
+    const isAnnuale = opzioni.isAnnuale || false;
+    const isTuttiAnni = opzioni.isTuttiAnni || false;
+
     const analizzaTestoGrist = (testo) => {
         const linee = testo.split('\n');
         const sezioni = {
-            ferie: { titolo: "MOVIMENTI FERIE DI QUESTO MESE", righe: [], saldo: null },
-            permessi: { titolo: "MOVIMENTI PERMESSI DI QUESTO MESE", righe: [], saldo: null },
-            malattia: { titolo: "MALATTIE DEL MESE", righe: [], saldo: null }
+            ferie: { 
+                titolo: isAnnuale ? "MOVIMENTI FERIE DELL'ANNO" : (isTuttiAnni ? "MOVIMENTI FERIE CUMULATI (TUTTI GLI ANNI)" : "MOVIMENTI FERIE DI QUESTO MESE"), 
+                righe: [], 
+                saldo: null 
+            },
+            permessi: { 
+                titolo: isAnnuale ? "MOVIMENTI PERMESSI DELL'ANNO" : (isTuttiAnni ? "MOVIMENTI PERMESSI CUMULATI (TUTTI GLI ANNI)" : "MOVIMENTI PERMESSI DI QUESTO MESE"), 
+                righe: [], 
+                saldo: null 
+            },
+            malattia: { 
+                titolo: isAnnuale ? "MALATTIE DELL'ANNO" : (isTuttiAnni ? "MALATTIE CUMULATE NEL MESE (TUTTI GLI ANNI)" : "MALATTIE DEL MESE"), 
+                righe: [], 
+                saldo: null 
+            }
         };
         
         let sezioneCorrente = null;
@@ -669,13 +685,12 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             
             if (lineaPulita.includes("MOVIMENTI FERIE")) { sezioneCorrente = sezioni.ferie; continue; }
             if (lineaPulita.includes("MOVIMENTI PERMESSI")) { sezioneCorrente = sezioni.permessi; continue; }
-            if (lineaPulita.includes("MALATTIE DEL MESE")) { sezioneCorrente = sezioni.malattia; continue; }
+            if (lineaPulita.includes("MALATTIE DEL MESE") || lineaPulita.includes("MALATTIE DELL'ANNO")) { sezioneCorrente = sezioni.malattia; continue; }
             
             if ((lineaPulita.startsWith('---') || lineaPulita.startsWith('===')) && !lineaPulita.includes(':')) {
                 continue;
             }
             
-            // REGEX CORRETTA: Riconosce i due punti anche con i caratteri speciali [+/-]
             const matchRiga = lineaPulita.match(/^([^:]+?)\s*:\s*(.*)$/);
             if (matchRiga && sezioneCorrente) {
                 const etichetta = matchRiga[1].trim();
@@ -683,8 +698,10 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
                 
                 if (etichetta.includes(">>>")) {
                     sezioneCorrente.saldo = { label: etichetta.replace(">>>", "").trim(), valore: valore };
+                } else if (etichetta.includes("<<<")) {
+                    sezioneCorrente.righe.push({ label: etichetta.replace("<<<", "").trim(), valore: valore, isPrecedente: true });
                 } else {
-                    sezioneCorrente.righe.push({ label: etichetta, valore: valore });
+                    sezioneCorrente.righe.push({ label: etichetta, valore: valore, isPrecedente: false });
                 }
             }
         }
@@ -693,10 +710,9 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
 
     const datiGrist = analizzaTestoGrist(testoMappato);
 
-    // --- COSTRUZIONE STRUTTURA GRAFICA PDF ---
     page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
     page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
-    page.drawText(titoloPrincipale, { x: 45, y: 770, size: 20, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText(titoloPrincipale, { x: 45, y: 770, size: 18, font: fontBold, color: rgb(1, 1, 1) });
 
     let y = 680;
 
@@ -713,15 +729,19 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         
         let rigaY = y - 53;
         sezioneData.righe.forEach(riga => {
-            page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontNormale, color: rgb(0.3, 0.35, 0.4) });
+            const fontRiga = riga.isPrecedente ? fontBold : fontNormale;
+            const coloreLabel = riga.isPrecedente ? rgb(0.16, 0.35, 0.55) : rgb(0.3, 0.35, 0.4);
             
-            // Colore specifico se si tratta di una riga di rettifica
+            page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontRiga, color: coloreLabel });
+            
             let coloreValore = rgb(0.11, 0.16, 0.24);
             if (riga.label.includes("Rettifiche")) {
-                coloreValore = rgb(0.9, 0.49, 0.13); // Colore Arancione per evidenziare la rettifica
+                coloreValore = rgb(0.9, 0.49, 0.13);
+            } else if (riga.isPrecedente) {
+                coloreValore = rgb(0.16, 0.35, 0.55);
             }
             
-            page.drawText(riga.valore, { x: 310, y: rigaY, size: 10, font: fontBold, color: coloreValore });
+            page.drawText(riga.valore, { x: 320, y: rigaY, size: 10, font: fontBold, color: coloreValore });
             rigaY -= 22;
         });
 
@@ -758,56 +778,67 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     a.remove();
 }
 
-        async function salvaEGeneraPDF() {
-            if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
-            const annoSel = document.getElementById('rep_anno').value;
-            const meseSel = document.getElementById('rep_mese').value;
-            const btn = document.getElementById('btnReport');
-            btn.disabled = true; btn.innerText = 'Generazione...';
-            
-            try {
-                const response = await fetch(WORKER_URL, { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) 
-                });
-                const resJson = await response.json();
-                if (response.ok && resJson.success) {
-                    await buildPdfFromText(
-                        "PROSPETTO RIEPILOGATIVO AZIENDALE",
-                        `REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`,
-                        resJson.testoReport,
-                        `Report_${resJson.mese}_${resJson.anno}.pdf`
-                    );
-                } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report."}`); }
-            } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante la generazione grafica del PDF."); }
-            finally { btn.disabled = false; btn.innerText = 'Genera PDF Mensile'; }
-        }
+async function salvaEGeneraPDF() {
+    if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
+    const annoSel = document.getElementById('rep_anno').value;
+    const meseSel = document.getElementById('rep_mese').value;
+    const btn = document.getElementById('btnReport');
+    btn.disabled = true; btn.innerText = 'Generazione...';
+    
+    try {
+        const response = await fetch(WORKER_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) 
+        });
+        const resJson = await response.json();
+        if (response.ok && resJson.success) {
+            const isTutti = (annoSel === "TUTTI");
+            const titoloPrinc = isTutti 
+                ? `REPORT STORICO MESE: ${resJson.mese.toUpperCase()} (TUTTI GLI ANNI)` 
+                : `REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`;
+            const nomeFile = isTutti 
+                ? `Report_${resJson.mese}_Tutti_Gli_Anni.pdf` 
+                : `Report_${resJson.mese}_${resJson.anno}.pdf`;
 
-        async function generaPDFAnnuale() {
-            if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
-            const annoSel = document.getElementById('rep_anno_annual').value;
-            const btn = document.getElementById('btnReportAnnual');
-            btn.disabled = true; btn.innerText = 'Generazione...';
-            
-            try {
-                const response = await fetch(WORKER_URL, { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) 
-                });
-                const resJson = await response.json();
-                if (response.ok && resJson.success) {
-                    await buildPdfFromText(
-                        "PROSPETTO RIEPILOGATIVO ANNUALE",
-                        `REPORT ANNUALE COMPLESSIVO: ANNO ${resJson.anno}`,
-                        resJson.testoReport,
-                        `Report_Annuale_${resJson.anno}.pdf`
-                    );
-                } else { mostraAlert(`Errore: ${resJson.error || "Nessun report annuale trovato per questo anno su Grist."}`); }
-            } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante il recupero o la generazione grafica del PDF."); }
-            finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale'; }
-        }
+            await buildPdfFromText(
+                "PROSPETTO RIEPILOGATIVO AZIENDALE",
+                titoloPrinc,
+                resJson.testoReport,
+                nomeFile,
+                { isAnnuale: false, isTuttiAnni: isTutti }
+            );
+        } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report."}`); }
+    } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante la generazione grafica del PDF."); }
+    finally { btn.disabled = false; btn.innerText = 'Genera PDF Mensile'; }
+}
+
+async function generaPDFAnnuale() {
+    if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
+    const annoSel = document.getElementById('rep_anno_annual').value;
+    const btn = document.getElementById('btnReportAnnual');
+    btn.disabled = true; btn.innerText = 'Generazione...';
+    
+    try {
+        const response = await fetch(WORKER_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) 
+        });
+        const resJson = await response.json();
+        if (response.ok && resJson.success) {
+            await buildPdfFromText(
+                "PROSPETTO RIEPILOGATIVO ANNUALE",
+                `REPORT ANNUALE COMPLESSIVO: ANNO ${resJson.anno}`,
+                resJson.testoReport,
+                `Report_Annuale_${resJson.anno}.pdf`,
+                { isAnnuale: true, isTuttiAnni: false }
+            );
+        } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report annuale."}`); }
+    } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante la generazione grafica del PDF."); }
+    finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale'; }
+}
+
 // VARIABILI DI STATO PER LA MODIFICA, STORICO E FILTRI
 let idRigaInModificaPresenze = null;
 let idRigaInModificaAssenze = null;
