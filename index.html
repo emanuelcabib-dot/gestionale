@@ -352,7 +352,7 @@
                 <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
             </div>
 
-            <!-- MODULO IMPOSTAZIONI PARAMETRI AGGIORNATO E MODIFICABILE -->
+            <!-- IMPOSTAZIONI PARAMETRI -->
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
                 <p>Gestione centralizzata e modifica completa di tutte le regole e tabelle di configurazione.</p>
@@ -375,8 +375,9 @@
                 <div id="paneParametriContrattuali" class="settings-pane">
                     <h3>Parametri Contrattuali (Spettanze Ferie e Permessi)</h3>
                     <div id="tableParametriContrattualiContainer" style="overflow-x: auto;">Caricamento parametri contrattuali...</div>
-                    <div style="margin-top: 15px;">
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
                         <button type="button" class="btn-submit" onclick="salvaModificheContrattuali()">💾 Salva Modifiche Contrattuali</button>
+                        <button type="button" class="btn-submit" style="background-color: #2980b9;" onclick="aggiungiRigaContrattuale()">➕ Aggiungi Nuovo Anno</button>
                     </div>
                 </div>
                 <div id="paneTipiTimbratura" class="settings-pane">
@@ -519,7 +520,7 @@
             for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             document.getElementById(sectionId).style.display = "block";
             document.getElementById('mobileDropdownMenu').style.display = 'none';
-            if (sectionId === 'timbratura') { sbloccaFormTimbratura(); caricaEventiGiornoRemoti(); }
+            if (sectionId === 'timbratura') { verificaStatoTimbraturaGiornata(); }
         }
 
         function openSection(evt, sectionId) {
@@ -535,19 +536,8 @@
             if (sectionId === 'home') {
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
-                sbloccaFormTimbratura();
-                caricaEventiGiornoRemoti();
+                verificaStatoTimbraturaGiornata();
             }
-        }
-
-        function sbloccaFormTimbratura() {
-            document.getElementById('p_evento').disabled = false;
-            document.getElementById('p_ore').disabled = false;
-            document.getElementById('p_minuti').disabled = false;
-            document.getElementById('p_note').disabled = false;
-            const btnSub = document.querySelector('#formPresenze .btn-submit');
-            btnSub.disabled = false;
-            btnSub.style.opacity = "1";
         }
 
         async function checkCode() {
@@ -573,6 +563,7 @@
                     await caricaConfigurazioneApp();
                     await caricaDatiHome();
                     caricaImpostazioniNative();
+                    verificaStatoTimbraturaGiornata();
                 } else {
                     errorMessage.style.display = 'block';
                 }
@@ -641,7 +632,7 @@
             }
         }
 
-        // HOME E CALCOLI REALI GIORNATA ODIERNA
+        // HOME E CONTROLLI GIORNATA E ASSENZE
         async function caricaDatiHome() {
             if (!sessionToken) return;
             
@@ -687,7 +678,7 @@
                 txtTimbraturePassate.innerText = "Verifica completata.";
             }
 
-            // Controllo Assenze nei prossimi 14 giorni
+            // Assenze nei prossimi 14 giorni con dettaglio record
             const txtAssenzeProgrammate = document.getElementById('txtAssenzeProgrammate');
             try {
                 const resAss = await fetch(WORKER_URL, {
@@ -699,9 +690,18 @@
                     const assenze = dA.assenze || [];
                     const oggiEpoch = Date.now() / 1000;
                     const futuroEpoch = oggiEpoch + (14 * 86400);
-                    const assenzeVicini = assenze.filter(r => r.fields.Data >= oggiEpoch && r.fields.Data <= futuroEpoch);
-                    if (assenzeVicini.length > 0) {
-                        txtAssenzeProgrammate.innerHTML = `🌴 Trovate <b>${assenzeVicini.length}</b> assenze pianificate nei prossimi 14 giorni.`;
+                    const assenzeVicine = assenze.filter(r => {
+                        const t = typeof r.fields.Data === 'number' ? r.fields.Data : 0;
+                        return t >= oggiEpoch && t <= futuroEpoch;
+                    });
+                    if (assenzeVicine.length > 0) {
+                        let htmlAss = `🌴 Trovate <b>${assenzeVicine.length}</b> assenze nei prossimi 14 giorni:<ul style="margin:5px 0 0 15px; padding:0; font-size:13px;">`;
+                        assenzeVicine.forEach(r => {
+                            const f = r.fields;
+                            htmlAss += `<li><b>${formattaDataTabella(f.Data)}</b>: ${f.Tipo_Assenza} (${f.Quantita}) ${f.Note ? '- ' + f.Note : ''}</li>`;
+                        });
+                        htmlAss += `</ul>`;
+                        txtAssenzeProgrammate.innerHTML = htmlAss;
                     } else {
                         txtAssenzeProgrammate.innerHTML = `👍 Nessuna assenza pianificata nei prossimi 14 giorni.`;
                     }
@@ -761,7 +761,7 @@
             }
         }
 
-        // SCHEDE IMPOSTAZIONI NATIVE COMPLETAMENTE MODIFICABILI
+        // SCHEDE IMPOSTAZIONI NATIVE
         function switchSettingsTab(evt, paneId) {
             document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
@@ -848,18 +848,37 @@
             document.getElementById('tableParametriContrattualiContainer').innerHTML = html;
         }
 
+        function aggiungiRigaContrattuale() {
+            const container = document.getElementById('tableParametriContrattualiContainer');
+            const nuovoId = 'new_' + Date.now();
+            const tr = document.createElement('tr');
+            tr.className = 'riga-nuova-contrattuale';
+            tr.style.borderBottom = '1px solid #e0e0e0';
+            tr.innerHTML = `
+                <td style="padding:10px;"><input type="number" class="new_ctr_anno" value="${new Date().getFullYear()}" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="text" class="new_ctr_fer" value="25.92" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="text" class="new_ctr_perm" value="40" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+            `;
+            let table = container.querySelector('table');
+            if (!table) {
+                container.innerHTML = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                    <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th></tr></thead><tbody></tbody></table>`;
+                table = container.querySelector('table');
+            }
+            table.querySelector('tbody').appendChild(tr);
+        }
+
         function generaTabellaTipiTimbraturaModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                 <thead><tr style="background:#2c3e50; color:white;">
-                    <th style="padding:10px;">Nome</th><th style="padding:10px;">Categoria</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th>
+                    <th style="padding:10px;">Nome Evento</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
                 html += `<tr style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><b>${r.fields.Nome}</b></td>
-                    <td style="padding:10px;"><input type="text" id="timb_cat_${r.id}" value="${r.fields.Categoria||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="timb_nome_${r.id}" value="${r.fields.Nome||''}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px;"><input type="checkbox" id="timb_unico_${r.id}" ${r.fields.Unico_Al_Giorno?'checked':''}></td>
                     <td style="padding:10px;"><input type="checkbox" id="timb_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
-                    <td style="padding:10px;"><input type="number" id="timb_ord_${r.id}" value="${r.fields.Ordine||0}" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="number" class="timb-ordine-input" id="timb_ord_${r.id}" value="${r.fields.Ordine||0}" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -885,14 +904,14 @@
         function generaTabellaAvvisiModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                 <thead><tr style="background:#2c3e50; color:white;">
-                    <th style="padding:10px;">Titolo</th><th style="padding:10px;">Messaggio</th><th style="padding:10px;">Tipo</th><th style="padding:10px;">Attivo</th>
+                    <th style="padding:10px; width:20%;">Titolo</th><th style="padding:10px; width:55%;">Messaggio</th><th style="padding:10px; width:15%;">Tipo</th><th style="padding:10px; width:10%;">Attivo</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
                 html += `<tr style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><input type="text" id="avv_tit_${r.id}" value="${r.fields.Titolo||''}" style="padding:6px; width:150px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="text" id="avv_msg_${r.id}" value="${r.fields.Messaggio||''}" style="padding:6px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="text" id="avv_tipo_${r.id}" value="${r.fields.Tipo||''}" style="padding:6px; width:90px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="checkbox" id="avv_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
+                    <td style="padding:10px;"><input type="text" id="avv_tit_${r.id}" value="${r.fields.Titolo||''}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><textarea id="avv_msg_${r.id}" rows="2" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px; resize:vertical;">${r.fields.Messaggio||''}</textarea></td>
+                    <td style="padding:10px;"><input type="text" id="avv_tipo_${r.id}" value="${r.fields.Tipo||''}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="avv_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -925,20 +944,41 @@
                     body: JSON.stringify({ tipo: "modifica_contrattuali", token: sessionToken, id_riga: r.id, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                 });
             }
+            const nuoveRighe = document.querySelectorAll('.riga-nuova-contrattuale');
+            for (const riga of nuoveRighe) {
+                const anno = riga.querySelector('.new_ctr_anno').value;
+                const ferie = riga.querySelector('.new_ctr_fer').value;
+                const perm = riga.querySelector('.new_ctr_perm').value;
+                await fetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "aggiungi_contrattuali", token: sessionToken, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
+                });
+            }
             mostraAlert("Parametri contrattuali aggiornati con successo!");
             caricaImpostazioniNative();
         }
 
         async function salvaModificheTipiTimbratura() {
+            const inputOrdini = document.querySelectorAll('.timb-ordine-input');
+            const ordiniVisti = new Set();
+            for (const inp of inputOrdini) {
+                const val = parseInt(inp.value, 10);
+                if (ordiniVisti.has(val)) {
+                    mostraAlert("Attenzione: non puoi assegnare lo stesso numero d'ordine a eventi differenti!");
+                    return;
+                }
+                ordiniVisti.add(val);
+            }
+
             if (!sessionToken || !await mostraConfirm("Salvare i tipi di timbratura?")) return;
             for (const r of recordsTipiTimbraturaOriginali) {
-                const cat = document.getElementById(`timb_cat_${r.id}`).value;
+                const nome = document.getElementById(`timb_nome_${r.id}`).value;
                 const unico = document.getElementById(`timb_unico_${r.id}`).checked;
                 const attivo = document.getElementById(`timb_att_${r.id}`).checked;
                 const ordine = document.getElementById(`timb_ord_${r.id}`).value;
                 await fetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tipo: "modifica_tipo_timbratura", token: sessionToken, id_riga: r.id, categoria: cat, unico: unico, attivo: attivo, ordine: ordine })
+                    body: JSON.stringify({ tipo: "modifica_tipo_timbratura", token: sessionToken, id_riga: r.id, nome: nome, unico: unico, attivo: attivo, ordine: ordine })
                 });
             }
             mostraAlert("Tipi di timbratura aggiornati con successo!");
@@ -975,29 +1015,56 @@
             caricaImpostazioniNative();
         }
 
-        // TIMBRATURE E EVENTI GIORNALIERI
-        async function caricaEventiGiornoRemoti() {
+        // VERIFICA E CONTROLLI TIMBRATURA GIORNATA (RIPRISTINATI)
+        async function verificaStatoTimbraturaGiornata() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
             if (!dataSel) return;
             const [anno, mese, giorno] = dataSel.split('-');
+            const dataGrist = `${giorno}/${mese}/${anno}`;
+
             try {
+                // 1. Controllo assenze bloccanti
+                const resAss = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
+                });
+                if (resAss.ok) {
+                    const dAss = await resAss.json();
+                    if (dAss.esiste) {
+                        mostraAlert("Attenzione: In questa data risulta registrata un'assenza bloccante!");
+                    }
+                }
+
+                // 2. Controllo eventi esistenti
                 const response = await fetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: `${giorno}/${mese}/${anno}` })
+                    body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
                 });
                 if (response.ok) {
                     const data = await response.json();
                     eventiGiornoCorrente = data.eventi || [];
-                } else {
-                    eventiGiornoCorrente = [];
+                    
+                    const selEvento = document.getElementById('p_evento');
+                    for (let i = 0; i < selEvento.options.length; i++) {
+                        const optVal = selEvento.options[i].value;
+                        if (eventiGiornoCorrente.includes(optVal) && optVal !== "Cantiere") {
+                            selEvento.options[i].disabled = true;
+                        } else {
+                            selEvento.options[i].disabled = false;
+                        }
+                    }
+
+                    if (eventiGiornoCorrente.includes("Uscita")) {
+                        mostraAlert("Attenzione: per questa giornata è già stata registrata l'Uscita (giornata completa).");
+                    }
                 }
             } catch (error) {
-                eventiGiornoCorrente = [];
+                console.error("Errore verifica timbratura:", error);
             }
         }
 
-        document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
+        document.getElementById('p_data').addEventListener('change', verificaStatoTimbraturaGiornata);
 
         // INVIO PRESENZE
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
@@ -1046,7 +1113,7 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // GENERAZIONE PDF AVANZATA (FEDELE ALL'ESEMPIO)
+        // GENERAZIONE PDF AVANZATA (FEDELE AL TUO ESEMPIO)
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -1056,7 +1123,7 @@
             
             let y = 780;
             
-            // Intestazione con bordo verde laterale simulato
+            // Intestazione con bordo verde laterale
             page.drawRectangle({ x: 40, y: 750, width: 6, height: 45, color: rgb(0.18, 0.8, 0.44) });
             page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 780, size: 10, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
             page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 760, size: 16, font: fontBold, color: rgb(0.15, 0.2, 0.25) });
@@ -1077,17 +1144,23 @@
                     y -= 15;
                     continue;
                 }
-                if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
+                if (linea.includes(':') && !linea.startsWith(' >>>') && !linea.startsWith(' <<<')) {
+                    const parti = linea.split(':');
+                    const etichetta = parti[0];
+                    const valore = parti.slice(1).join(':').trim();
+                    page.drawText(etichetta, { x: 50, y: y, size: 11, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
+                    page.drawText(valore, { x: 400, y: y, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                } else if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
                     page.drawText(linea, { x: 60, y: y, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
                 } else if (linea.startsWith(' >>>') || linea.startsWith(' <<<') || linea.startsWith(' *')) {
                     page.drawText(linea, { x: 50, y: y, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-                } else if (linea.endsWith(':') || linea === linea.toUpperCase()) {
+                } else if (linea === linea.toUpperCase() && linea.trim().length > 0) {
                     y -= 10;
                     page.drawText(linea, { x: 50, y: y, size: 12, font: fontBold, color: rgb(0.18, 0.35, 0.5) });
                 } else {
                     page.drawText(linea, { x: 50, y: y, size: 11, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
                 }
-                y -= 20;
+                y -= 22;
             }
 
             // Piè di pagina
@@ -1267,7 +1340,10 @@
 
         function attivaModificaPresenza(id, data, evento, ora, minuti, note) {
             idRigaInModificaPresenze = id;
-            sbloccaFormTimbratura();
+            document.getElementById('p_evento').disabled = false;
+            document.getElementById('p_ore').disabled = false;
+            document.getElementById('p_minuti').disabled = false;
+            document.getElementById('p_note').disabled = false;
             document.getElementById('p_data').value = formattaDataPerInput(data);
             document.getElementById('p_evento').value = evento;
             document.getElementById('p_ore').value = ora;
@@ -1285,13 +1361,13 @@
             document.getElementById('formPresenze').reset();
             document.getElementById('p_data').value = getOggiInLocale();
             setOrarioAttuale();
-            sbloccaFormTimbratura();
             document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
             document.getElementById('btnEliminaPresenza').style.display = "none";
             document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
             document.getElementById("timbratura").style.display = "none";
             document.getElementById("storico_panel").style.display = "block";
             caricaTabellaStorico();
+            verificaStatoTimbraturaGiornata();
         }
 
         function attivaModificaAssenza(id, data, tipoAssenza, quantita, note) {
