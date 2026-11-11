@@ -228,10 +228,10 @@
             <div id="report_panel" class="section">
                 <h2>Generazione Report</h2>
                 
-                <h3>Generazione Report Mensile</h3>
-                <p>Seleziona anno e mese per sovrascrivere il record Grist e scaricare il PDF.</p>
+                <h3>1. Report Ferie e Permessi — Mensile</h3>
+                <p>Seleziona anno e mese per aggiornare Grist e scaricare il PDF riepilogativo.</p>
                 <form id="formReport" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
-                     <div class="form-group">
+                    <div class="form-group">
                         <label for="rep_anno">Anno:</label>
                         <select id="rep_anno" required>
                             <option value="TUTTI">Tutti gli anni</option>
@@ -240,7 +240,6 @@
                             <option value="2024">2024</option>
                         </select>
                     </div>
-
                     <div class="form-group">
                         <label for="rep_mese">Mese:</label>
                         <select id="rep_mese" required>
@@ -258,23 +257,74 @@
                             <option value="Dicembre">Dicembre</option>
                         </select>
                     </div>
-                    <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile</button>
+                    <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile (Assenze)</button>
                 </form>
 
-                <h3>Generazione Report Annuale</h3>
-                <p>Seleziona l'anno per scaricare il PDF riepilogativo annuale archiviato su Grist.</p>
+                <h3>2. Report Ferie e Permessi — Annuale</h3>
+                <p>Seleziona l'anno (o tutti gli anni) per scaricare il PDF riepilogativo annuale.</p>
                 <form id="formReportAnnuale" onsubmit="event.preventDefault(); generaPDFAnnuale();">
                     <div class="form-group">
                         <label for="rep_anno_annual">Anno:</label>
                         <select id="rep_anno_annual" required>
-                            <option value="2026">2026</option>
+                            <option value="TUTTI">Tutti gli anni</option>
+                            <option value="2026" selected>2026</option>
                             <option value="2025">2025</option>
                             <option value="2024">2024</option>
                         </select>
                     </div>
-                    <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale</button>
+                    <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale (Assenze)</button>
+                </form>
+
+                <hr style="margin: 35px 0; border: 0; border-top: 2px solid #ecf0f1;">
+
+                <h3>3. Report Timbrature — Mensile</h3>
+                <p>Calcola giorni lavorati, ore nette e straordinari del mese selezionato.</p>
+                <form id="formReportTimbratureMensile" onsubmit="event.preventDefault(); generaPDFTimbratureMensile();">
+                    <div class="form-group">
+                        <label for="rep_timb_anno">Anno:</label>
+                        <select id="rep_timb_anno" required>
+                            <option value="TUTTI">Tutti gli anni</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="rep_timb_mese">Mese:</label>
+                        <select id="rep_timb_mese" required>
+                            <option value="Gennaio">Gennaio</option>
+                            <option value="Febbraio">Febbraio</option>
+                            <option value="Marzo">Marzo</option>
+                            <option value="Aprile">Aprile</option>
+                            <option value="Maggio">Maggio</option>
+                            <option value="Giugno">Giugno</option>
+                            <option value="Luglio">Luglio</option>
+                            <option value="Agosto">Agosto</option>
+                            <option value="Settembre">Settembre</option>
+                            <option value="Ottobre">Ottobre</option>
+                            <option value="Novembre">Novembre</option>
+                            <option value="Dicembre">Dicembre</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="btnReportTimbMensile" class="btn-submit" style="background-color: #2980b9;">Genera PDF Mensile (Timbrature)</button>
+                </form>
+
+                <h3>4. Report Timbrature — Annuale</h3>
+                <p>Calcola il riepilogo complessivo delle ore lavorate e presenze dell'anno.</p>
+                <form id="formReportTimbratureAnnuale" onsubmit="event.preventDefault(); generaPDFTimbratureAnnuale();">
+                    <div class="form-group">
+                        <label for="rep_timb_anno_annual">Anno:</label>
+                        <select id="rep_timb_anno_annual" required>
+                            <option value="TUTTI">Tutti gli anni</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="btnReportTimbAnnual" class="btn-submit" style="background-color: #16a085;">Genera PDF Annuale (Timbrature)</button>
                 </form>
             </div>
+
 
             <div id="dashboard" class="section">
                 <h2>Dashboard di riepilogo</h2>
@@ -656,21 +706,26 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
 
     const isAnnuale = opzioni.isAnnuale || false;
     const isTuttiAnni = opzioni.isTuttiAnni || false;
+    const isTimbrature = opzioni.isTimbrature || false;
 
     const analizzaTestoGrist = (testo) => {
         const linee = testo.split('\n');
-        const sezioni = {
-            ferie: { 
+        const sezioni = isTimbrature ? {
+            sez1: { titolo: "PRESENZE E GIORNATE REGISTRATE", righe: [], saldo: null },
+            sez2: { titolo: "CONTEGGIO ORE LAVORATE E STRAORDINARI", righe: [], saldo: null },
+            sez3: { titolo: "", righe: [], saldo: null }
+        } : {
+            sez1: { 
                 titolo: isAnnuale ? "MOVIMENTI FERIE DELL'ANNO" : (isTuttiAnni ? "MOVIMENTI FERIE CUMULATI (TUTTI GLI ANNI)" : "MOVIMENTI FERIE DI QUESTO MESE"), 
                 righe: [], 
                 saldo: null 
             },
-            permessi: { 
+            sez2: { 
                 titolo: isAnnuale ? "MOVIMENTI PERMESSI DELL'ANNO" : (isTuttiAnni ? "MOVIMENTI PERMESSI CUMULATI (TUTTI GLI ANNI)" : "MOVIMENTI PERMESSI DI QUESTO MESE"), 
                 righe: [], 
                 saldo: null 
             },
-            malattia: { 
+            sez3: { 
                 titolo: isAnnuale ? "MALATTIE DELL'ANNO" : (isTuttiAnni ? "MALATTIE CUMULATE NEL MESE (TUTTI GLI ANNI)" : "MALATTIE DEL MESE"), 
                 righe: [], 
                 saldo: null 
@@ -683,9 +738,9 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             const lineaPulita = linee[i].trim();
             if (!lineaPulita) continue;
             
-            if (lineaPulita.includes("MOVIMENTI FERIE")) { sezioneCorrente = sezioni.ferie; continue; }
-            if (lineaPulita.includes("MOVIMENTI PERMESSI")) { sezioneCorrente = sezioni.permessi; continue; }
-            if (lineaPulita.includes("MALATTIE DEL MESE") || lineaPulita.includes("MALATTIE DELL'ANNO")) { sezioneCorrente = sezioni.malattia; continue; }
+            if (lineaPulita.includes("MOVIMENTI FERIE") || lineaPulita.includes("PRESENZE E GIORNATE")) { sezioneCorrente = sezioni.sez1; continue; }
+            if (lineaPulita.includes("MOVIMENTI PERMESSI") || lineaPulita.includes("CONTEGGIO ORE LAVORATE")) { sezioneCorrente = sezioni.sez2; continue; }
+            if (lineaPulita.includes("MALATTIE DEL MESE") || lineaPulita.includes("MALATTIE DELL'ANNO") || lineaPulita.includes("MALATTIE CUMULATE")) { sezioneCorrente = sezioni.sez3; continue; }
             
             if ((lineaPulita.startsWith('---') || lineaPulita.startsWith('===')) && !lineaPulita.includes(':')) {
                 continue;
@@ -695,6 +750,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             if (matchRiga && sezioneCorrente) {
                 const etichetta = matchRiga[1].trim();
                 const valore = matchRiga[2].trim();
+
                 
                 if (etichetta.includes(">>>")) {
                     sezioneCorrente.saldo = { label: etichetta.replace(">>>", "").trim(), valore: valore };
@@ -712,7 +768,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
 
     page.drawRectangle({ x: 0, y: 740, width: 595.28, height: 101.89, color: rgb(0.11, 0.16, 0.24) });
     page.drawText(titoloAlto, { x: 45, y: 800, size: 10, font: fontBold, color: rgb(0.53, 0.59, 0.65) });
-    page.drawText(titoloPrincipale, { x: 45, y: 770, size: 18, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText(titoloPrincipale, { x: 45, y: 770, size: 17, font: fontBold, color: rgb(1, 1, 1) });
 
     let y = 680;
 
@@ -723,7 +779,7 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
         const altezzaBox = 45 + (sezioneData.righe.length * 22) + (haSaldo ? 35 : 15);
         
         page.drawRectangle({ x: 45, y: y - altezzaBox, width: 505.28, height: altezzaBox, color: rgb(0.96, 0.97, 0.98) });
-        page.drawRectangle({ x: 45, y: y - altezzaBox, width: 4, height: altezzaBox, color: rgb(0.2, 0.6, 0.86) });
+        page.drawRectangle({ x: 45, y: y - altezzaBox, width: 4, height: altezzaBox, color: isTimbrature ? rgb(0.16, 0.5, 0.73) : rgb(0.2, 0.6, 0.86) });
         
         page.drawText(sezioneData.titolo, { x: 65, y: y - 28, size: 11, font: fontBold, color: rgb(0.17, 0.24, 0.31) });
         
@@ -735,33 +791,33 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
             page.drawText(riga.label, { x: 65, y: rigaY, size: 10, font: fontRiga, color: coloreLabel });
             
             let coloreValore = rgb(0.11, 0.16, 0.24);
-            if (riga.label.includes("Rettifiche")) {
+            if (riga.label.includes("Rettifiche") || riga.label.includes("incomplete")) {
                 coloreValore = rgb(0.9, 0.49, 0.13);
             } else if (riga.isPrecedente) {
                 coloreValore = rgb(0.16, 0.35, 0.55);
             }
             
-            page.drawText(riga.valore, { x: 320, y: rigaY, size: 10, font: fontBold, color: coloreValore });
+            page.drawText(riga.valore, { x: 310, y: rigaY, size: 10, font: fontBold, color: coloreValore });
             rigaY -= 22;
         });
 
         if (haSaldo) {
             page.drawLine({ start: { x: 65, y: rigaY + 12 }, end: { x: 525, y: rigaY + 12 }, thickness: 0.5, color: rgb(0.85, 0.87, 0.89) });
             page.drawText(sezioneData.saldo.label, { x: 65, y: rigaY, size: 10, font: fontBold, color: rgb(0.11, 0.16, 0.24) });
-            page.drawText(sezioneData.saldo.valore, { x: 380, y: rigaY, size: 11, font: fontBold, color: rgb(0.18, 0.64, 0.34) });
+            page.drawText(sezioneData.saldo.valore, { x: 370, y: rigaY, size: 11, font: fontBold, color: rgb(0.18, 0.64, 0.34) });
         }
         
         y -= (altezzaBox + 20);
     };
 
-    disegnaSezioneGrafica(datiGrist.ferie);
-    disegnaSezioneGrafica(datiGrist.permessi);
+    disegnaSezioneGrafica(datiGrist.sez1);
+    disegnaSezioneGrafica(datiGrist.sez2);
     
-    if (datiGrist.malattia.righe.length > 0 && !datiGrist.malattia.saldo) {
-        const ultimaRiga = datiGrist.malattia.righe[datiGrist.malattia.righe.length - 1];
-        datiGrist.malattia.saldo = { label: "Totale registrato nel periodo", valore: ultimaRiga.valore };
+    if (!isTimbrature && datiGrist.sez3.righe.length > 0 && !datiGrist.sez3.saldo) {
+        const ultimaRiga = datiGrist.sez3.righe[datiGrist.sez3.righe.length - 1];
+        datiGrist.sez3.saldo = { label: "Totale registrato nel periodo", valore: ultimaRiga.valore };
     }
-    disegnaSezioneGrafica(datiGrist.malattia);
+    disegnaSezioneGrafica(datiGrist.sez3);
 
     page.drawLine({ start: { x: 45, y: 50 }, end: { x: 550, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
     page.drawText("Documento digitale generato automaticamente dal sistema gestionale.", { x: 45, y: 38, size: 8, font: fontNormale, color: rgb(0.6, 0.65, 0.7) });
@@ -777,7 +833,6 @@ async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nome
     window.URL.revokeObjectURL(url);
     a.remove();
 }
-
 async function salvaEGeneraPDF() {
     if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
     const annoSel = document.getElementById('rep_anno').value;
@@ -794,23 +849,16 @@ async function salvaEGeneraPDF() {
         const resJson = await response.json();
         if (response.ok && resJson.success) {
             const isTutti = (annoSel === "TUTTI");
-            const titoloPrinc = isTutti 
-                ? `REPORT STORICO MESE: ${resJson.mese.toUpperCase()} (TUTTI GLI ANNI)` 
-                : `REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`;
-            const nomeFile = isTutti 
-                ? `Report_${resJson.mese}_Tutti_Gli_Anni.pdf` 
-                : `Report_${resJson.mese}_${resJson.anno}.pdf`;
-
             await buildPdfFromText(
-                "PROSPETTO RIEPILOGATIVO AZIENDALE",
-                titoloPrinc,
+                "PROSPETTO RIEPILOGATIVO ASSENZE",
+                isTutti ? `REPORT STORICO: ${resJson.mese.toUpperCase()} (TUTTI GLI ANNI)` : `REPORT MENSILE: ${resJson.mese.toUpperCase()} ${resJson.anno}`,
                 resJson.testoReport,
-                nomeFile,
-                { isAnnuale: false, isTuttiAnni: isTutti }
+                isTutti ? `Report_Assenze_${resJson.mese}_Tutti_Anni.pdf` : `Report_Assenze_${resJson.mese}_${resJson.anno}.pdf`,
+                { isAnnuale: false, isTuttiAnni: isTutti, isTimbrature: false }
             );
         } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report."}`); }
-    } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante la generazione grafica del PDF."); }
-    finally { btn.disabled = false; btn.innerText = 'Genera PDF Mensile'; }
+    } catch (error) { mostraAlert("Errore durante la generazione grafica del PDF."); }
+    finally { btn.disabled = false; btn.innerText = 'Genera PDF Mensile (Assenze)'; }
 }
 
 async function generaPDFAnnuale() {
@@ -827,17 +875,74 @@ async function generaPDFAnnuale() {
         });
         const resJson = await response.json();
         if (response.ok && resJson.success) {
+            const isTutti = (annoSel === "TUTTI");
             await buildPdfFromText(
-                "PROSPETTO RIEPILOGATIVO ANNUALE",
-                `REPORT ANNUALE COMPLESSIVO: ANNO ${resJson.anno}`,
+                "PROSPETTO RIEPILOGATIVO ANNUALE ASSENZE",
+                isTutti ? "REPORT ANNUALE CUMULATO (TUTTI GLI ANNI)" : `REPORT ANNUALE COMPLESSIVO: ANNO ${resJson.anno}`,
                 resJson.testoReport,
-                `Report_Annuale_${resJson.anno}.pdf`,
-                { isAnnuale: true, isTuttiAnni: false }
+                isTutti ? "Report_Assenze_Annuale_Tutti_Anni.pdf" : `Report_Assenze_Annuale_${resJson.anno}.pdf`,
+                { isAnnuale: true, isTuttiAnni: isTutti, isTimbrature: false }
             );
         } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report annuale."}`); }
-    } catch (error) { console.error("Errore:", error); mostraAlert("Errore durante la generazione grafica del PDF."); }
-    finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale'; }
+    } catch (error) { mostraAlert("Errore durante la generazione grafica del PDF."); }
+    finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale (Assenze)'; }
 }
+
+async function generaPDFTimbratureMensile() {
+    if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
+    const annoSel = document.getElementById('rep_timb_anno').value;
+    const meseSel = document.getElementById('rep_timb_mese').value;
+    const btn = document.getElementById('btnReportTimbMensile');
+    btn.disabled = true; btn.innerText = 'Generazione...';
+    
+    try {
+        const response = await fetch(WORKER_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) 
+        });
+        const resJson = await response.json();
+        if (response.ok && resJson.success) {
+            const isTutti = (annoSel === "TUTTI");
+            await buildPdfFromText(
+                "PROSPETTO RIEPILOGATIVO TIMBRATURE",
+                isTutti ? `TIMBRATURE MESE DI ${resJson.mese.toUpperCase()} (TUTTI GLI ANNI)` : `TIMBRATURE MENSILI: ${resJson.mese.toUpperCase()} ${resJson.anno}`,
+                resJson.testoReport,
+                isTutti ? `Report_Timbrature_${resJson.mese}_Tutti_Anni.pdf` : `Report_Timbrature_${resJson.mese}_${resJson.anno}.pdf`,
+                { isAnnuale: false, isTuttiAnni: isTutti, isTimbrature: true }
+            );
+        } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report timbrature."}`); }
+    } catch (error) { mostraAlert("Errore durante la generazione grafica del PDF."); }
+    finally { btn.disabled = false; btn.innerText = 'Genera PDF Mensile (Timbrature)'; }
+}
+
+async function generaPDFTimbratureAnnuale() {
+    if (!sessionToken) { mostraAlert("Sessione non valida. Effettua l'accesso."); return; }
+    const annoSel = document.getElementById('rep_timb_anno_annual').value;
+    const btn = document.getElementById('btnReportTimbAnnual');
+    btn.disabled = true; btn.innerText = 'Generazione...';
+    
+    try {
+        const response = await fetch(WORKER_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) 
+        });
+        const resJson = await response.json();
+        if (response.ok && resJson.success) {
+            const isTutti = (annoSel === "TUTTI");
+            await buildPdfFromText(
+                "PROSPETTO RIEPILOGATIVO ANNUALE TIMBRATURE",
+                isTutti ? "TIMBRATURE COMPLESSIVE (TUTTI GLI ANNI)" : `TIMBRATURE ANNUALI: ANNO ${resJson.anno}`,
+                resJson.testoReport,
+                isTutti ? "Report_Timbrature_Annuale_Tutti_Anni.pdf" : `Report_Timbrature_Annuale_${resJson.anno}.pdf`,
+                { isAnnuale: true, isTuttiAnni: isTutti, isTimbrature: true }
+            );
+        } else { mostraAlert(`Errore: ${resJson.error || "Impossibile elaborare il report annuale timbrature."}`); }
+    } catch (error) { mostraAlert("Errore durante la generazione grafica del PDF."); }
+    finally { btn.disabled = false; btn.innerText = 'Genera PDF Annuale (Timbrature)'; }
+}
+
 
 // VARIABILI DI STATO PER LA MODIFICA, STORICO E FILTRI
 let idRigaInModificaPresenze = null;
