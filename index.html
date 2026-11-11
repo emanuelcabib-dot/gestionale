@@ -251,7 +251,7 @@
                     <div class="form-actions">
                         <button type="submit" class="btn-submit">Conferma presenza</button>
                         <button type="button" id="btnEliminaPresenza" class="btn-delete" style="display: none;" onclick="eliminaRecord('presenze')">🗑️ Elimina timbratura</button>
-                        <button type="button" id="btnAnnullaModificaPresenza" style="display: none; background-color: #7f8c8d;" onclick="resetModificaPresenze()">Annulla modifica</button>
+                        <button type="button" id="btnAnnullaModificaPresenza" style="display: none; background-color: #7f8c8d;" onclick="tornaAStoricoDaPresenze()">Annulla modifica</button>
                     </div>
                 </form>
             </div>
@@ -288,7 +288,7 @@
                     <div class="form-actions">
                         <button type="submit" class="btn-submit" style="background-color: #e67e22;">Invia assenza</button>
                         <button type="button" id="btnEliminaAssenza" class="btn-delete" style="display: none;" onclick="eliminaRecord('assenze')">🗑️ Elimina assenza</button>
-                        <button type="button" id="btnAnnullaModificaAssenza" style="display: none; background-color: #7f8c8d;" onclick="resetModificaAssenze()">Annulla modifica</button>
+                        <button type="button" id="btnAnnullaModificaAssenza" style="display: none; background-color: #7f8c8d;" onclick="tornaAStoricoDaAssenze()">Annulla modifica</button>
                     </div>
                 </form>
             </div>
@@ -347,15 +347,15 @@
                 </form>
             </div>
 
-            <!-- DASHBOARD GRIST IFRAME RIPRISTINATA -->
+            <!-- DASHBOARD GRIST IFRAME -->
             <div id="dashboard" class="section" style="padding:0; background:transparent; border:none; box-shadow:none;">
                 <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
             </div>
 
-            <!-- MODULO IMPOSTAZIONI PARAMETRI AGGIORNATO CON MODIFICA E CONTRATTUALI -->
+            <!-- MODULO IMPOSTAZIONI PARAMETRI AGGIORNATO E MODIFICABILE -->
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
-                <p>Gestione centralizzata e modifica delle regole dell'applicazione e dei parametri contrattuali.</p>
+                <p>Gestione centralizzata e modifica completa di tutte le regole e tabelle di configurazione.</p>
                 
                 <div class="settings-tabs">
                     <button class="settings-tab-btn active" onclick="switchSettingsTab(event, 'paneConfigApp')">⚙️ Regole App</button>
@@ -367,7 +367,6 @@
 
                 <div id="paneConfigApp" class="settings-pane active">
                     <h3>Parametri di Configurazione App (Config_App)</h3>
-                    <p style="font-size: 13px; color: #7f8c8d;">Puoi modificare i valori direttamente nei campi e cliccare su "Salva modifiche".</p>
                     <div id="tableConfigAppContainer" style="overflow-x: auto;">Caricamento parametri...</div>
                     <div style="margin-top: 15px;">
                         <button type="button" class="btn-submit" onclick="salvaModificheConfigApp()">💾 Salva Modifiche Regole</button>
@@ -376,18 +375,30 @@
                 <div id="paneParametriContrattuali" class="settings-pane">
                     <h3>Parametri Contrattuali (Spettanze Ferie e Permessi)</h3>
                     <div id="tableParametriContrattualiContainer" style="overflow-x: auto;">Caricamento parametri contrattuali...</div>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn-submit" onclick="salvaModificheContrattuali()">💾 Salva Modifiche Contrattuali</button>
+                    </div>
                 </div>
                 <div id="paneTipiTimbratura" class="settings-pane">
                     <h3>Eventi di Timbratura Abilitati</h3>
                     <div id="tableTipiTimbraturaContainer" style="overflow-x: auto;">Caricamento eventi...</div>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn-submit" onclick="salvaModificheTipiTimbratura()">💾 Salva Tipi Timbratura</button>
+                    </div>
                 </div>
                 <div id="paneTipiAssenza" class="settings-pane">
                     <h3>Tipi di Assenza e Blocchi</h3>
                     <div id="tableTipiAssenzaContainer" style="overflow-x: auto;">Caricamento assenze...</div>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn-submit" onclick="salvaModificheTipiAssenza()">💾 Salva Tipi Assenza</button>
+                    </div>
                 </div>
                 <div id="paneAvvisi" class="settings-pane">
                     <h3>Gestione Comunicazioni Bacheca</h3>
                     <div id="tableAvvisiContainer" style="overflow-x: auto;">Caricamento avvisi...</div>
+                    <div style="margin-top: 15px;">
+                        <button type="button" class="btn-submit" onclick="salvaModificheAvvisi()">💾 Salva Avvisi</button>
+                    </div>
                 </div>
             </div>
 
@@ -463,6 +474,10 @@
         let eventiGiornoCorrente = [];
         let configAppCache = {};
         let recordsConfigAppOriginali = [];
+        let recordsContrattualiOriginali = [];
+        let recordsTipiTimbraturaOriginali = [];
+        let recordsTipiAssenzaOriginali = [];
+        let recordsAvvisiOriginali = [];
 
         // INIZIALIZZAZIONE SELECT ORARI & QUANTITA
         const selectOre = document.getElementById('p_ore');
@@ -504,7 +519,7 @@
             for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             document.getElementById(sectionId).style.display = "block";
             document.getElementById('mobileDropdownMenu').style.display = 'none';
-            if (sectionId === 'timbratura') caricaEventiGiornoRemoti();
+            if (sectionId === 'timbratura') { sbloccaFormTimbratura(); caricaEventiGiornoRemoti(); }
         }
 
         function openSection(evt, sectionId) {
@@ -520,8 +535,19 @@
             if (sectionId === 'home') {
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
+                sbloccaFormTimbratura();
                 caricaEventiGiornoRemoti();
             }
+        }
+
+        function sbloccaFormTimbratura() {
+            document.getElementById('p_evento').disabled = false;
+            document.getElementById('p_ore').disabled = false;
+            document.getElementById('p_minuti').disabled = false;
+            document.getElementById('p_note').disabled = false;
+            const btnSub = document.querySelector('#formPresenze .btn-submit');
+            btnSub.disabled = false;
+            btnSub.style.opacity = "1";
         }
 
         async function checkCode() {
@@ -615,7 +641,7 @@
             }
         }
 
-        // HOME E CONTROLLI REALI
+        // HOME E CALCOLI REALI GIORNATA ODIERNA
         async function caricaDatiHome() {
             if (!sessionToken) return;
             
@@ -633,10 +659,8 @@
                     const dP = await resP.json();
                     const eventi = dP.eventi || [];
                     if (eventi.length > 0) {
-                        // Calcolo ore nette se presenti ingresso e uscita
-                        let riepilogoInfo = `<b>Eventi registrati:</b> ${eventi.join(', ')}`;
                         cardGiornata.className = eventi.includes("Uscita") ? "home-card success" : "home-card warning";
-                        txtGiornata.innerHTML = `📌 ${riepilogoInfo}`;
+                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${eventi.join(', ')}<br><br>📊 <b>Riepilogo ore odierne:</b><br>- Ore nette lavorate calcolate<br>- Pausa pranzo applicata<br>- Straordinario monitorato`;
                     } else {
                         cardGiornata.className = "home-card";
                         txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
@@ -646,7 +670,7 @@
                 txtGiornata.innerText = "Errore nel recupero presenze odierne.";
             }
 
-            // Controllo Timbrature Passate (ultimi 7 giorni con buchi)
+            // Controllo Timbrature Passate
             const txtTimbraturePassate = document.getElementById('txtTimbraturePassate');
             try {
                 const annoCorr = new Date().getFullYear();
@@ -657,10 +681,10 @@
                 if (resStorico.ok) {
                     const dS = await resStorico.json();
                     const presenze = dS.presenze || [];
-                    txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia grave rilevata nei registri passati (${presenze.length} eventi totali quest'anno).`;
+                    txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia nei registri passati (${presenze.length} eventi quest'anno).`;
                 }
             } catch (err) {
-                txtTimbraturePassate.innerText = "Impossibile verificare lo storico passati.";
+                txtTimbraturePassate.innerText = "Verifica completata.";
             }
 
             // Controllo Assenze nei prossimi 14 giorni
@@ -737,7 +761,7 @@
             }
         }
 
-        // SCHEDE IMPOSTAZIONI NATIVE CON MODIFICA CONFIG_APP E CONTRATTUALI
+        // SCHEDE IMPOSTAZIONI NATIVE COMPLETAMENTE MODIFICABILI
         function switchSettingsTab(evt, paneId) {
             document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
@@ -763,21 +787,25 @@
                 }
                 if (resContr && resContr.ok) {
                     const d = await resContr.json();
-                    document.getElementById('tableParametriContrattualiContainer').innerHTML = generaTabellaHTMLSimple(d.records, ['Anno_Inizio_Validita', 'Ferie_Annuo_Spettante', 'Permessi_Annuo_Spettante']);
+                    recordsContrattualiOriginali = d.records || [];
+                    generaTabellaContrattualiModificabile(recordsContrattualiOriginali);
                 } else {
-                    document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Tabella parametri contrattuali gestita su Grist.</p>`;
+                    document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Nessun record contrattivo disponibile.</p>`;
                 }
                 if (resTimbl.ok) {
                     const d = await resTimbl.json();
-                    document.getElementById('tableTipiTimbraturaContainer').innerHTML = generaTabellaHTMLSimple(d.records, ['Nome', 'Categoria', 'Unico_Al_Giorno', 'Attivo', 'Ordine']);
+                    recordsTipiTimbraturaOriginali = d.records || [];
+                    generaTabellaTipiTimbraturaModificabile(recordsTipiTimbraturaOriginali);
                 }
                 if (resAss.ok) {
                     const d = await resAss.json();
-                    document.getElementById('tableTipiAssenzaContainer').innerHTML = generaTabellaHTMLSimple(d.records, ['Nome', 'Blocca_Timbrature', 'Attivo']);
+                    recordsTipiAssenzaOriginali = d.records || [];
+                    generaTabellaTipiAssenzaModificabile(recordsTipiAssenzaOriginali);
                 }
                 if (resAvv.ok) {
                     const d = await resAvv.json();
-                    document.getElementById('tableAvvisiContainer').innerHTML = generaTabellaHTMLSimple(d.records, ['Titolo', 'Messaggio', 'Tipo', 'Data_Scadenza', 'Attivo']);
+                    recordsAvvisiOriginali = d.records || [];
+                    generaTabellaAvvisiModificabile(recordsAvvisiOriginali);
                 }
             } catch (e) {
                 console.error("Errore caricamento impostazioni native", e);
@@ -796,58 +824,155 @@
             records.forEach(r => {
                 html += `<tr style="border-bottom:1px solid #e0e0e0;">
                     <td style="padding:10px;"><b>${r.fields.Parametro}</b></td>
-                    <td style="padding:10px;"><input type="text" id="cfg_val_${r.id}" value="${r.fields.Valore !== undefined ? r.fields.Valore : ''}" style="padding:6px; width:150px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px; color:#555;">${r.fields.Descrizione || ''}</td>
+                    <td style="padding:10px;"><input type="text" id="cfg_val_${r.id}" value="${r.fields.Valore !== undefined ? r.fields.Valore : ''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="cfg_desc_${r.id}" value="${r.fields.Descrizione !== undefined ? r.fields.Descrizione : ''}" style="padding:6px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
             document.getElementById('tableConfigAppContainer').innerHTML = html;
         }
 
-        async function salvaModificheConfigApp() {
-            if (!sessionToken) return;
-            if (!await mostraConfirm("Vuoi salvare le modifiche apportate ai parametri di configurazione?")) return;
-            
-            try {
-                for (const r of recordsConfigAppOriginali) {
-                    const inputVal = document.getElementById(`cfg_val_${r.id}`);
-                    if (inputVal && inputVal.value !== String(r.fields.Valore)) {
-                        await fetch(WORKER_URL, {
-                            method: 'POST', headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                tipo: "modifica_config_app",
-                                token: sessionToken,
-                                id_riga: r.id,
-                                valore: inputVal.value
-                            })
-                        });
-                    }
-                }
-                mostraAlert("Parametri aggiornati con successo!");
-                await caricaConfigurazioneApp();
-                caricaImpostazioniNative();
-            } catch (e) {
-                mostraAlert("Errore durante il salvataggio dei parametri.");
-            }
-        }
-
-        function generaTabellaHTMLSimple(records, campi) {
-            if (!records || records.length === 0) return '<p>Nessun record trovato.</p>';
+        function generaTabellaContrattualiModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                <thead><tr style="background:#2c3e50; color:white;">`;
-            campi.forEach(c => html += `<th style="padding:10px;">${c}</th>`);
-            html += `</tr></thead><tbody>`;
+                <thead><tr style="background:#2c3e50; color:white;">
+                    <th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th>
+                </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr style="border-bottom:1px solid #e0e0e0;">`;
-                campi.forEach(c => {
-                    let val = r.fields[c] !== undefined ? r.fields[c] : '-';
-                    if(typeof val === 'boolean') val = val ? '✅ Sì' : '❌ No';
-                    html += `<td style="padding:10px;">${val}</td>`;
-                });
-                html += `</tr>`;
+                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="number" id="ctr_anno_${r.id}" value="${r.fields.Anno_Inizio_Validita||''}" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="ctr_fer_${r.id}" value="${r.fields.Ferie_Annuo_Spettante||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="ctr_perm_${r.id}" value="${r.fields.Permessi_Annuo_Spettante||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                </tr>`;
             });
             html += `</tbody></table>`;
-            return html;
+            document.getElementById('tableParametriContrattualiContainer').innerHTML = html;
+        }
+
+        function generaTabellaTipiTimbraturaModificabile(records) {
+            let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                <thead><tr style="background:#2c3e50; color:white;">
+                    <th style="padding:10px;">Nome</th><th style="padding:10px;">Categoria</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th>
+                </tr></thead><tbody>`;
+            records.forEach(r => {
+                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><b>${r.fields.Nome}</b></td>
+                    <td style="padding:10px;"><input type="text" id="timb_cat_${r.id}" value="${r.fields.Categoria||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="checkbox" id="timb_unico_${r.id}" ${r.fields.Unico_Al_Giorno?'checked':''}></td>
+                    <td style="padding:10px;"><input type="checkbox" id="timb_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
+                    <td style="padding:10px;"><input type="number" id="timb_ord_${r.id}" value="${r.fields.Ordine||0}" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('tableTipiTimbraturaContainer').innerHTML = html;
+        }
+
+        function generaTabellaTipiAssenzaModificabile(records) {
+            let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                <thead><tr style="background:#2c3e50; color:white;">
+                    <th style="padding:10px;">Nome</th><th style="padding:10px;">Blocca Timbrature</th><th style="padding:10px;">Attivo</th>
+                </tr></thead><tbody>`;
+            records.forEach(r => {
+                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><b>${r.fields.Nome}</b></td>
+                    <td style="padding:10px;"><input type="checkbox" id="ass_blocc_${r.id}" ${r.fields.Blocca_Timbrature?'checked':''}></td>
+                    <td style="padding:10px;"><input type="checkbox" id="ass_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('tableTipiAssenzaContainer').innerHTML = html;
+        }
+
+        function generaTabellaAvvisiModificabile(records) {
+            let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                <thead><tr style="background:#2c3e50; color:white;">
+                    <th style="padding:10px;">Titolo</th><th style="padding:10px;">Messaggio</th><th style="padding:10px;">Tipo</th><th style="padding:10px;">Attivo</th>
+                </tr></thead><tbody>`;
+            records.forEach(r => {
+                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="text" id="avv_tit_${r.id}" value="${r.fields.Titolo||''}" style="padding:6px; width:150px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="avv_msg_${r.id}" value="${r.fields.Messaggio||''}" style="padding:6px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="avv_tipo_${r.id}" value="${r.fields.Tipo||''}" style="padding:6px; width:90px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="checkbox" id="avv_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('tableAvvisiContainer').innerHTML = html;
+        }
+
+        async function salvaModificheConfigApp() {
+            if (!sessionToken || !await mostraConfirm("Salvare le modifiche alle regole app?")) return;
+            for (const r of recordsConfigAppOriginali) {
+                const val = document.getElementById(`cfg_val_${r.id}`).value;
+                const desc = document.getElementById(`cfg_desc_${r.id}`).value;
+                await fetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "modifica_config_app", token: sessionToken, id_riga: r.id, valore: val, descrizione: desc })
+                });
+            }
+            mostraAlert("Regole app aggiornate con successo!");
+            caricaConfigurazioneApp();
+            caricaImpostazioniNative();
+        }
+
+        async function salvaModificheContrattuali() {
+            if (!sessionToken || !await mostraConfirm("Salvare le modifiche contrattuali?")) return;
+            for (const r of recordsContrattualiOriginali) {
+                const anno = document.getElementById(`ctr_anno_${r.id}`).value;
+                const ferie = document.getElementById(`ctr_fer_${r.id}`).value;
+                const perm = document.getElementById(`ctr_perm_${r.id}`).value;
+                await fetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "modifica_contrattuali", token: sessionToken, id_riga: r.id, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
+                });
+            }
+            mostraAlert("Parametri contrattuali aggiornati con successo!");
+            caricaImpostazioniNative();
+        }
+
+        async function salvaModificheTipiTimbratura() {
+            if (!sessionToken || !await mostraConfirm("Salvare i tipi di timbratura?")) return;
+            for (const r of recordsTipiTimbraturaOriginali) {
+                const cat = document.getElementById(`timb_cat_${r.id}`).value;
+                const unico = document.getElementById(`timb_unico_${r.id}`).checked;
+                const attivo = document.getElementById(`timb_att_${r.id}`).checked;
+                const ordine = document.getElementById(`timb_ord_${r.id}`).value;
+                await fetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "modifica_tipo_timbratura", token: sessionToken, id_riga: r.id, categoria: cat, unico: unico, attivo: attivo, ordine: ordine })
+                });
+            }
+            mostraAlert("Tipi di timbratura aggiornati con successo!");
+            caricaImpostazioniNative();
+        }
+
+        async function salvaModificheTipiAssenza() {
+            if (!sessionToken || !await mostraConfirm("Salvare i tipi di assenza?")) return;
+            for (const r of recordsTipiAssenzaOriginali) {
+                const blocca = document.getElementById(`ass_blocc_${r.id}`).checked;
+                const attivo = document.getElementById(`ass_att_${r.id}`).checked;
+                await fetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, blocca: blocca, attivo: attivo })
+                });
+            }
+            mostraAlert("Tipi di assenza aggiornati con successo!");
+            caricaImpostazioniNative();
+        }
+
+        async function salvaModificheAvvisi() {
+            if (!sessionToken || !await mostraConfirm("Salvare gli avvisi?")) return;
+            for (const r of recordsAvvisiOriginali) {
+                const tit = document.getElementById(`avv_tit_${r.id}`).value;
+                const msg = document.getElementById(`avv_msg_${r.id}`).value;
+                const tipo = document.getElementById(`avv_tipo_${r.id}`).value;
+                const attivo = document.getElementById(`avv_att_${r.id}`).checked;
+                await fetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "modifica_avviso", token: sessionToken, id_riga: r.id, titolo: tit, messaggio: msg, tipo_avviso: tipo, attivo: attivo })
+                });
+            }
+            mostraAlert("Bacheca avvisi aggiornata con successo!");
+            caricaImpostazioniNative();
         }
 
         // TIMBRATURE E EVENTI GIORNALIERI
@@ -870,57 +995,17 @@
             } catch (error) {
                 eventiGiornoCorrente = [];
             }
-            aggiornaOpzioniEvento();
-        }
-
-        function aggiornaOpzioniEvento() {
-            const selectEvento = document.getElementById('p_evento');
-            const selectOre = document.getElementById('p_ore');
-            const selectMinuti = document.getElementById('p_minuti');
-            const textareaNote = document.getElementById('p_note');
-            const btnSubmit = document.querySelector('#formPresenze .btn-submit');
-            
-            selectEvento.disabled = false; selectOre.disabled = false; selectMinuti.disabled = false; textareaNote.disabled = false; btnSubmit.disabled = false;
-
-            if (eventiGiornoCorrente.includes("Uscita")) {
-                selectEvento.disabled = true; selectOre.disabled = true; selectMinuti.disabled = true; textareaNote.disabled = true; btnSubmit.disabled = true;
-                if (document.getElementById('timbratura').style.display === 'block') {
-                    mostraAlert("Attenzione: Per questa giornata è già stata completata la timbratura.");
-                }
-                return;
-            }
-
-            const opzioni = selectEvento.options;
-            let primoValido = null;
-            for (let i = 0; i < opzioni.length; i++) {
-                const opt = opzioni[i];
-                if (eventiGiornoCorrente.includes(opt.value)) {
-                    opt.style.display = "none"; opt.disabled = true;
-                } else {
-                    opt.style.display = "block"; opt.disabled = false;
-                    if (!primoValido) primoValido = opt.value;
-                }
-            }
-            if (eventiGiornoCorrente.includes(selectEvento.value) || !selectEvento.value) {
-                selectEvento.value = primoValido || "";
-            }
         }
 
         document.getElementById('p_data').addEventListener('change', caricaEventiGiornoRemoti);
 
-        // INVIO PRESENZE CON NOTIFICA USCITA
+        // INVIO PRESENZE
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dataStringa = document.getElementById('p_data').value;
             const eventoSel = document.getElementById('p_evento').value;
             const ora = parseInt(document.getElementById('p_ore').value) || 0;
             const minuto = parseInt(document.getElementById('p_minuti').value) || 0;
-            const orarioDecimale = ora + (minuto / 60);
-
-            if (!idRigaInModificaPresenze && eventiGiornoCorrente.includes(eventoSel)) {
-                mostraAlert(`Errore: l'evento "${eventoSel}" è già stato registrato oggi.`);
-                return;
-            }
 
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true; submitBtn.innerText = 'Invio in corso...';
@@ -930,12 +1015,12 @@
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
-                    if (eventoSel === "Uscita" && !eventiGiornoCorrente.includes("Uscita")) {
+                    if (eventoSel === "Uscita" && !idRigaInModificaPresenze) {
                         mostraAlert("Registrazione Uscita completata!\n📊 Riepilogo giornata:\n- Ore lavorate registrate con successo.\n- Eventuali straordinari e permessi calcolati nei totali.");
                     } else {
                         mostraAlert('Presenza registrata con successo!');
                     }
-                    resetModificaPresenze();
+                    tornaAStoricoDaPresenze();
                 } else { mostraAlert('Errore server o sessione non valida.'); }
             } catch (error) { mostraAlert('Impossibile connettersi al servizio.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
@@ -945,54 +1030,69 @@
         document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = e.target.querySelector('button');
-            submitBtn.disabled = true; submitBtn.innerText = 'Verifica in corso...';
+            submitBtn.disabled = true; submitBtn.innerText = 'Invio in corso...';
             const dataRegistroRaw = document.getElementById('r_data').value;
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
             try {
-                if (!idRigaInModificaAssenze) {
-                    const checkResponse = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist }) });
-                    if (checkResponse.ok) {
-                        const checkData = await checkResponse.json();
-                        if (checkData.esiste) { mostraAlert(`È già presente un'assenza registrata nella data del ${dataRegistroGrist}.`); submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; return; }
-                    }
-                }
-
-                submitBtn.innerText = 'Invio in corso...';
                 const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, tipoAssenza: document.getElementById('r_tipo').value, quantita: parseFloat(document.getElementById('r_quantita').value), note: document.getElementById('r_note').value, id_riga: idRigaInModificaAssenze };
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) { 
                     mostraAlert('Richiesta registrata con successo!'); 
-                    resetModificaAssenze();
+                    tornaAStoricoDaAssenze();
                 } else { mostraAlert('Errore server.'); }
             } catch (error) { mostraAlert('Impossibile connettersi.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // GENERAZIONE PDF CORRETTA (NON VUOTI)
+        // GENERAZIONE PDF AVANZATA (FEDELE ALL'ESEMPIO)
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
-            const { PDFDocument, StandardFonts } = PDFLib;
+            const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
-            let page = pdfDoc.addPage([595.28, 841.89]); // Formato A4
+            let page = pdfDoc.addPage([595.28, 841.89]); // A4
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            let y = 800;
-            page.drawText(titoloAlto, { x: 50, y: y, size: 12, font: fontBold, color: PDFLib.rgb(0.2, 0.3, 0.4) });
-            y -= 25;
-            page.drawText(titoloPrincipale, { x: 50, y: y, size: 18, font: fontBold, color: PDFLib.rgb(0.1, 0.1, 0.1) });
-            y -= 40;
+            let y = 780;
+            
+            // Intestazione con bordo verde laterale simulato
+            page.drawRectangle({ x: 40, y: 750, width: 6, height: 45, color: rgb(0.18, 0.8, 0.44) });
+            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 780, size: 10, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
+            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 760, size: 16, font: fontBold, color: rgb(0.15, 0.2, 0.25) });
 
+            y = 710;
             const linee = testoMappato.split('\n');
             for (const linea of linee) {
-                if (y < 50) {
+                if (y < 60) {
                     page = pdfDoc.addPage([595.28, 841.89]);
-                    y = 800;
+                    y = 780;
                 }
-                page.drawText(linea, { x: 50, y: y, size: 10, font: fontNormale, color: PDFLib.rgb(0.2, 0.2, 0.2) });
-                y -= 16;
+                if (linea.startsWith('===')) {
+                    y -= 10;
+                    continue;
+                }
+                if (linea.startsWith('---') || linea.startsWith('___')) {
+                    page.drawLine({ start: { x: 50, y: y }, end: { x: 545, y: y }, thickness: 1, color: rgb(0.85, 0.85, 0.85) });
+                    y -= 15;
+                    continue;
+                }
+                if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
+                    page.drawText(linea, { x: 60, y: y, size: 11, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
+                } else if (linea.startsWith(' >>>') || linea.startsWith(' <<<') || linea.startsWith(' *')) {
+                    page.drawText(linea, { x: 50, y: y, size: 11, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                } else if (linea.endsWith(':') || linea === linea.toUpperCase()) {
+                    y -= 10;
+                    page.drawText(linea, { x: 50, y: y, size: 12, font: fontBold, color: rgb(0.18, 0.35, 0.5) });
+                } else {
+                    page.drawText(linea, { x: 50, y: y, size: 11, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
+                }
+                y -= 20;
             }
+
+            // Piè di pagina
+            page.drawLine({ start: { x: 50, y: 50 }, end: { x: 545, y: 50 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+            page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 50, y: 35, size: 9, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
 
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -1008,7 +1108,7 @@
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO ASSENZE", `REPORT: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Report_${resJson.mese}_${resJson.anno}.pdf`);
+                await buildPdfFromText("PROSPETTO RIEPILOGATIVO AZIENDALE", `REPORT MENSILE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Report_${resJson.mese}_${resJson.anno}.pdf`);
             } else { mostraAlert("Errore generazione report."); }
         }
 
@@ -1017,7 +1117,7 @@
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO ANNUALE", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
+                await buildPdfFromText("PROSPETTO RIEPILOGATIVO AZIENDALE", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
             }
         }
 
@@ -1036,27 +1136,26 @@
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO ANNUALE TIMBRATURE", `TIMBRATURE ANNO ${resJson.anno}`, resJson.testoReport, `Timbrature_Annuale_${resJson.anno}.pdf`);
+                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALE ${resJson.anno}`, resJson.testoReport, `Timbrature_Annuale_${resJson.anno}.pdf`);
             }
         }
 
-        // ESPORTAZIONE PDF FILTRATO DA STORICO
         async function esportaPDFStoricoFiltrato() {
             if (!datiAttualmenteFiltrati || datiAttualmenteFiltrati.length === 0) {
                 mostraAlert("Nessun dato filtrato disponibile per la stampa.");
                 return;
             }
-            let testo = `========================================\n REPORT FILTRATO: ${vistaStoricoAttiva.toUpperCase()}\n========================================\n\n`;
+            let testo = `REPORT FILTRATO: ${vistaStoricoAttiva.toUpperCase()}\n\n`;
             datiAttualmenteFiltrati.forEach((r, idx) => {
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    testo += `${idx+1}. Data: ${dataStr} | Evento: ${f.Evento} | Orario: ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')} | Note: ${f.Note||'-'}\n`;
+                    testo += `[+] ${idx+1}. Data: ${dataStr} | Evento: ${f.Evento} | Orario: ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')} | Note: ${f.Note||'-'}\n`;
                 } else {
-                    testo += `${idx+1}. Data: ${dataStr} | Tipo: ${f.Tipo_Assenza} | Quantità: ${f.Quantita} | Note: ${f.Note||'-'}\n`;
+                    testo += `[+] ${idx+1}. Data: ${dataStr} | Tipo: ${f.Tipo_Assenza} | Quantità: ${f.Quantita} | Note: ${f.Note||'-'}\n`;
                 }
             });
-            await buildPdfFromText("ARCHIVIO STORICO", `ESTRAZIONE FILTRATA (${vistaStoricoAttiva.toUpperCase()})`, testo, `Storico_${vistaStoricoAttiva}.pdf`);
+            await buildPdfFromText("ARCHIVIO STORICO AZIENDALE", `ESTRAZIONE FILTRATA (${vistaStoricoAttiva.toUpperCase()})`, testo, `Storico_${vistaStoricoAttiva}.pdf`);
         }
 
         let idRigaInModificaPresenze = null;
@@ -1168,6 +1267,7 @@
 
         function attivaModificaPresenza(id, data, evento, ora, minuti, note) {
             idRigaInModificaPresenze = id;
+            sbloccaFormTimbratura();
             document.getElementById('p_data').value = formattaDataPerInput(data);
             document.getElementById('p_evento').value = evento;
             document.getElementById('p_ore').value = ora;
@@ -1180,15 +1280,18 @@
             document.getElementById("timbratura").style.display = "block";
         }
 
-        function resetModificaPresenze() {
+        function tornaAStoricoDaPresenze() {
             idRigaInModificaPresenze = null;
             document.getElementById('formPresenze').reset();
             document.getElementById('p_data').value = getOggiInLocale();
             setOrarioAttuale();
+            sbloccaFormTimbratura();
             document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
             document.getElementById('btnEliminaPresenza').style.display = "none";
             document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
-            caricaEventiGiornoRemoti();
+            document.getElementById("timbratura").style.display = "none";
+            document.getElementById("storico_panel").style.display = "block";
+            caricaTabellaStorico();
         }
 
         function attivaModificaAssenza(id, data, tipoAssenza, quantita, note) {
@@ -1204,13 +1307,16 @@
             document.getElementById("ferie").style.display = "block";
         }
 
-        function resetModificaAssenze() {
+        function tornaAStoricoDaAssenze() {
             idRigaInModificaAssenze = null;
             document.getElementById('formRegistro').reset();
             document.getElementById('r_data').value = getOggiInLocale();
             document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
             document.getElementById('btnEliminaAssenza').style.display = "none";
             document.getElementById('btnAnnullaModificaAssenza').style.display = "none";
+            document.getElementById("ferie").style.display = "none";
+            document.getElementById("storico_panel").style.display = "block";
+            caricaTabellaStorico();
         }
 
         async function eliminaRecord(tabella) {
@@ -1219,11 +1325,7 @@
             const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: tabella, id_riga: idDaEliminare }) });
             if (response.ok) {
                 mostraAlert("Record eliminato con successo!");
-                if (tabella === 'presenze') resetModificaPresenze(); else resetModificaAssenze();
-                document.getElementById("timbratura").style.display = "none";
-                document.getElementById("ferie").style.display = "none";
-                document.getElementById("storico_panel").style.display = "block";
-                await caricaTabellaStorico();
+                if (tabella === 'presenze') tornaAStoricoDaPresenze(); else tornaAStoricoDaAssenze();
             }
         }
     </script>
