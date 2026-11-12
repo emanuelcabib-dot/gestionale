@@ -221,20 +221,16 @@
             <div id="timbratura" class="section">
                 <h2>Timbratura giornata</h2>
                 <p>Inserisci i dati relativi alla timbratura giornaliera.</p>
+                <div id="bannerBloccoTimbratura" style="display:none; background:#fdecea; border:1px solid #f5c6cb; color:#721c24; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
                 <form id="formPresenze">
                     <div class="form-group">
-                        <label for="p_data">Data:</label>
-                        <input type="date" id="p_data" required>
+                        <label>Data:</label>
+                        <div id="p_data_estesa" style="font-size: 16px; font-weight: bold; color: #2c3e50; padding: 12px; background: #f8f9fa; border: 1px solid #ccc; border-radius: 4px;"></div>
+                        <input type="hidden" id="p_data" required>
                     </div>
                     <div class="form-group">
                         <label for="p_evento">Evento:</label>
-                        <select id="p_evento" required>
-                            <option value="Ingresso">Ingresso</option>
-                            <option value="Inizio Pausa">Inizio pausa</option>
-                            <option value="Fine Pausa">Fine pausa</option>
-                            <option value="Uscita">Uscita</option>
-                            <option value="Cantiere">Cantiere</option>
-                        </select>
+                        <select id="p_evento" required></select>
                     </div>
                     <div class="form-group">
                         <label for="p_ore">Ore:</label>
@@ -412,7 +408,10 @@
                     <button type="button" id="btnVistaPresenze" class="vista-btn active" onclick="cambiaVistaStorico('presenze')">🕒 Timbrature Giornata</button>
                     <button type="button" id="btnVistaAssenze" class="vista-btn" onclick="cambiaVistaStorico('assenze')">🌴 Assenze</button>
                 </div>
-
+                <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
+                    <button type="button" onclick="apriInserimentoPassato('presenze')" style="background-color:#27ae60; color:white; padding:10px 15px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">➕ Aggiungi Timbratura Passata</button>
+                    <button type="button" onclick="apriInserimentoPassato('assenze')" style="background-color:#d35400; color:white; padding:10px 15px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">➕ Aggiungi Assenza Passata</button>
+                </div>
                 <div class="filtri-bar">
                     <div class="form-group">
                         <label for="storico_anno">1. Anno:</label>
@@ -480,6 +479,46 @@
         let recordsTipiAssenzaOriginali = [];
         let recordsAvvisiOriginali = [];
         let tipiAssenzaBloccantiCache = new Set();
+        let listaTipiTimbraturaGrist = [];
+        let listaTipiAssenzaGrist = [];
+        let modalitaInserimentoPassato = false;
+
+        function getIeriInLocale() {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function formattaDataEstesaItaliana(dataISO) {
+            const [aa, mm, gg] = dataISO.split('-').map(Number);
+            const d = new Date(aa, mm - 1, gg);
+            const testo = d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            return testo.charAt(0).toUpperCase() + testo.slice(1);
+        }
+
+        async function caricaTipiTimbraturaDynamic() {
+            try {
+                const res = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_tipi_timbratura", token: sessionToken })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    listaTipiTimbraturaGrist = (data.records || [])
+                        .filter(r => r.fields.Attivo === true)
+                        .sort((a, b) => (a.fields.Ordine || 0) - (b.fields.Ordine || 0));
+                    
+                    const sel = document.getElementById('p_evento');
+                    sel.innerHTML = '';
+                    listaTipiTimbraturaGrist.forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.fields.Nome;
+                        opt.innerText = r.fields.Nome;
+                        sel.appendChild(opt);
+                    });
+                }
+            } catch (e) { console.error("Errore Tipi Timbratura:", e); }
+        }
 
         const selectOre = document.getElementById('p_ore');
         for (let i = 0; i < 24; i++) {
@@ -528,7 +567,6 @@
             
             document.getElementById(sectionId).style.display = "block";
             
-            // Attiva il pulsante corrispondente nella sidebar/menu se presente
             for (let i = 0; i < tabButtons.length; i++) {
                 if (tabButtons[i].getAttribute('onclick') && tabButtons[i].getAttribute('onclick').includes(sectionId)) {
                     tabButtons[i].classList.add("active");
@@ -538,20 +576,52 @@
             if (sectionId === 'home') {
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
-                if (!idRigaInModificaPresenze) {
-                    document.getElementById('p_data').value = getOggiInLocale();
+                if (!idRigaInModificaPresenze && !modalitaInserimentoPassato) {
+                    const oggiStr = getOggiInLocale();
+                    document.getElementById('p_data').type = 'hidden';
+                    document.getElementById('p_data').value = oggiStr;
+                    document.getElementById('p_data_estesa').style.display = 'block';
+                    document.getElementById('p_data_estesa').innerText = formattaDataEstesaItaliana(oggiStr);
                     setOrarioAttuale();
-                    document.getElementById('p_evento').value = "Ingresso";
                     document.getElementById('p_note').value = "";
                 }
                 verificaStatoTimbraturaGiornata();
             } else if (sectionId === 'ferie') {
-                if (!idRigaInModificaAssenze) {
-                    document.getElementById('r_data').value = getOggiInLocale();
-                    document.getElementById('r_tipo').value = "Ferie";
+                const rDataInput = document.getElementById('r_data');
+                if (!idRigaInModificaAssenze && !modalitaInserimentoPassato) {
+                    const oggiStr = getOggiInLocale();
+                    rDataInput.min = oggiStr;
+                    rDataInput.removeAttribute('max');
+                    rDataInput.value = oggiStr;
                     document.getElementById('r_quantita').value = "8";
                     document.getElementById('r_note').value = "";
                 }
+            }
+        }
+
+        function apriInserimentoPassato(tipo) {
+            modalitaInserimentoPassato = true;
+            const ieriStr = getIeriInLocale();
+            if (tipo === 'presenze') {
+                idRigaInModificaPresenze = null;
+                document.getElementById('p_data_estesa').style.display = 'none';
+                const pData = document.getElementById('p_data');
+                pData.type = 'date';
+                pData.removeAttribute('min');
+                pData.max = ieriStr;
+                pData.value = ieriStr;
+                document.getElementById('p_note').value = "Inserimento retroattivo";
+                document.getElementById('btnAnnullaModificaPresenza').style.display = "inline-block";
+                navigaASezione('timbratura');
+            } else {
+                idRigaInModificaAssenze = null;
+                const rData = document.getElementById('r_data');
+                rData.removeAttribute('min');
+                rData.max = ieriStr;
+                rData.value = ieriStr;
+                document.getElementById('r_note').value = "Inserimento assenza passata";
+                document.getElementById('btnAnnullaModificaAssenza').style.display = "inline-block";
+                navigaASezione('ferie');
             }
         }
 
@@ -576,6 +646,7 @@
                     setOrarioAttuale();
                     await caricaConfigurazioneApp();
                     await caricaTipiAssenzaCache();
+                    await caricaTipiTimbraturaDynamic();
                     await caricaDatiHome();
                     caricaImpostazioniNative();
                     navigaASezione('home');
@@ -625,15 +696,21 @@
                 if (res.ok) {
                     const data = await res.json();
                     tipiAssenzaBloccantiCache.clear();
-                    (data.records || []).forEach(r => {
-                        if (r.fields.Blocca_Timbrature && r.fields.Attivo) {
+                    listaTipiAssenzaGrist = (data.records || []).filter(r => r.fields.Attivo === true);
+                    
+                    const selAssenza = document.getElementById('r_tipo');
+                    selAssenza.innerHTML = '';
+                    listaTipiAssenzaGrist.forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.fields.Nome;
+                        opt.innerText = r.fields.Nome;
+                        selAssenza.appendChild(opt);
+                        if (r.fields.Blocca_Timbrature) {
                             tipiAssenzaBloccantiCache.add(String(r.fields.Nome || "").trim().toLowerCase());
                         }
                     });
                 }
-            } catch (e) {
-                console.error("Errore caricamento Tipi Assenza", e);
-            }
+            } catch (e) { console.error("Errore caricamento Tipi Assenza", e); }
         }
 
         function popolaTendineAnniDinamiche() {
@@ -684,8 +761,12 @@
                     const dP = await resP.json();
                     const eventi = dP.eventi || [];
                     if (eventi.length > 0) {
+                        const riepOggi = calcolaRiepilogoGiornata(dP.records || []);
                         cardGiornata.className = eventi.includes("Uscita") ? "home-card success" : "home-card warning";
-                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${eventi.join(', ')}<br><br>📊 <b>Riepilogo ore odierne:</b><br>- Ore nette lavorate calcolate<br>- Pausa pranzo applicata<br>- Straordinario monitorato`;
+                        let dettagliOre = riepOggi.completata 
+                            ? `• <b>Ore lavorate:</b> ${riepOggi.lavorate}<br>• <b>Straordinari:</b> ${riepOggi.straordinari}<br>• <b>Permessi:</b> ${riepOggi.permessi}`
+                            : `• <i>Giornata in corso (in attesa di timbratura Uscita per il calcolo definitivo)</i>`;
+                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${eventi.join(', ')}<br><br>📊 <b>Riepilogo ore odierne:</b><br>${dettagliOre}`;
                     } else {
                         cardGiornata.className = "home-card";
                         txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
@@ -1046,12 +1127,69 @@
             caricaImpostazioniNative();
         }
 
+        function calcolaRiepilogoGiornata(recordsGiorno) {
+            let minIng = 0, minUsc = 0, minPausaIn = 0, minPausaFi = 0;
+            recordsGiorno.forEach(r => {
+                const f = r.fields;
+                const totMin = (parseInt(f.Ora || 0) * 60) + parseInt(f.Minuti || 0);
+                if (f.Evento === "Ingresso") minIng = totMin;
+                if (f.Evento === "Uscita") minUsc = totMin;
+                if (f.Evento === "Inizio Pausa") minPausaIn = totMin;
+                if (f.Evento === "Fine Pausa") minPausaFi = totMin;
+            });
+
+            if (minIng > 0 && minUsc > minIng) {
+                const lordi = minUsc - minIng;
+                let pausa = 0;
+                if (minPausaIn > 0 && minPausaFi > minPausaIn) {
+                    pausa = minPausaFi - minPausaIn;
+                } else if (lordi > 360) {
+                    pausa = 60;
+                }
+                const netti = Math.max(0, lordi - pausa);
+                const oreLav = Math.floor(netti / 60);
+                const minLav = netti % 60;
+
+                let strTesto = "0,00 ore";
+                let permTesto = "Nessuno";
+                if (netti > 510) {
+                    const strMin = Math.round((netti - 480) / 30) * 30;
+                    strTesto = `${Math.floor(strMin / 60)},${String(strMin % 60).padStart(2, '0')} ore`;
+                } else if (netti < 480) {
+                    const diffMin = 480 - netti;
+                    permTesto = `${Math.floor(diffMin / 60)}h ${diffMin % 60}m mancanti alle 8h`;
+                }
+                return {
+                    completata: true,
+                    lavorate: `${oreLav}h ${String(minLav).padStart(2, '0')}m`,
+                    straordinari: strTesto,
+                    permessi: permTesto
+                };
+            }
+            return { completata: false };
+        }
+
+        function setStatoCampiTimbratura(disabilita, messaggioBanner = "") {
+            const banner = document.getElementById('bannerBloccoTimbratura');
+            if (messaggioBanner) {
+                banner.innerText = messaggioBanner;
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+            document.querySelectorAll('#formPresenze select, #formPresenze textarea, #formPresenze button[type="submit"]').forEach(el => {
+                el.disabled = disabilita;
+            });
+        }
+
         async function verificaStatoTimbraturaGiornata() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
             if (!dataSel) return;
             const [anno, mese, giorno] = dataSel.split('-');
             const dataGrist = `${giorno}/${mese}/${anno}`;
+
+            setStatoCampiTimbratura(false, "");
 
             try {
                 const resAss = await fetch(WORKER_URL, {
@@ -1060,8 +1198,9 @@
                 });
                 if (resAss.ok) {
                     const dAss = await resAss.json();
-                    if (dAss.esiste) {
-                        mostraAlert("Attenzione: In questa data risulta registrata un'assenza bloccante!");
+                    if (dAss.esiste && dAss.bloccaTimbrature && !idRigaInModificaPresenze) {
+                        setStatoCampiTimbratura(true, "⛔ Attenzione: Per questa data risulta registrata un'assenza che blocca le timbrature.");
+                        return;
                     }
                 }
 
@@ -1072,25 +1211,38 @@
                 if (response.ok) {
                     const data = await response.json();
                     eventiGiornoCorrente = data.eventi || [];
-                    
+                    const recordsGiorno = data.records || [];
+
+                    if (eventiGiornoCorrente.includes("Uscita") && !idRigaInModificaPresenze) {
+                        const riep = calcolaRiepilogoGiornata(recordsGiorno);
+                        let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
+                        if (riep.completata) {
+                            msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
+                        }
+                        setStatoCampiTimbratura(true, msg);
+                        return;
+                    }
+
                     const selEvento = document.getElementById('p_evento');
                     for (let i = 0; i < selEvento.options.length; i++) {
                         const optVal = selEvento.options[i].value;
-                        if (eventiGiornoCorrente.includes(optVal) && optVal !== "Cantiere") {
+                        const confTipo = listaTipiTimbraturaGrist.find(t => t.fields.Nome === optVal);
+                        const isUnico = confTipo ? Boolean(confTipo.fields.Unico_Al_Giorno) : true;
+                        
+                        if (eventiGiornoCorrente.includes(optVal) && isUnico) {
                             selEvento.options[i].disabled = true;
                         } else {
                             selEvento.options[i].disabled = false;
                         }
                     }
+                    const primaDisponibile = Array.from(selEvento.options).find(o => !o.disabled);
+                    if (primaDisponibile) selEvento.value = primaDisponibile.value;
                 }
-            } catch (error) {
-                console.error("Errore verifica timbratura:", error);
-            }
+            } catch (error) { console.error("Errore verifica timbratura:", error); }
         }
 
         document.getElementById('p_data').addEventListener('change', verificaStatoTimbraturaGiornata);
 
-        // INVIO PRESENZE -> RIMANDA A HOME
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dataStringa = document.getElementById('p_data').value;
@@ -1122,7 +1274,18 @@
             try {
                 const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
-                    mostraAlert('Presenza registrata con successo!');
+                    modalitaInserimentoPassato = false;
+                    if (eventoSel === "Uscita") {
+                        const resCheck = await fetch(WORKER_URL, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
+                        });
+                        const dCheck = await resCheck.json();
+                        const riep = calcolaRiepilogoGiornata(dCheck.records || []);
+                        mostraAlert(`🎉 Giornata completata!\n\n• Ore lavorate: ${riep.lavorate || 'Calcolate'}\n• Straordinari: ${riep.straordinari || '0,00 ore'}\n• Permessi/Note: ${riep.permessi || 'Nessuno'}`);
+                    } else {
+                        mostraAlert('Presenza registrata con successo!');
+                    }
                     navigaASezione('home');
                     idRigaInModificaPresenze = null;
                     document.getElementById('formPresenze').reset();
@@ -1134,7 +1297,6 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
         });
 
-        // INVIO ASSENZE CON CONTROLLO UNICITÀ DATA -> RIMANDA A HOME
         document.getElementById('formRegistro').addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = e.target.querySelector('button');
@@ -1143,7 +1305,6 @@
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
-            // Controllo se esiste già un'assenza in questa data (se non siamo in modifica)
             if (!idRigaInModificaAssenze) {
                 try {
                     const resCheck = await fetch(WORKER_URL, {
@@ -1159,6 +1320,19 @@
                         }
                     }
                 } catch(err) {}
+
+                const resTimbCheck = await fetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
+                });
+                if (resTimbCheck.ok) {
+                    const dTimb = await resTimbCheck.json();
+                    if (dTimb.eventi && dTimb.eventi.length > 0) {
+                        mostraAlert("⛔ Impossibile inserire l'assenza: nella data selezionata risultano già registrate delle timbrature!");
+                        submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
+                        return;
+                    }
+                }
             }
 
             try {
@@ -1177,15 +1351,13 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // GENERAZIONE PDF PROFESSIONALE CON BLOCCHI A SFONDO COLORATO
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
-            let page = pdfDoc.addPage([595.28, 841.89]); // A4
+            let page = pdfDoc.addPage([595.28, 841.89]);
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            // Sfondo box intestazione
             page.drawRectangle({ x: 35, y: 730, width: 525, height: 65, color: rgb(0.92, 0.95, 0.98) });
             page.drawRectangle({ x: 35, y: 730, width: 6, height: 65, color: rgb(0.18, 0.6, 0.85) });
 
@@ -1199,16 +1371,12 @@
                     page = pdfDoc.addPage([595.28, 841.89]);
                     y = 780;
                 }
-                if (linea.startsWith('===')) {
-                    y -= 10;
-                    continue;
-                }
+                if (linea.startsWith('===')) { y -= 10; continue; }
                 if (linea.startsWith('---') || linea.startsWith('___')) {
                     page.drawLine({ start: { x: 35, y: y }, end: { x: 560, y: y }, thickness: 1, color: rgb(0.8, 0.85, 0.9) });
                     y -= 15;
                     continue;
                 }
-                // Sezione titolo interno con sfondo colorato leggero
                 if (linea === linea.toUpperCase() && linea.trim().length > 0 && !linea.includes(':')) {
                     y -= 10;
                     page.drawRectangle({ x: 35, y: y - 3, width: 525, height: 18, color: rgb(0.95, 0.95, 0.95) });
@@ -1233,7 +1401,6 @@
                 y -= 20;
             }
 
-            // Piè di pagina
             page.drawLine({ start: { x: 35, y: 40 }, end: { x: 560, y: 40 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
             page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 35, y: 25, size: 8, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
 
@@ -1288,17 +1455,28 @@
                 mostraAlert("Nessun dato filtrato disponibile per la stampa.");
                 return;
             }
-            let testo = `REPORT FILTRATO: ${vistaStoricoAttiva.toUpperCase()}\n\n`;
-            datiAttualmenteFiltrati.forEach((r, idx) => {
+            const annoSel = document.getElementById('storico_anno').value;
+            const meseSel = document.getElementById('storico_mese').options[document.getElementById('storico_mese').selectedIndex].text;
+            const giornoSel = document.getElementById('storico_giorno').options[document.getElementById('storico_giorno').selectedIndex].text;
+            const categoria = vistaStoricoAttiva === 'presenze' ? 'TIMBRATURE GIORNATA' : 'FERIE, PERMESSI E MALATTIA';
+
+            let testo = `DETTAGLIO ESTRAZIONE\n----------------------------------------\n`;
+            testo += `Categoria Stampata: ${categoria}\n`;
+            testo += `Filtri Applicati: Anno ${annoSel} | Mese: ${meseSel} | Giorno: ${giornoSel}\n`;
+            testo += `Totale Record Estratti: ${datiAttualmenteFiltrati.length}\n\n`;
+            testo += `ELENCO REGISTRAZIONI\n----------------------------------------\n`;
+
+            datiAttualmenteFiltrati.forEach((r) => {
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    testo += `Data: ${dataStr} | Evento: ${f.Evento} | Orario: ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')} | Note: ${f.Note||'-'}\n`;
+                    testo += `${dataStr}  |  ${f.Evento.padEnd(15, ' ')}  |  Ore ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')}  |  Note: ${f.Note || '-'}\n`;
                 } else {
-                    testo += `Data: ${dataStr} | Tipo: ${f.Tipo_Assenza} | Quantità: ${f.Quantita} | Note: ${f.Note||'-'}\n`;
+                    testo += `${dataStr}  |  ${f.Tipo_Assenza.padEnd(18, ' ')}  |  Q.tà: ${f.Quantita}  |  Note: ${f.Note || '-'}\n`;
                 }
             });
-            await buildPdfFromText("ARCHIVIO STORICO AZIENDALE", `ESTRAZIONE FILTRATA (${vistaStoricoAttiva.toUpperCase()})`, testo, `Storico_${vistaStoricoAttiva}.pdf`);
+
+            await buildPdfFromText("ARCHIVIO STORICO AZIENDALE", `REPORT FILTRATO - ${categoria}`, testo, `Storico_${vistaStoricoAttiva}_${annoSel}.pdf`);
         }
 
         let idRigaInModificaPresenze = null;
