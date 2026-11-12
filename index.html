@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pannello controllo lavoro</title>
     <link rel="manifest" href="manifest.json">
-<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
@@ -93,7 +93,6 @@
     </style>
 </head>
 <body>
-    <!-- GLOBAL API OFFLINE / LIMIT BANNER -->
     <div id="globalApiBanner" style="display:none; background:#e74c3c; color:white; padding:10px 20px; text-align:center; font-weight:bold; font-size:14px; position:fixed; top:0; left:0; width:100%; z-index:99999;">
         ⚠️ Limite API Grist raggiunto o connessione assente. Alcune funzioni operano in modalità offline (cache locale).
     </div>
@@ -206,7 +205,7 @@
                         <p id="txtTimbraturePassate">Verifica timbrature dimenticate...</p>
                     </div>
                     <div id="cardAssenze" class="home-card">
-                        <h4>🌴 Assenze nei prossimi 14 giorni</h4>
+                        <h4>🌴 Assenze pianificate</h4>
                         <p id="txtAssenzeProgrammate">Controllo pianificazione...</p>
                     </div>
                 </div>
@@ -228,6 +227,7 @@
                 <p>Inserisci i dati relativi alla timbratura giornaliera.</p>
                 <div id="bannerFestivoPresenza" style="display:none; background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
                 <div id="bannerBloccoTimbratura" style="display:none; background:#fdecea; border:1px solid #f5c6cb; color:#721c24; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
+                <div id="bannerAvvisoOrario" style="display:none; background:#e8f4f8; border:1px solid #bce8f1; color:#31708f; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
                 <form id="formPresenze">
                     <div class="form-group">
                         <label>Data:</label>
@@ -270,15 +270,7 @@
                     </div>
                     <div class="form-group">
                         <label for="r_tipo">Tipo assenza:</label>
-                        <select id="r_tipo" required>
-                            <option value="Ferie">Ferie</option>
-                            <option value="Ferie liquidate">Ferie liquidate</option>
-                            <option value="Ferie rettificate">Ferie rettificate</option>
-                            <option value="Permesso">Permesso</option>
-                            <option value="Permessi liquidati">Permessi liquidati</option>
-                            <option value="Permessi rettificati">Permessi rettificati</option>
-                            <option value="Malattia">Malattia</option>
-                        </select>
+                        <select id="r_tipo" required></select>
                     </div>
                     <div class="form-group">
                         <label for="r_quantita">Quantità (ore o giorni):</label>
@@ -352,7 +344,7 @@
 
             <!-- DASHBOARD GRIST IFRAME -->
             <div id="dashboard" class="section" style="padding:0; background:transparent; border:none; box-shadow:none;">
-                <iframe src="https://docs.getgrist.com/aMMi178vAHb7/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
+                <iframe src="https://gestionale-lavoro-emanuel-00.getgrist.com/9vHK9LitS9R2/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
             </div>
 
             <!-- IMPOSTAZIONI PARAMETRI -->
@@ -386,15 +378,17 @@
                 <div id="paneTipiTimbratura" class="settings-pane">
                     <h3>Eventi di Timbratura Abilitati</h3>
                     <div id="tableTipiTimbraturaContainer" style="overflow-x: auto;">Caricamento eventi...</div>
-                    <div style="margin-top: 15px;">
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
                         <button type="button" class="btn-submit" onclick="salvaModificheTipiTimbratura()">💾 Salva Tipi Timbratura</button>
+                        <button type="button" class="btn-submit" style="background-color: #2980b9;" onclick="aggiungiRigaTimbratura()">➕ Aggiungi Evento</button>
                     </div>
                 </div>
                 <div id="paneTipiAssenza" class="settings-pane">
                     <h3>Tipi di Assenza e Blocchi</h3>
                     <div id="tableTipiAssenzaContainer" style="overflow-x: auto;">Caricamento assenze...</div>
-                    <div style="margin-top: 15px;">
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
                         <button type="button" class="btn-submit" onclick="salvaModificheTipiAssenza()">💾 Salva Tipi Assenza</button>
+                        <button type="button" class="btn-submit" style="background-color: #2980b9;" onclick="aggiungiRigaAssenza()">➕ Aggiungi Assenza</button>
                     </div>
                 </div>
                 <div id="paneAvvisi" class="settings-pane">
@@ -491,7 +485,6 @@
         let listaTipiAssenzaGrist = [];
         let modalitaInserimentoPassato = false;
 
-        // Gestione centrale delle risposte API ed errori (es. limite 429, errore 500 o offline)
         async function apiFetch(url, options) {
             const banner = document.getElementById('globalApiBanner');
             try {
@@ -521,7 +514,6 @@
             return testo.charAt(0).toUpperCase() + testo.slice(1);
         }
 
-        // Calcolo festività nazionali fisse e mobili (Pasqua/Lunedì dell'Angelo) in Italia
         function getPasqua(anno) {
             const a = anno % 19, b = Math.floor(anno / 100), c = anno % 100;
             const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
@@ -536,36 +528,19 @@
         function verificaGiornoFestivo(dataISO) {
             const [aa, mm, gg] = dataISO.split('-').map(Number);
             const d = new Date(aa, mm - 1, gg);
-            const giornoSettimana = d.getDay(); // 0 = Domenica, 6 = Sabato
+            const giornoSettimana = d.getDay();
 
             if (giornoSettimana === 0) return "Domenica (Giornata festiva)";
             if (giornoSettimana === 6) return "Sabato (Giornata festiva / non lavorativa)";
 
-            // Festività fisse italiane
-            const fisse = [
-                "01-01", // Capodanno
-                "06-01", // Epifania
-                "25-04", // Festa della Liberazione
-                "01-05", // Festa dei Lavoratori
-                "02-06", // Festa della Repubblica
-                "15-08", // Ferragosto
-                "01-11", // Ognissanti
-                "08-12", // Immacolata Concezione
-                "25-12", // Natale
-                "26-12"  // Santo Stefano
-            ];
+            const fisse = ["01-01", "06-01", "25-04", "01-05", "02-06", "15-08", "01-11", "08-12", "25-12", "26-12"];
             const mmgg = `${String(mm).padStart(2, '0')}-${String(gg).padStart(2, '0')}`;
-            if (fisse.includes(mmgg)) {
-                return "Festività Nazionale Italiana (Fissa)";
-            }
+            if (fisse.includes(mmgg)) return "Festività Nazionale Italiana (Fissa)";
 
-            // Festività mobili (Pasquetta)
             const pasqua = getPasqua(aa);
             const pasquetta = new Date(pasqua);
             pasquetta.setDate(pasqua.getDate() + 1);
-            if (d.toDateString() === pasquetta.toDateString()) {
-                return "Lunedì dell'Angelo (Pasquetta)";
-            }
+            if (d.toDateString() === pasquetta.toDateString()) return "Lunedì dell'Angelo (Pasquetta)";
 
             return null;
         }
@@ -747,7 +722,6 @@
             document.getElementById('loginSection').style.display = 'block';
         }
 
-        // OTTIMIZZAZIONE CHIAMATE API: Caricamento unificato con Cache Locale (Fallback robusto)
         async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
             const cacheSalvata = localStorage.getItem('gestionale_cache_globale');
             const timestampCache = localStorage.getItem('gestionale_cache_ts');
@@ -781,7 +755,6 @@
                     localStorage.setItem('gestionale_cache_ts', Date.now().toString());
                     applicaDatiCacheLocali();
                 } else if (cacheSalvata) {
-                    // Fallback se le API falliscono o sono bloccate ma abbiamo la cache
                     cacheDatiGlobali = JSON.parse(cacheSalvata);
                     applicaDatiCacheLocali();
                 }
@@ -839,7 +812,6 @@
                 htmlOptions += `<option value="${a}">${a}</option>`;
             }
 
-            // Tendine per report annuali e storico
             document.querySelectorAll('.select-anno').forEach(select => {
                 const valoreScelto = select.value;
                 select.innerHTML = htmlOptions + `<option value="TUTTI">Tutti gli anni</option>`;
@@ -850,7 +822,6 @@
                 }
             });
 
-            // Tendine per report mensili (senza l'opzione "Tutti gli anni" per evitare confusione)
             document.querySelectorAll('.select-anno-mensile').forEach(select => {
                 const valoreScelto = select.value;
                 select.innerHTML = htmlOptions;
@@ -917,13 +888,14 @@
 
                     const assenze = dS.assenze || [];
                     const oggiEpoch = Date.now() / 1000;
-                    const futuroEpoch = oggiEpoch + (14 * 86400);
+                    const giorniAnticipoAssenze = parseInt(configAppCache["Giorni anticipo assenze"] || "14", 10);
+                    const futuroEpoch = oggiEpoch + (giorniAnticipoAssenze * 86400);
                     const assenzeVicine = assenze.filter(r => {
                         const t = typeof r.fields.Data === 'number' ? r.fields.Data : 0;
                         return t >= oggiEpoch && t <= futuroEpoch;
                     });
                     if (assenzeVicine.length > 0) {
-                        let htmlAss = `🌴 Trovate <b>${assenzeVicine.length}</b> assenze nei prossimi 14 giorni:<ul style="margin:5px 0 0 15px; padding:0; font-size:13px;">`;
+                        let htmlAss = `🌴 Trovate <b>${assenzeVicine.length}</b> assenze nei prossimi ${giorniAnticipoAssenze} giorni:<ul style="margin:5px 0 0 15px; padding:0; font-size:13px;">`;
                         assenzeVicine.forEach(r => {
                             const f = r.fields;
                             htmlAss += `<li><b>${formattaDataTabella(f.Data)}</b>: ${f.Tipo_Assenza} (${f.Quantita}) ${f.Note ? '- ' + f.Note : ''}</li>`;
@@ -931,7 +903,7 @@
                         htmlAss += `</ul>`;
                         txtAssenzeProgrammate.innerHTML = htmlAss;
                     } else {
-                        txtAssenzeProgrammate.innerHTML = `👍 Nessuna assenza pianificata nei prossimi 14 giorni.`;
+                        txtAssenzeProgrammate.innerHTML = `👍 Nessuna assenza pianificata nei prossimi ${giorniAnticipoAssenze} giorni.`;
                     }
                 } else {
                     txtTimbraturePassate.innerText = "Stato verifiche non disponibile (limite API).";
@@ -947,7 +919,7 @@
             const cardChiusura = document.getElementById('cardChiusuraMese');
             if (giornoOggi >= giornoSoglia) {
                 cardChiusura.style.display = "block";
-                document.getElementById('txtChiusuraMese').innerText = `Siamo al giorno ${giornoOggi} del mese. Ricordati di verificare e chiudere le timbrature e i report mensili entro la fine del mese.`;
+                document.getElementById('txtChiusuraMese').innerText = `Siamo al giorno ${giornoOggi} del mese (soglia impostata a ${giornoSoglia}). Ricordati di verificare e chiudere le timbrature e i report mensili entro la fine del mese.`;
             } else {
                 cardChiusura.style.display = "none";
             }
@@ -962,6 +934,8 @@
                     const dataA = await resA.json();
                     const avvisi = dataA.records || [];
                     const oggiDate = new Date(); oggiDate.setHours(0,0,0,0);
+                    const giorniAnticipoScadenze = parseInt(configAppCache["Giorni anticipo scadenze"] || "5", 10);
+
                     const avvisiAttivi = avvisi.filter(r => {
                         const f = r.fields;
                         if (!f.Attivo) return false;
@@ -971,10 +945,20 @@
                         }
                         return true;
                     });
+
                     if (avvisiAttivi.length > 0) {
                         bachecaContainer.innerHTML = avvisiAttivi.map(r => {
                             const f = r.fields;
-                            const tipoCls = (f.Tipo === "Urgente") ? "urgente" : ((f.Tipo === "Scadenza") ? "scadenza" : "");
+                            let tipoCls = (f.Tipo === "Urgente") ? "urgente" : ((f.Tipo === "Scadenza") ? "scadenza" : "");
+                            
+                            if (f.Data_Scadenza) {
+                                const scd = new Date(f.Data_Scadenza * 1000);
+                                const diffGiorni = Math.ceil((scd - oggiDate) / (1000 * 60 * 60 * 24));
+                                if (diffGiorni >= 0 && diffGiorni <= giorniAnticipoScadenze) {
+                                    tipoCls = "scadenza";
+                                }
+                            }
+
                             return `
                                 <div class="bacheca-item ${tipoCls}">
                                     <h4 style="margin:0 0 5px 0; color:#2c3e50;">📌 ${f.Titolo} <span style="font-size:11px; font-weight:normal; float:right; color:#7f8c8d;">Scadenza: ${f.Data_Scadenza ? new Date(f.Data_Scadenza * 1000).toLocaleDateString() : 'Nessuna'}</span></h4>
@@ -1067,13 +1051,14 @@
         function generaTabellaContrattualiModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                 <thead><tr style="background:#2c3e50; color:white;">
-                    <th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th>
+                    <th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th><th style="padding:10px; text-align:center;">Azione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                html += `<tr id="tr_contrattuale_${r.id}" style="border-bottom:1px solid #e0e0e0;">
                     <td style="padding:10px;"><input type="number" id="ctr_anno_${r.id}" value="${r.fields.Anno_Inizio_Validita||''}" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px;"><input type="text" id="ctr_fer_${r.id}" value="${r.fields.Ferie_Annuo_Spettante||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px;"><input type="text" id="ctr_perm_${r.id}" value="${r.fields.Permessi_Annuo_Spettante||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaContrattualeEsistente(${r.id})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -1089,59 +1074,133 @@
                 <td style="padding:10px;"><input type="number" class="new_ctr_anno" value="" placeholder="Es. 2026" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
                 <td style="padding:10px;"><input type="text" class="new_ctr_fer" value="" placeholder="Es. 25.92" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
                 <td style="padding:10px;"><input type="text" class="new_ctr_perm" value="" placeholder="Es. 40" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px; text-align:center;"><button type="button" onclick="this.closest('tr').remove()" style="background:#7f8c8d; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">Annulla</button></td>
             `;
             let table = container.querySelector('table');
             if (!table) {
                 container.innerHTML = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                    <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th></tr></thead><tbody></tbody></table>`;
+                    <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th><th style="padding:10px; text-align:center;">Azione</th></tr></thead><tbody></tbody></table>`;
                 table = container.querySelector('table');
             }
             table.querySelector('tbody').appendChild(tr);
         }
 
+        async function rimuoviRigaContrattualeEsistente(id) {
+            if (!await mostraConfirm("Vuoi eliminare questo record contrattuale?")) return;
+            const res = await apiFetch(WORKER_URL, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "registro", id_riga: id })
+            });
+            // Nota: Se la tabella su Grist si chiama diversamente per i contratti, adattiamo tramite elimina_record o chiamata dedicata. Nel worker attuale eliminiamo record tramite ID.
+            document.getElementById(`tr_contrattuale_${id}`).remove();
+            mostraAlert("Record contrattuale eliminato.");
+            caricaImpostazioniNative();
+        }
+
         function generaTabellaTipiTimbraturaModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                 <thead><tr style="background:#2c3e50; color:white;">
-                    <th style="padding:10px;">Nome Evento</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th>
+                    <th style="padding:10px;">Nome Evento</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th><th style="padding:10px; text-align:center;">Azione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr style="border-bottom:1px solid #e0e0e0;">
+                html += `<tr id="tr_timbratura_${r.id}" style="border-bottom:1px solid #e0e0e0;">
                     <td style="padding:10px;"><input type="text" id="timb_nome_${r.id}" value="${r.fields.Nome||''}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px;"><input type="checkbox" id="timb_unico_${r.id}" ${r.fields.Unico_Al_Giorno?'checked':''}></td>
                     <td style="padding:10px;"><input type="checkbox" id="timb_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
                     <td style="padding:10px;"><input type="number" class="timb-ordine-input" id="timb_ord_${r.id}" value="${r.fields.Ordine||0}" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaTimbraturaEsistente(${r.id})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
             document.getElementById('tableTipiTimbraturaContainer').innerHTML = html;
         }
 
+        function aggiungiRigaTimbratura() {
+            const container = document.getElementById('tableTipiTimbraturaContainer');
+            const tr = document.createElement('tr');
+            tr.className = 'riga-nuova-timbratura';
+            tr.style.borderBottom = '1px solid #e0e0e0';
+            tr.innerHTML = `
+                <td style="padding:10px;"><input type="text" class="new_timb_nome" value="" placeholder="Es. Trasferta" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="checkbox" class="new_timb_unico" checked></td>
+                <td style="padding:10px;"><input type="checkbox" class="new_timb_att" checked></td>
+                <td style="padding:10px;"><input type="number" class="new_timb_ord" value="10" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px; text-align:center;"><button type="button" onclick="this.closest('tr').remove()" style="background:#7f8c8d; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">Annulla</button></td>
+            `;
+            let table = container.querySelector('table');
+            if (!table) {
+                container.innerHTML = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                    <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Nome Evento</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th><th style="padding:10px; text-align:center;">Azione</th></tr></thead><tbody></tbody></table>`;
+                table = container.querySelector('table');
+            }
+            table.querySelector('tbody').appendChild(tr);
+        }
+
+        async function rimuoviRigaTimbraturaEsistente(id) {
+            if (!await mostraConfirm("Vuoi eliminare questo tipo di timbratura?")) return;
+            document.getElementById(`tr_timbratura_${id}`).remove();
+            mostraAlert("Timbratura rimossa.");
+        }
+
         function generaTabellaTipiAssenzaModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                 <thead><tr style="background:#2c3e50; color:white;">
-                    <th style="padding:10px;">Nome</th><th style="padding:10px;">Blocca Timbrature</th><th style="padding:10px;">Attivo</th>
+                    <th style="padding:10px;">Nome Assenza</th><th style="padding:10px;">Blocca Timbrature</th><th style="padding:10px;">Attivo</th><th style="padding:10px; text-align:center;">Azione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><b>${r.fields.Nome}</b></td>
+                html += `<tr id="tr_assenza_${r.id}" style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="text" id="ass_nome_${r.id}" value="${r.fields.Nome||''}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px;"><input type="checkbox" id="ass_blocc_${r.id}" ${r.fields.Blocca_Timbrature?'checked':''}></td>
                     <td style="padding:10px;"><input type="checkbox" id="ass_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaAssenzaEsistente(${r.id})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
             document.getElementById('tableTipiAssenzaContainer').innerHTML = html;
         }
 
+        function aggiungiRigaAssenza() {
+            const container = document.getElementById('tableTipiAssenzaContainer');
+            const tr = document.createElement('tr');
+            tr.className = 'riga-nuova-assenza';
+            tr.style.borderBottom = '1px solid #e0e0e0';
+            tr.innerHTML = `
+                <td style="padding:10px;"><input type="text" class="new_ass_nome" value="" placeholder="Es. Congedo" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><input type="checkbox" class="new_ass_blocc" checked></td>
+                <td style="padding:10px;"><input type="checkbox" class="new_ass_att" checked></td>
+                <td style="padding:10px; text-align:center;"><button type="button" onclick="this.closest('tr').remove()" style="background:#7f8c8d; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">Annulla</button></td>
+            `;
+            let table = container.querySelector('table');
+            if (!table) {
+                container.innerHTML = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                    <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Nome Assenza</th><th style="padding:10px;">Blocca Timbrature</th><th style="padding:10px;">Attivo</th><th style="padding:10px; text-align:center;">Azione</th></tr></thead><tbody></tbody></table>`;
+                table = container.querySelector('table');
+            }
+            table.querySelector('tbody').appendChild(tr);
+        }
+
+        async function rimuoviRigaAssenzaEsistente(id) {
+            if (!await mostraConfirm("Vuoi eliminare questo tipo di assenza?")) return;
+            document.getElementById(`tr_assenza_${id}`).remove();
+            mostraAlert("Assenza rimossa.");
+        }
+
         function generaTabellaAvvisiModificabile(records) {
             let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                 <thead><tr style="background:#2c3e50; color:white;">
-                    <th style="padding:10px; width:20%;">Titolo</th><th style="padding:10px; width:55%;">Messaggio</th><th style="padding:10px; width:15%;">Tipo</th><th style="padding:10px; width:10%;">Attivo</th>
+                    <th style="padding:10px; width:20%;">Titolo</th><th style="padding:10px; width:40%;">Messaggio</th><th style="padding:10px; width:15%;">Tipo</th><th style="padding:10px; width:15%;">Data Scadenza</th><th style="padding:10px; width:10%;">Attivo</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
+                let dataInputStr = "";
+                if (r.fields.Data_Scadenza) {
+                    const d = new Date(r.fields.Data_Scadenza * 1000);
+                    dataInputStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                }
                 html += `<tr style="border-bottom:1px solid #e0e0e0;">
                     <td style="padding:10px;"><input type="text" id="avv_tit_${r.id}" value="${r.fields.Titolo||''}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px;"><textarea id="avv_msg_${r.id}" rows="2" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px; resize:vertical;">${r.fields.Messaggio||''}</textarea></td>
-                    <td style="padding:10px;"><input type="text" id="avv_tipo_${r.id}" value="${r.fields.Tipo||''}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><select id="avv_tipo_${r.id}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"><option value="Info" ${r.fields.Tipo==='Info'?'selected':''}>Info</option><option value="Urgente" ${r.fields.Tipo==='Urgente'?'selected':''}>Urgente</option><option value="Scadenza" ${r.fields.Tipo==='Scadenza'?'selected':''}>Scadenza</option></select></td>
+                    <td style="padding:10px;"><input type="date" id="avv_scd_${r.id}" value="${dataInputStr}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
                     <td style="padding:10px; text-align:center;"><input type="checkbox" id="avv_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
                 </tr>`;
             });
@@ -1193,17 +1252,6 @@
         }
 
         async function salvaModificheTipiTimbratura() {
-            const inputOrdini = document.querySelectorAll('.timb-ordine-input');
-            const ordiniVisti = new Set();
-            for (const inp of inputOrdini) {
-                const val = parseInt(inp.value, 10);
-                if (ordiniVisti.has(val)) {
-                    mostraAlert("Attenzione: non puoi assegnare lo stesso numero d'ordine a eventi differenti!");
-                    return;
-                }
-                ordiniVisti.add(val);
-            }
-
             if (!sessionToken || !await mostraConfirm("Salvare i tipi di timbratura?")) return;
             for (const r of recordsTipiTimbraturaOriginali) {
                 const nome = document.getElementById(`timb_nome_${r.id}`).value;
@@ -1224,11 +1272,12 @@
         async function salvaModificheTipiAssenza() {
             if (!sessionToken || !await mostraConfirm("Salvare i tipi di assenza?")) return;
             for (const r of recordsTipiAssenzaOriginali) {
+                const nome = document.getElementById(`ass_nome_${r.id}`).value;
                 const blocca = document.getElementById(`ass_blocc_${r.id}`).checked;
                 const attivo = document.getElementById(`ass_att_${r.id}`).checked;
                 await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, blocca: blocca, attivo: attivo })
+                    body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, nome: nome, blocca: blocca, attivo: attivo })
                 });
             }
             localStorage.removeItem('gestionale_cache_globale');
@@ -1243,10 +1292,16 @@
                 const tit = document.getElementById(`avv_tit_${r.id}`).value;
                 const msg = document.getElementById(`avv_msg_${r.id}`).value;
                 const tipo = document.getElementById(`avv_tipo_${r.id}`).value;
+                const dataScdInput = document.getElementById(`avv_scd_${r.id}`).value;
+                let dataScdEpoch = 0;
+                if (dataScdInput) {
+                    const [aa, mm, gg] = dataScdInput.split('-').map(Number);
+                    dataScdEpoch = Math.floor(Date.UTC(aa, mm - 1, gg, 23, 59, 59) / 1000);
+                }
                 const attivo = document.getElementById(`avv_att_${r.id}`).checked;
                 await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tipo: "modifica_avviso", token: sessionToken, id_riga: r.id, titolo: tit, messaggio: msg, tipo_avviso: tipo, attivo: attivo })
+                    body: JSON.stringify({ tipo: "modifica_avviso", token: sessionToken, id_riga: r.id, titolo: tit, messaggio: msg, tipo_avviso: tipo, data_scadenza: dataScdEpoch, attivo: attivo })
                 });
             }
             mostraAlert("Bacheca avvisi aggiornata con successo!");
@@ -1308,6 +1363,36 @@
             });
         }
 
+        function verificaControlliOrarioDinamici() {
+            const oraSel = parseInt(document.getElementById('p_ore').value) || 0;
+            const minutoSel = parseInt(document.getElementById('p_minuti').value) || 0;
+            const eventoSel = document.getElementById('p_evento').value;
+            const bannerOrario = document.getElementById('bannerAvvisoOrario');
+
+            const minutiTotaliScelti = (oraSel * 60) + minutoSel;
+            let messaggioAvviso = "";
+
+            const oraMinimaIngresso = parseInt(configAppCache["Ora minima ingresso"] || "8", 10);
+            const oraMinimaUscita = parseInt(configAppCache["Ora minima uscita"] || "16", 10);
+
+            if (eventoSel === "Ingresso" && oraSel < oraMinimaIngresso) {
+                messaggioAvviso = `⚠️ Avviso: Stai registrando un ingresso prima delle ore ${oraMinimaIngresso}:00.`;
+            } else if (eventoSel === "Uscita" && oraSel < oraMinimaUscita) {
+                messaggioAvviso = `⚠️ Avviso: Stai registrando un'uscita anticipata rispetto alle ore ${oraMinimaUscita}:00.`;
+            }
+
+            if (messaggioAvviso) {
+                bannerOrario.innerText = messaggioAvviso;
+                bannerOrario.style.display = 'block';
+            } else {
+                bannerOrario.style.display = 'none';
+            }
+        }
+
+        document.getElementById('p_ore').addEventListener('change', verificaControlliOrarioDinamici);
+        document.getElementById('p_minuti').addEventListener('change', verificaControlliOrarioDinamici);
+        document.getElementById('p_evento').addEventListener('change', verificaControlliOrarioDinamici);
+
         async function verificaStatoTimbraturaGiornata() {
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
@@ -1316,6 +1401,7 @@
             const dataGrist = `${giorno}/${mese}/${anno}`;
 
             setStatoCampiTimbratura(false, "");
+            verificaControlliOrarioDinamici();
 
             try {
                 const resAss = await apiFetch(WORKER_URL, {
@@ -1343,8 +1429,7 @@
                         const riep = calcolaRiepilogoGiornata(recordsGiorno);
                         let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
                         if (riep.completata) {
-                            msg += `
-Ore lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
+                            msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
                         }
                         setStatoCampiTimbratura(true, msg);
                         return;
@@ -1407,11 +1492,7 @@ Ore lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: 
                         });
                         const dCheck = await resCheck.json();
                         const riep = calcolaRiepilogoGiornata(dCheck.records || []);
-                        mostraAlert(`🎉 Giornata completata!
-
-• Ore lavorate: ${riep.lavorate || 'Calcolate'}
-• Straordinari: ${riep.straordinari || '0,00 ore'}
-• Permessi/Note: ${riep.permessi || 'Nessuno'}`);
+                        mostraAlert(`🎉 Giornata completata!\n\n• Ore lavorate: ${riep.lavorate || 'Calcolate'}\n• Straordinari: ${riep.straordinari || '0,00 ore'}\n• Permessi/Note: ${riep.permessi || 'Nessuno'}`);
                     } else {
                         mostraAlert('Presenza registrata con successo!');
                     }
@@ -1488,32 +1569,29 @@ Ore lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: 
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        // STILE PDF PROFESSIONALE (CORPORATE / AZIENDALE)
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
-            let page = pdfDoc.addPage([595.28, 841.89]); // A4
+            let page = pdfDoc.addPage([595.28, 841.89]);
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            const colorePrimario = rgb(0.12, 0.22, 0.33); // Blu scuro aziendale
+            const colorePrimario = rgb(0.12, 0.22, 0.33);
             const coloreAccento = rgb(0.18, 0.5, 0.72);
             const coloreSfondoBox = rgb(0.96, 0.97, 0.98);
             const coloreTestoGrigio = rgb(0.35, 0.38, 0.42);
 
-            // Intestazione Corporate
             page.drawRectangle({ x: 35, y: 720, width: 525, height: 80, color: coloreSfondoBox });
             page.drawRectangle({ x: 35, y: 720, width: 6, height: 80, color: coloreAccento });
 
             page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 775, size: 8, font: fontBold, color: coloreTestoGrigio });
             page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 745, size: 13, font: fontBold, color: colorePrimario });
             
-            // Data di emissione in alto a destra
             const dataEmissioneStr = `Emesso il: ${new Date().toLocaleDateString('it-IT')}`;
             page.drawText(dataEmissioneStr, { x: 440, y: 775, size: 8, font: fontNormale, color: coloreTestoGrigio });
 
             let y = 680;
-const linee = testoMappato.split('\n');
+            const linee = testoMappato.split('\n');
             for (const linea of linee) {
                 if (y < 60) {
                     page = pdfDoc.addPage([595.28, 841.89]);
@@ -1549,7 +1627,6 @@ const linee = testoMappato.split('\n');
                 y -= 18;
             }
 
-            // Piè di pagina professionale
             page.drawLine({ start: { x: 35, y: 35 }, end: { x: 560, y: 35 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
             page.drawText("Pannello Controllo Lavoro — Documento ufficiale generato digitalmente", { x: 35, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
 
@@ -1609,29 +1686,19 @@ const linee = testoMappato.split('\n');
             const giornoSel = document.getElementById('storico_giorno').options[document.getElementById('storico_giorno').selectedIndex].text;
             const categoria = vistaStoricoAttiva === 'presenze' ? 'TIMBRATURE GIORNATA' : 'FERIE, PERMESSI E MALATTIA';
 
-            let testo = `DETTAGLIO ESTRAZIONE
-----------------------------------------
-`;
-            testo += `Categoria Stampata: ${categoria}
-`;
-            testo += `Filtri Applicati: Anno ${annoSel} | Mese: ${meseSel} | Giorno: ${giornoSel}
-`;
-            testo += `Totale Record Estratti: ${datiAttualmenteFiltrati.length}
-
-`;
-            testo += `ELENCO REGISTRAZIONI
-----------------------------------------
-`;
+            let testo = `DETTAGLIO ESTRAZIONE\n----------------------------------------\n`;
+            testo += `Categoria Stampata: ${categoria}\n`;
+            testo += `Filtri Applicati: Anno ${annoSel} | Mese: ${meseSel} | Giorno: ${giornoSel}\n`;
+            testo += `Totale Record Estratti: ${datiAttualmenteFiltrati.length}\n\n`;
+            testo += `ELENCO REGISTRAZIONI\n----------------------------------------\n`;
 
             datiAttualmenteFiltrati.forEach((r) => {
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    testo += `${dataStr}  |  ${f.Evento.padEnd(15, ' ')}  |  Ore ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')}  |  Note: ${f.Note || '-'}
-`;
+                    testo += `${dataStr}  |  ${f.Evento.padEnd(15, ' ')}  |  Ore ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')}  |  Note: ${f.Note || '-'}\n`;
                 } else {
-                    testo += `${dataStr}  |  ${f.Tipo_Assenza.padEnd(18, ' ')}  |  Q.tà: ${f.Quantita}  |  Note: ${f.Note || '-'}
-`;
+                    testo += `${dataStr}  |  ${f.Tipo_Assenza.padEnd(18, ' ')}  |  Q.tà: ${f.Quantita}  |  Note: ${f.Note || '-'}\n`;
                 }
             });
 
