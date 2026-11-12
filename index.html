@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pannello controllo lavoro</title>
     <link rel="manifest" href="manifest.json">
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
@@ -93,6 +93,11 @@
     </style>
 </head>
 <body>
+    <!-- GLOBAL API OFFLINE / LIMIT BANNER -->
+    <div id="globalApiBanner" style="display:none; background:#e74c3c; color:white; padding:10px 20px; text-align:center; font-weight:bold; font-size:14px; position:fixed; top:0; left:0; width:100%; z-index:99999;">
+        ⚠️ Limite API Grist raggiunto o connessione assente. Alcune funzioni operano in modalità offline (cache locale).
+    </div>
+
     <!-- ALERT MODAL -->
     <div id="customAlert" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:9999; align-items:center; justify-content:center;">
         <div style="background:white; padding:25px; border-radius:8px; max-width:400px; width:90%; box-shadow:0 4px 15px rgba(0,0,0,0.2); text-align:center;">
@@ -221,6 +226,7 @@
             <div id="timbratura" class="section">
                 <h2>Timbratura giornata</h2>
                 <p>Inserisci i dati relativi alla timbratura giornaliera.</p>
+                <div id="bannerFestivoPresenza" style="display:none; background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
                 <div id="bannerBloccoTimbratura" style="display:none; background:#fdecea; border:1px solid #f5c6cb; color:#721c24; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
                 <form id="formPresenze">
                     <div class="form-group">
@@ -256,6 +262,7 @@
             <div id="ferie" class="section">
                 <h2>Ferie, permessi e malattia</h2>
                 <p>Compila questo modulo per inserire una richiesta o registrazione di assenza.</p>
+                <div id="bannerFestivoAssenza" style="display:none; background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;"></div>
                 <form id="formRegistro">
                     <div class="form-group">
                         <label for="r_data">Data:</label>
@@ -296,7 +303,7 @@
                 <form id="formReport" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
                     <div class="form-group">
                         <label for="rep_anno">Anno:</label>
-                        <select id="rep_anno" class="select-anno" required></select>
+                        <select id="rep_anno" class="select-anno-mensile" required></select>
                     </div>
                     <div class="form-group">
                         <label for="rep_mese">Mese:</label>
@@ -322,7 +329,7 @@
                 <form id="formReportTimbratureMensile" onsubmit="event.preventDefault(); generaPDFTimbratureMensile();">
                     <div class="form-group">
                         <label for="rep_timb_anno">Anno:</label>
-                        <select id="rep_timb_anno" class="select-anno" required></select>
+                        <select id="rep_timb_anno" class="select-anno-mensile" required></select>
                     </div>
                     <div class="form-group">
                         <label for="rep_timb_mese">Mese:</label>
@@ -471,6 +478,7 @@
     <script>
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
         let sessionToken = "";
+        let cacheDatiGlobali = null;
         let eventiGiornoCorrente = [];
         let configAppCache = {};
         let recordsConfigAppOriginali = [];
@@ -482,6 +490,23 @@
         let listaTipiTimbraturaGrist = [];
         let listaTipiAssenzaGrist = [];
         let modalitaInserimentoPassato = false;
+
+        // Gestione centrale delle risposte API ed errori (es. limite 429, errore 500 o offline)
+        async function apiFetch(url, options) {
+            const banner = document.getElementById('globalApiBanner');
+            try {
+                const response = await fetch(url, options);
+                if (response.status === 429 || response.status >= 500) {
+                    if (banner) banner.style.display = 'block';
+                } else {
+                    if (banner) banner.style.display = 'none';
+                }
+                return response;
+            } catch (error) {
+                if (banner) banner.style.display = 'block';
+                throw error;
+            }
+        }
 
         function getIeriInLocale() {
             const d = new Date();
@@ -496,28 +521,53 @@
             return testo.charAt(0).toUpperCase() + testo.slice(1);
         }
 
-        async function caricaTipiTimbraturaDynamic() {
-            try {
-                const res = await fetch(WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_tipi_timbratura", token: sessionToken })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    listaTipiTimbraturaGrist = (data.records || [])
-                        .filter(r => r.fields.Attivo === true)
-                        .sort((a, b) => (a.fields.Ordine || 0) - (b.fields.Ordine || 0));
-                    
-                    const sel = document.getElementById('p_evento');
-                    sel.innerHTML = '';
-                    listaTipiTimbraturaGrist.forEach(r => {
-                        const opt = document.createElement('option');
-                        opt.value = r.fields.Nome;
-                        opt.innerText = r.fields.Nome;
-                        sel.appendChild(opt);
-                    });
-                }
-            } catch (e) { console.error("Errore Tipi Timbratura:", e); }
+        // Calcolo festività nazionali fisse e mobili (Pasqua/Lunedì dell'Angelo) in Italia
+        function getPasqua(anno) {
+            const a = anno % 19, b = Math.floor(anno / 100), c = anno % 100;
+            const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+            const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+            const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+            const m = Math.floor((a + 11 * h + 22 * l) / 451);
+            const mese = Math.floor((h + l - 7 * m + 114) / 31);
+            const giorno = ((h + l - 7 * m + 114) % 31) + 1;
+            return new Date(anno, mese - 1, giorno);
+        }
+
+        function verificaGiornoFestivo(dataISO) {
+            const [aa, mm, gg] = dataISO.split('-').map(Number);
+            const d = new Date(aa, mm - 1, gg);
+            const giornoSettimana = d.getDay(); // 0 = Domenica, 6 = Sabato
+
+            if (giornoSettimana === 0) return "Domenica (Giornata festiva)";
+            if (giornoSettimana === 6) return "Sabato (Giornata festiva / non lavorativa)";
+
+            // Festività fisse italiane
+            const fisse = [
+                "01-01", // Capodanno
+                "06-01", // Epifania
+                "25-04", // Festa della Liberazione
+                "01-05", // Festa dei Lavoratori
+                "02-06", // Festa della Repubblica
+                "15-08", // Ferragosto
+                "01-11", // Ognissanti
+                "08-12", // Immacolata Concezione
+                "25-12", // Natale
+                "26-12"  // Santo Stefano
+            ];
+            const mmgg = `${String(mm).padStart(2, '0')}-${String(gg).padStart(2, '0')}`;
+            if (fisse.includes(mmgg)) {
+                return "Festività Nazionale Italiana (Fissa)";
+            }
+
+            // Festività mobili (Pasquetta)
+            const pasqua = getPasqua(aa);
+            const pasquetta = new Date(pasqua);
+            pasquetta.setDate(pasqua.getDate() + 1);
+            if (d.toDateString() === pasquetta.toDateString()) {
+                return "Lunedì dell'Angelo (Pasquetta)";
+            }
+
+            return null;
         }
 
         const selectOre = document.getElementById('p_ore');
@@ -586,6 +636,7 @@
                     document.getElementById('p_note').value = "";
                 }
                 verificaStatoTimbraturaGiornata();
+                gestisciBannerFestivoPresenze();
             } else if (sectionId === 'ferie') {
                 const rDataInput = document.getElementById('r_data');
                 if (!idRigaInModificaAssenze && !modalitaInserimentoPassato) {
@@ -596,8 +647,39 @@
                     document.getElementById('r_quantita').value = "8";
                     document.getElementById('r_note').value = "";
                 }
+                gestisciBannerFestivoAssenze();
             }
         }
+
+        function gestisciBannerFestivoPresenze() {
+            const dataVal = document.getElementById('p_data').value;
+            const banner = document.getElementById('bannerFestivoPresenza');
+            const festivoMotivo = verificaGiornoFestivo(dataVal);
+            if (festivoMotivo) {
+                banner.innerText = `⚠️ Attenzione: La data selezionata (${formattaDataEstesaItaliana(dataVal)}) corrisponde a: ${festivoMotivo}.`;
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
+        function gestisciBannerFestivoAssenze() {
+            const dataVal = document.getElementById('r_data').value;
+            const banner = document.getElementById('bannerFestivoAssenza');
+            const festivoMotivo = verificaGiornoFestivo(dataVal);
+            if (festivoMotivo) {
+                banner.innerText = `⚠️ Attenzione: La data inserita (${formattaDataEstesaItaliana(dataVal)}) corrisponde a: ${festivoMotivo}.`;
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
+        document.getElementById('p_data').addEventListener('change', () => {
+            verificaStatoTimbraturaGiornata();
+            gestisciBannerFestivoPresenze();
+        });
+        document.getElementById('r_data').addEventListener('change', gestisciBannerFestivoAssenze);
 
         function apriInserimentoPassato(tipo) {
             modalitaInserimentoPassato = true;
@@ -629,7 +711,7 @@
             const codeInput = document.getElementById('companyCode').value;
             const errorMessage = document.getElementById('errorMessage');
             try {
-                const response = await fetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "auth", code: codeInput })
@@ -644,73 +726,108 @@
                     document.getElementById('r_data').value = getOggiInLocale();
 
                     setOrarioAttuale();
-                    await caricaConfigurazioneApp();
-                    await caricaTipiAssenzaCache();
-                    await caricaTipiTimbraturaDynamic();
+                    await inizializzaDatiGlobaliCache();
                     await caricaDatiHome();
-                    caricaImpostazioniNative();
                     navigaASezione('home');
                 } else {
                     errorMessage.style.display = 'block';
                 }
             } catch (error) {
                 console.error('Errore Auth:', error);
-                mostraAlert('Impossibile connettersi al servizio di autenticazione.');
+                mostraAlert('Impossibile connettersi al servizio di autenticazione o limite Grist raggiunto.');
             }
         }
 
         function logout() {
             sessionToken = "";
+            cacheDatiGlobali = null;
             eventiGiornoCorrente = [];
             document.getElementById('companyCode').value = "";
             document.getElementById('mainPanel').style.display = 'none';
             document.getElementById('loginSection').style.display = 'block';
         }
 
-        async function caricaConfigurazioneApp() {
+        // OTTIMIZZAZIONE CHIAMATE API: Caricamento unificato con Cache Locale (Fallback robusto)
+        async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
+            const cacheSalvata = localStorage.getItem('gestionale_cache_globale');
+            const timestampCache = localStorage.getItem('gestionale_cache_ts');
+            const unGiorno = 24 * 60 * 60 * 1000;
+
+            if (!forzaAggiornamento && cacheSalvata && timestampCache && (Date.now() - parseInt(timestampCache) < unGiorno)) {
+                cacheDatiGlobali = JSON.parse(cacheSalvata);
+                applicaDatiCacheLocali();
+                return;
+            }
+
             try {
-                const res = await fetch(WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_config_app", token: sessionToken })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    recordsConfigAppOriginali = data.records || [];
-                    configAppCache = {};
-                    recordsConfigAppOriginali.forEach(r => {
-                        configAppCache[r.fields.Parametro] = r.fields.Valore;
-                    });
-                    popolaTendineAnniDinamiche();
+                const [resConf, resTimbl, resAss] = await Promise.all([
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) })
+                ]);
+
+                if (resConf.ok && resTimbl.ok && resAss.ok) {
+                    const dConf = await resConf.json();
+                    const dTimbl = await resTimbl.json();
+                    const dAss = await resAss.json();
+
+                    cacheDatiGlobali = {
+                        configApp: dConf.records || [],
+                        tipiTimbratura: dTimbl.records || [],
+                        tipiAssenza: dAss.records || []
+                    };
+
+                    localStorage.setItem('gestionale_cache_globale', JSON.stringify(cacheDatiGlobali));
+                    localStorage.setItem('gestionale_cache_ts', Date.now().toString());
+                    applicaDatiCacheLocali();
+                } else if (cacheSalvata) {
+                    // Fallback se le API falliscono o sono bloccate ma abbiamo la cache
+                    cacheDatiGlobali = JSON.parse(cacheSalvata);
+                    applicaDatiCacheLocali();
                 }
             } catch (e) {
-                console.error("Errore caricamento Config_App", e);
+                console.error("Errore inizializzazione cache globale, utilizzo dati locali offline", e);
+                if (cacheSalvata) {
+                    cacheDatiGlobali = JSON.parse(cacheSalvata);
+                    applicaDatiCacheLocali();
+                }
             }
         }
 
-        async function caricaTipiAssenzaCache() {
-            try {
-                const res = await fetch(WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_tipi_assenza", token: sessionToken })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    tipiAssenzaBloccantiCache.clear();
-                    listaTipiAssenzaGrist = (data.records || []).filter(r => r.fields.Attivo === true);
-                    
-                    const selAssenza = document.getElementById('r_tipo');
-                    selAssenza.innerHTML = '';
-                    listaTipiAssenzaGrist.forEach(r => {
-                        const opt = document.createElement('option');
-                        opt.value = r.fields.Nome;
-                        opt.innerText = r.fields.Nome;
-                        selAssenza.appendChild(opt);
-                        if (r.fields.Blocca_Timbrature) {
-                            tipiAssenzaBloccantiCache.add(String(r.fields.Nome || "").trim().toLowerCase());
-                        }
-                    });
+        function applicaDatiCacheLocali() {
+            if (!cacheDatiGlobali) return;
+
+            recordsConfigAppOriginali = cacheDatiGlobali.configApp;
+            configAppCache = {};
+            recordsConfigAppOriginali.forEach(r => { configAppCache[r.fields.Parametro] = r.fields.Valore; });
+            popolaTendineAnniDinamiche();
+
+            listaTipiTimbraturaGrist = cacheDatiGlobali.tipiTimbratura
+                .filter(r => r.fields.Attivo === true)
+                .sort((a, b) => (a.fields.Ordine || 0) - (b.fields.Ordine || 0));
+            
+            const sel = document.getElementById('p_evento');
+            sel.innerHTML = '';
+            listaTipiTimbraturaGrist.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.fields.Nome;
+                opt.innerText = r.fields.Nome;
+                sel.appendChild(opt);
+            });
+
+            tipiAssenzaBloccantiCache.clear();
+            listaTipiAssenzaGrist = cacheDatiGlobali.tipiAssenza.filter(r => r.fields.Attivo === true);
+            const selAssenza = document.getElementById('r_tipo');
+            selAssenza.innerHTML = '';
+            listaTipiAssenzaGrist.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.fields.Nome;
+                opt.innerText = r.fields.Nome;
+                selAssenza.appendChild(opt);
+                if (r.fields.Blocca_Timbrature) {
+                    tipiAssenzaBloccantiCache.add(String(r.fields.Nome || "").trim().toLowerCase());
                 }
-            } catch (e) { console.error("Errore caricamento Tipi Assenza", e); }
+            });
         }
 
         function popolaTendineAnniDinamiche() {
@@ -721,9 +838,20 @@
             for (let a = annoCorrente; a >= annoInizio; a--) {
                 htmlOptions += `<option value="${a}">${a}</option>`;
             }
-            htmlOptions += `<option value="TUTTI">Tutti gli anni</option>`;
 
+            // Tendine per report annuali e storico
             document.querySelectorAll('.select-anno').forEach(select => {
+                const valoreScelto = select.value;
+                select.innerHTML = htmlOptions + `<option value="TUTTI">Tutti gli anni</option>`;
+                if (valoreScelto && select.querySelector(`option[value="${valoreScelto}"]`)) {
+                    select.value = valoreScelto;
+                } else {
+                    select.value = annoCorrente;
+                }
+            });
+
+            // Tendine per report mensili (senza l'opzione "Tutti gli anni" per evitare confusione)
+            document.querySelectorAll('.select-anno-mensile').forEach(select => {
                 const valoreScelto = select.value;
                 select.innerHTML = htmlOptions;
                 if (valoreScelto && select.querySelector(`option[value="${valoreScelto}"]`)) {
@@ -735,11 +863,7 @@
 
             const selectStoricoAnno = document.getElementById('storico_anno');
             if(selectStoricoAnno) {
-                let htmlStorico = '';
-                for (let a = annoCorrente; a >= annoInizio; a--) {
-                    htmlStorico += `<option value="${a}">${a}</option>`;
-                }
-                selectStoricoAnno.innerHTML = htmlStorico;
+                selectStoricoAnno.innerHTML = htmlOptions;
                 selectStoricoAnno.value = annoCorrente;
             }
         }
@@ -753,7 +877,7 @@
             const [aa, mm, gg] = oggiStr.split('-');
             
             try {
-                const resP = await fetch(WORKER_URL, {
+                const resP = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: `${gg}/${mm}/${aa}` })
                 });
@@ -771,15 +895,18 @@
                         cardGiornata.className = "home-card";
                         txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
                     }
+                } else {
+                    txtGiornata.innerHTML = `⚠️ Impossibile caricare presenze (limite API o server occupato).`;
                 }
             } catch (e) {
-                txtGiornata.innerText = "Errore nel recupero presenze odierne.";
+                txtGiornata.innerText = "Errore di connessione nel recupero presenze odierne.";
             }
 
             const txtTimbraturePassate = document.getElementById('txtTimbraturePassate');
+            const txtAssenzeProgrammate = document.getElementById('txtAssenzeProgrammate');
             try {
                 const annoCorr = new Date().getFullYear();
-                const resStorico = await fetch(WORKER_URL, {
+                const resStorico = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: String(annoCorr) })
                 });
@@ -787,20 +914,8 @@
                     const dS = await resStorico.json();
                     const presenze = dS.presenze || [];
                     txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia nei registri passati (${presenze.length} eventi quest'anno).`;
-                }
-            } catch (err) {
-                txtTimbraturePassate.innerText = "Verifica completata.";
-            }
 
-            const txtAssenzeProgrammate = document.getElementById('txtAssenzeProgrammate');
-            try {
-                const resAss = await fetch(WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: String(new Date().getFullYear()) })
-                });
-                if (resAss.ok) {
-                    const dA = await resAss.json();
-                    const assenze = dA.assenze || [];
+                    const assenze = dS.assenze || [];
                     const oggiEpoch = Date.now() / 1000;
                     const futuroEpoch = oggiEpoch + (14 * 86400);
                     const assenzeVicine = assenze.filter(r => {
@@ -818,9 +933,13 @@
                     } else {
                         txtAssenzeProgrammate.innerHTML = `👍 Nessuna assenza pianificata nei prossimi 14 giorni.`;
                     }
+                } else {
+                    txtTimbraturePassate.innerText = "Stato verifiche non disponibile (limite API).";
+                    txtAssenzeProgrammate.innerText = "Pianificazione non disponibile.";
                 }
-            } catch (e) {
-                txtAssenzeProgrammate.innerText = "Controllo pianificazione completato.";
+            } catch (err) {
+                txtTimbraturePassate.innerText = "Verifica non disponibile offline.";
+                txtAssenzeProgrammate.innerText = "Controllo pianificazione non disponibile.";
             }
 
             const giornoSoglia = parseInt(configAppCache["Giorno avviso fine mese"] || "25", 10);
@@ -835,7 +954,7 @@
 
             const bachecaContainer = document.getElementById('bachecaContainer');
             try {
-                const resA = await fetch(WORKER_URL, {
+                const resA = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_avvisi", token: sessionToken })
                 });
@@ -866,6 +985,8 @@
                     } else {
                         bachecaContainer.innerHTML = `<p style="color: #7f8c8d;">Nessuna comunicazione attiva in bacheca.</p>`;
                     }
+                } else {
+                    bachecaContainer.innerHTML = `<p style="color: #e74c3c;">Impossibile aggiornare la bacheca (limite API).</p>`;
                 }
             } catch (e) {
                 bachecaContainer.innerHTML = `<p style="color: #e74c3c;">Impossibile caricare la bacheca avvisi.</p>`;
@@ -877,17 +998,18 @@
             document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
+            if(paneId) caricaImpostazioniNative();
         }
 
         async function caricaImpostazioniNative() {
             if (!sessionToken) return;
             try {
                 const [resConf, resContr, resTimbl, resAss, resAvv] = await Promise.all([
-                    fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
-                    fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_parametri_contrattuali", token: sessionToken}) }).catch(() => ({ok: false})),
-                    fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
-                    fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) }),
-                    fetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_avvisi", token: sessionToken}) })
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_parametri_contrattuali", token: sessionToken}) }).catch(() => ({ok: false})),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) }),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_avvisi", token: sessionToken}) })
                 ]);
 
                 if (resConf.ok) {
@@ -900,7 +1022,7 @@
                     recordsContrattualiOriginali = d.records || [];
                     generaTabellaContrattualiModificabile(recordsContrattualiOriginali);
                 } else {
-                    document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Nessun record contrattivo disponibile.</p>`;
+                    document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Nessun record contrattivo disponibile o limite API raggiunto.</p>`;
                 }
                 if (resTimbl.ok) {
                     const d = await resTimbl.json();
@@ -1032,13 +1154,14 @@
             for (const r of recordsConfigAppOriginali) {
                 const val = document.getElementById(`cfg_val_${r.id}`).value;
                 const desc = document.getElementById(`cfg_desc_${r.id}`).value;
-                await fetch(WORKER_URL, {
+                await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_config_app", token: sessionToken, id_riga: r.id, valore: val, descrizione: desc })
                 });
             }
+            localStorage.removeItem('gestionale_cache_globale');
+            await inizializzaDatiGlobaliCache(true);
             mostraAlert("Regole app aggiornate con successo!");
-            caricaConfigurazioneApp();
             caricaImpostazioniNative();
         }
 
@@ -1048,7 +1171,7 @@
                 const anno = document.getElementById(`ctr_anno_${r.id}`).value;
                 const ferie = document.getElementById(`ctr_fer_${r.id}`).value;
                 const perm = document.getElementById(`ctr_perm_${r.id}`).value;
-                await fetch(WORKER_URL, {
+                await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_contrattuali", token: sessionToken, id_riga: r.id, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                 });
@@ -1059,7 +1182,7 @@
                 const ferie = riga.querySelector('.new_ctr_fer').value;
                 const perm = riga.querySelector('.new_ctr_perm').value;
                 if(anno && ferie && perm) {
-                    await fetch(WORKER_URL, {
+                    await apiFetch(WORKER_URL, {
                         method: 'POST', headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ tipo: "aggiungi_contrattuali", token: sessionToken, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                     });
@@ -1087,11 +1210,13 @@
                 const unico = document.getElementById(`timb_unico_${r.id}`).checked;
                 const attivo = document.getElementById(`timb_att_${r.id}`).checked;
                 const ordine = document.getElementById(`timb_ord_${r.id}`).value;
-                await fetch(WORKER_URL, {
+                await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_tipo_timbratura", token: sessionToken, id_riga: r.id, nome: nome, unico: unico, attivo: attivo, ordine: ordine })
                 });
             }
+            localStorage.removeItem('gestionale_cache_globale');
+            await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di timbratura aggiornati con successo!");
             caricaImpostazioniNative();
         }
@@ -1101,12 +1226,13 @@
             for (const r of recordsTipiAssenzaOriginali) {
                 const blocca = document.getElementById(`ass_blocc_${r.id}`).checked;
                 const attivo = document.getElementById(`ass_att_${r.id}`).checked;
-                await fetch(WORKER_URL, {
+                await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, blocca: blocca, attivo: attivo })
                 });
             }
-            await caricaTipiAssenzaCache();
+            localStorage.removeItem('gestionale_cache_globale');
+            await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di assenza aggiornati con successo!");
             caricaImpostazioniNative();
         }
@@ -1118,7 +1244,7 @@
                 const msg = document.getElementById(`avv_msg_${r.id}`).value;
                 const tipo = document.getElementById(`avv_tipo_${r.id}`).value;
                 const attivo = document.getElementById(`avv_att_${r.id}`).checked;
-                await fetch(WORKER_URL, {
+                await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_avviso", token: sessionToken, id_riga: r.id, titolo: tit, messaggio: msg, tipo_avviso: tipo, attivo: attivo })
                 });
@@ -1192,7 +1318,7 @@
             setStatoCampiTimbratura(false, "");
 
             try {
-                const resAss = await fetch(WORKER_URL, {
+                const resAss = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
                 });
@@ -1204,7 +1330,7 @@
                     }
                 }
 
-                const response = await fetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
                 });
@@ -1217,7 +1343,8 @@
                         const riep = calcolaRiepilogoGiornata(recordsGiorno);
                         let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
                         if (riep.completata) {
-                            msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
+                            msg += `
+Ore lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
                         }
                         setStatoCampiTimbratura(true, msg);
                         return;
@@ -1241,8 +1368,6 @@
             } catch (error) { console.error("Errore verifica timbratura:", error); }
         }
 
-        document.getElementById('p_data').addEventListener('change', verificaStatoTimbraturaGiornata);
-
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dataStringa = document.getElementById('p_data').value;
@@ -1254,7 +1379,7 @@
             const dataGrist = `${giornoP}/${meseP}/${annoP}`;
 
             try {
-                const resAss = await fetch(WORKER_URL, {
+                const resAss = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
                 });
@@ -1272,17 +1397,21 @@
 
             const payload = { tipo: "presenze", token: sessionToken, data: dataGrist, evento: eventoSel, ore: ora, minuti: minuto, note: document.getElementById('p_note').value, id_riga: idRigaInModificaPresenze };
             try {
-                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
                     modalitaInserimentoPassato = false;
                     if (eventoSel === "Uscita") {
-                        const resCheck = await fetch(WORKER_URL, {
+                        const resCheck = await apiFetch(WORKER_URL, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
                         });
                         const dCheck = await resCheck.json();
                         const riep = calcolaRiepilogoGiornata(dCheck.records || []);
-                        mostraAlert(`🎉 Giornata completata!\n\n• Ore lavorate: ${riep.lavorate || 'Calcolate'}\n• Straordinari: ${riep.straordinari || '0,00 ore'}\n• Permessi/Note: ${riep.permessi || 'Nessuno'}`);
+                        mostraAlert(`🎉 Giornata completata!
+
+• Ore lavorate: ${riep.lavorate || 'Calcolate'}
+• Straordinari: ${riep.straordinari || '0,00 ore'}
+• Permessi/Note: ${riep.permessi || 'Nessuno'}`);
                     } else {
                         mostraAlert('Presenza registrata con successo!');
                     }
@@ -1292,7 +1421,11 @@
                     document.getElementById('btnEliminaPresenza').style.display = "none";
                     document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
                     document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
-                } else { mostraAlert('Errore server o sessione non valida.'); }
+                } else if (response.status === 429) {
+                    mostraAlert('⚠️ Limite chiamate API Grist superato. Riprova più tardi.');
+                } else { 
+                    mostraAlert('Errore server o sessione non valida.'); 
+                }
             } catch (error) { mostraAlert('Impossibile connettersi al servizio.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Conferma presenza'; }
         });
@@ -1307,7 +1440,7 @@
 
             if (!idRigaInModificaAssenze) {
                 try {
-                    const resCheck = await fetch(WORKER_URL, {
+                    const resCheck = await apiFetch(WORKER_URL, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist })
                     });
@@ -1321,7 +1454,7 @@
                     }
                 } catch(err) {}
 
-                const resTimbCheck = await fetch(WORKER_URL, {
+                const resTimbCheck = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
                 });
@@ -1337,7 +1470,7 @@
 
             try {
                 const payload = { tipo: "registro", token: sessionToken, data: dataRegistroGrist, tipoAssenza: document.getElementById('r_tipo').value, quantita: parseFloat(document.getElementById('r_quantita').value), note: document.getElementById('r_note').value, id_riga: idRigaInModificaAssenze };
-                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) { 
                     mostraAlert('Richiesta registrata con successo!'); 
                     navigaASezione('home');
@@ -1346,26 +1479,41 @@
                     document.getElementById('btnEliminaAssenza').style.display = "none";
                     document.getElementById('btnAnnullaModificaAssenza').style.display = "none";
                     document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
-                } else { mostraAlert('Errore server.'); }
+                } else if (response.status === 429) {
+                    mostraAlert('⚠️ Limite chiamate API Grist superato. Riprova più tardi.');
+                } else { 
+                    mostraAlert('Errore server.'); 
+                }
             } catch (error) { mostraAlert('Impossibile connettersi.'); }
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
+        // STILE PDF PROFESSIONALE (CORPORATE / AZIENDALE)
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
-            let page = pdfDoc.addPage([595.28, 841.89]);
+            let page = pdfDoc.addPage([595.28, 841.89]); // A4
             const fontNormale = await pdfDoc.embedFont(StandardFonts.Helvetica);
             const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
             
-            page.drawRectangle({ x: 35, y: 730, width: 525, height: 65, color: rgb(0.92, 0.95, 0.98) });
-            page.drawRectangle({ x: 35, y: 730, width: 6, height: 65, color: rgb(0.18, 0.6, 0.85) });
+            const colorePrimario = rgb(0.12, 0.22, 0.33); // Blu scuro aziendale
+            const coloreAccento = rgb(0.18, 0.5, 0.72);
+            const coloreSfondoBox = rgb(0.96, 0.97, 0.98);
+            const coloreTestoGrigio = rgb(0.35, 0.38, 0.42);
 
-            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 768, size: 9, font: fontBold, color: rgb(0.3, 0.4, 0.5) });
-            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 742, size: 14, font: fontBold, color: rgb(0.15, 0.25, 0.35) });
+            // Intestazione Corporate
+            page.drawRectangle({ x: 35, y: 720, width: 525, height: 80, color: coloreSfondoBox });
+            page.drawRectangle({ x: 35, y: 720, width: 6, height: 80, color: coloreAccento });
 
-            let y = 690;
-            const linee = testoMappato.split('\n');
+            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 775, size: 8, font: fontBold, color: coloreTestoGrigio });
+            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 745, size: 13, font: fontBold, color: colorePrimario });
+            
+            // Data di emissione in alto a destra
+            const dataEmissioneStr = `Emesso il: ${new Date().toLocaleDateString('it-IT')}`;
+            page.drawText(dataEmissioneStr, { x: 440, y: 775, size: 8, font: fontNormale, color: coloreTestoGrigio });
+
+            let y = 680;
+const linee = testoMappato.split('\n');
             for (const linea of linee) {
                 if (y < 60) {
                     page = pdfDoc.addPage([595.28, 841.89]);
@@ -1373,15 +1521,15 @@
                 }
                 if (linea.startsWith('===')) { y -= 10; continue; }
                 if (linea.startsWith('---') || linea.startsWith('___')) {
-                    page.drawLine({ start: { x: 35, y: y }, end: { x: 560, y: y }, thickness: 1, color: rgb(0.8, 0.85, 0.9) });
+                    page.drawLine({ start: { x: 35, y: y }, end: { x: 560, y: y }, thickness: 0.75, color: rgb(0.82, 0.86, 0.9) });
                     y -= 15;
                     continue;
                 }
                 if (linea === linea.toUpperCase() && linea.trim().length > 0 && !linea.includes(':')) {
                     y -= 10;
-                    page.drawRectangle({ x: 35, y: y - 3, width: 525, height: 18, color: rgb(0.95, 0.95, 0.95) });
-                    page.drawText(linea, { x: 42, y: y + 2, size: 10, font: fontBold, color: rgb(0.2, 0.3, 0.4) });
-                    y -= 20;
+                    page.drawRectangle({ x: 35, y: y - 3, width: 525, height: 18, color: rgb(0.90, 0.93, 0.96) });
+                    page.drawText(linea, { x: 42, y: y + 2, size: 9, font: fontBold, color: colorePrimario });
+                    y -= 22;
                     continue;
                 }
 
@@ -1389,20 +1537,21 @@
                     const parti = linea.split(':');
                     const etichetta = parti[0].trim();
                     const valore = parti.slice(1).join(':').trim();
-                    page.drawText(etichetta, { x: 45, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
-                    page.drawText(valore, { x: 280, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                    page.drawText(etichetta, { x: 45, y: y, size: 9, font: fontNormale, color: coloreTestoGrigio });
+                    page.drawText(valore, { x: 280, y: y, size: 9, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
                 } else if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
-                    page.drawText(linea, { x: 45, y: y, size: 10, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
+                    page.drawText(linea, { x: 45, y: y, size: 9, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
                 } else if (linea.startsWith(' >>>') || linea.startsWith(' <<<') || linea.startsWith(' *')) {
-                    page.drawText(linea, { x: 40, y: y, size: 10, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
+                    page.drawText(linea, { x: 40, y: y, size: 9, font: fontBold, color: colorePrimario });
                 } else {
-                    page.drawText(linea, { x: 40, y: y, size: 10, font: fontNormale, color: rgb(0.3, 0.3, 0.3) });
+                    page.drawText(linea, { x: 40, y: y, size: 9, font: fontNormale, color: coloreTestoGrigio });
                 }
-                y -= 20;
+                y -= 18;
             }
 
-            page.drawLine({ start: { x: 35, y: 40 }, end: { x: 560, y: 40 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
-            page.drawText("Documento digitale generato automaticamente dal sistema gestionale", { x: 35, y: 25, size: 8, font: fontNormale, color: rgb(0.6, 0.6, 0.6) });
+            // Piè di pagina professionale
+            page.drawLine({ start: { x: 35, y: 35 }, end: { x: 560, y: 35 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+            page.drawText("Pannello Controllo Lavoro — Documento ufficiale generato digitalmente", { x: 35, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
 
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -1415,39 +1564,39 @@
             if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
             const annoSel = document.getElementById('rep_anno').value;
             const meseSel = document.getElementById('rep_mese').value;
-            const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
+            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
                 await buildPdfFromText("PROSPETTO RIEPILOGATIVO AZIENDALE", `REPORT MENSILE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Report_${resJson.mese}_${resJson.anno}.pdf`);
-            } else { mostraAlert("Errore generazione report."); }
+            } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
         }
 
         async function generaPDFAnnuale() {
             const annoSel = document.getElementById('rep_anno_annual').value;
-            const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
+            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
                 await buildPdfFromText("PROSPETTO RIEPILOGATIVO AZIENDALE", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
-            }
+            } else { mostraAlert("Errore generazione report annuale."); }
         }
 
         async function generaPDFTimbratureMensile() {
             const annoSel = document.getElementById('rep_timb_anno').value;
             const meseSel = document.getElementById('rep_timb_mese').value;
-            const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
+            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
                 await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Timbrature_${resJson.mese}_${resJson.anno}.pdf`);
-            }
+            } else { mostraAlert("Errore generazione report timbrature mensile."); }
         }
 
         async function generaPDFTimbratureAnnuale() {
             const annoSel = document.getElementById('rep_timb_anno_annual').value;
-            const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
+            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
                 await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALE ${resJson.anno}`, resJson.testoReport, `Timbrature_Annuale_${resJson.anno}.pdf`);
-            }
+            } else { mostraAlert("Errore generazione report timbrature annuale."); }
         }
 
         async function esportaPDFStoricoFiltrato() {
@@ -1460,19 +1609,29 @@
             const giornoSel = document.getElementById('storico_giorno').options[document.getElementById('storico_giorno').selectedIndex].text;
             const categoria = vistaStoricoAttiva === 'presenze' ? 'TIMBRATURE GIORNATA' : 'FERIE, PERMESSI E MALATTIA';
 
-            let testo = `DETTAGLIO ESTRAZIONE\n----------------------------------------\n`;
-            testo += `Categoria Stampata: ${categoria}\n`;
-            testo += `Filtri Applicati: Anno ${annoSel} | Mese: ${meseSel} | Giorno: ${giornoSel}\n`;
-            testo += `Totale Record Estratti: ${datiAttualmenteFiltrati.length}\n\n`;
-            testo += `ELENCO REGISTRAZIONI\n----------------------------------------\n`;
+            let testo = `DETTAGLIO ESTRAZIONE
+----------------------------------------
+`;
+            testo += `Categoria Stampata: ${categoria}
+`;
+            testo += `Filtri Applicati: Anno ${annoSel} | Mese: ${meseSel} | Giorno: ${giornoSel}
+`;
+            testo += `Totale Record Estratti: ${datiAttualmenteFiltrati.length}
+
+`;
+            testo += `ELENCO REGISTRAZIONI
+----------------------------------------
+`;
 
             datiAttualmenteFiltrati.forEach((r) => {
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    testo += `${dataStr}  |  ${f.Evento.padEnd(15, ' ')}  |  Ore ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')}  |  Note: ${f.Note || '-'}\n`;
+                    testo += `${dataStr}  |  ${f.Evento.padEnd(15, ' ')}  |  Ore ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')}  |  Note: ${f.Note || '-'}
+`;
                 } else {
-                    testo += `${dataStr}  |  ${f.Tipo_Assenza.padEnd(18, ' ')}  |  Q.tà: ${f.Quantita}  |  Note: ${f.Note || '-'}\n`;
+                    testo += `${dataStr}  |  ${f.Tipo_Assenza.padEnd(18, ' ')}  |  Q.tà: ${f.Quantita}  |  Note: ${f.Note || '-'}
+`;
                 }
             });
 
@@ -1515,7 +1674,7 @@
             if (!sessionToken) return;
             const annoScelto = document.getElementById("storico_anno").value;
             try {
-                const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: annoScelto }) });
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: annoScelto }) });
                 if (response.ok) {
                     const res = await response.json();
                     datiStoricoPresenze = res.presenze || [];
@@ -1641,10 +1800,12 @@
         async function eliminaRecord(tabella) {
             const idDaEliminare = (tabella === 'presenze') ? idRigaInModificaPresenze : idRigaInModificaAssenze;
             if (!idDaEliminare || !await mostraConfirm("Sei sicuro di voler eliminare definitivamente questo record?")) return;
-            const response = await fetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: tabella, id_riga: idDaEliminare }) });
+            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: tabella, id_riga: idDaEliminare }) });
             if (response.ok) {
                 mostraAlert("Record eliminato con successo!");
                 if (tabella === 'presenze') tornaAStoricoDaPresenze(); else tornaAStoricoDaAssenze();
+            } else if (response.status === 429) {
+                mostraAlert("⚠️ Limite chiamate API Grist superato.");
             }
         }
     </script>
