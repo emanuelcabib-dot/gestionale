@@ -1089,13 +1089,12 @@
             if (!await mostraConfirm("Vuoi eliminare questo record contrattuale?")) return;
             const res = await apiFetch(WORKER_URL, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "registro", id_riga: id })
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "parametri_contrattuali", id_riga: id })
             });
             if (!res.ok) {
                 mostraAlert(`Errore durante l'eliminazione del record contrattuale (HTTP ${res.status}).`);
                 return;
             }
-            // Nota: Se la tabella su Grist si chiama diversamente per i contratti, adattiamo tramite elimina_record o chiamata dedicata. Nel worker attuale eliminiamo record tramite ID.
             document.getElementById(`tr_contrattuale_${id}`).remove();
             mostraAlert("Record contrattuale eliminato.");
             caricaImpostazioniNative();
@@ -1142,8 +1141,19 @@
 
         async function rimuoviRigaTimbraturaEsistente(id) {
             if (!await mostraConfirm("Vuoi eliminare questo tipo di timbratura?")) return;
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "tipi_timbratura", id_riga: id })
+            });
+            if (!response.ok) {
+                mostraAlert(`Errore durante l'eliminazione del tipo di timbratura (HTTP ${response.status}).`);
+                return;
+            }
             document.getElementById(`tr_timbratura_${id}`).remove();
             mostraAlert("Timbratura rimossa.");
+            localStorage.removeItem('gestionale_cache_globale');
+            await inizializzaDatiGlobaliCache(true);
+            caricaImpostazioniNative();
         }
 
         function generaTabellaTipiAssenzaModificabile(records) {
@@ -1185,8 +1195,19 @@
 
         async function rimuoviRigaAssenzaEsistente(id) {
             if (!await mostraConfirm("Vuoi eliminare questo tipo di assenza?")) return;
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "tipi_assenza", id_riga: id })
+            });
+            if (!response.ok) {
+                mostraAlert(`Errore durante l'eliminazione del tipo di assenza (HTTP ${response.status}).`);
+                return;
+            }
             document.getElementById(`tr_assenza_${id}`).remove();
             mostraAlert("Assenza rimossa.");
+            localStorage.removeItem('gestionale_cache_globale');
+            await inizializzaDatiGlobaliCache(true);
+            caricaImpostazioniNative();
         }
 
         function generaTabellaAvvisiModificabile(records) {
@@ -1283,6 +1304,25 @@
                     return;
                 }
             }
+            for (const riga of document.querySelectorAll('.riga-nuova-timbratura')) {
+                const nome = riga.querySelector('.new_timb_nome').value.trim();
+                if (!nome) continue;
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tipo: "aggiungi_tipo_timbratura",
+                        token: sessionToken,
+                        nome,
+                        unico: riga.querySelector('.new_timb_unico').checked,
+                        attivo: riga.querySelector('.new_timb_att').checked,
+                        ordine: riga.querySelector('.new_timb_ord').value
+                    })
+                });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante l'aggiunta del tipo di timbratura (HTTP ${response.status}).`);
+                    return;
+                }
+            }
             localStorage.removeItem('gestionale_cache_globale');
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di timbratura aggiornati con successo!");
@@ -1301,6 +1341,24 @@
                 });
                 if (!response.ok) {
                     mostraAlert(`Errore durante il salvataggio dei tipi di assenza (HTTP ${response.status}).`);
+                    return;
+                }
+            }
+            for (const riga of document.querySelectorAll('.riga-nuova-assenza')) {
+                const nome = riga.querySelector('.new_ass_nome').value.trim();
+                if (!nome) continue;
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tipo: "aggiungi_tipo_assenza",
+                        token: sessionToken,
+                        nome,
+                        blocca: riga.querySelector('.new_ass_blocc').checked,
+                        attivo: riga.querySelector('.new_ass_att').checked
+                    })
+                });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante l'aggiunta del tipo di assenza (HTTP ${response.status}).`);
                     return;
                 }
             }
