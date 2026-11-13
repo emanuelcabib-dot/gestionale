@@ -1091,6 +1091,10 @@
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "registro", id_riga: id })
             });
+            if (!res.ok) {
+                mostraAlert(`Errore durante l'eliminazione del record contrattuale (HTTP ${res.status}).`);
+                return;
+            }
             // Nota: Se la tabella su Grist si chiama diversamente per i contratti, adattiamo tramite elimina_record o chiamata dedicata. Nel worker attuale eliminiamo record tramite ID.
             document.getElementById(`tr_contrattuale_${id}`).remove();
             mostraAlert("Record contrattuale eliminato.");
@@ -1213,10 +1217,14 @@
             for (const r of recordsConfigAppOriginali) {
                 const val = document.getElementById(`cfg_val_${r.id}`).value;
                 const desc = document.getElementById(`cfg_desc_${r.id}`).value;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_config_app", token: sessionToken, id_riga: r.id, valore: val, descrizione: desc })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio delle regole app (HTTP ${response.status}).`);
+                    return;
+                }
             }
             localStorage.removeItem('gestionale_cache_globale');
             await inizializzaDatiGlobaliCache(true);
@@ -1230,10 +1238,14 @@
                 const anno = document.getElementById(`ctr_anno_${r.id}`).value;
                 const ferie = document.getElementById(`ctr_fer_${r.id}`).value;
                 const perm = document.getElementById(`ctr_perm_${r.id}`).value;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_contrattuali", token: sessionToken, id_riga: r.id, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio dei parametri contrattuali (HTTP ${response.status}).`);
+                    return;
+                }
             }
             const nuoveRighe = document.querySelectorAll('.riga-nuova-contrattuale');
             for (const riga of nuoveRighe) {
@@ -1241,10 +1253,14 @@
                 const ferie = riga.querySelector('.new_ctr_fer').value;
                 const perm = riga.querySelector('.new_ctr_perm').value;
                 if(anno && ferie && perm) {
-                    await apiFetch(WORKER_URL, {
+                    const response = await apiFetch(WORKER_URL, {
                         method: 'POST', headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ tipo: "aggiungi_contrattuali", token: sessionToken, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                     });
+                    if (!response.ok) {
+                        mostraAlert(`Errore durante l'aggiunta del parametro contrattuale (HTTP ${response.status}).`);
+                        return;
+                    }
                 }
             }
             mostraAlert("Parametri contrattuali aggiornati con successo!");
@@ -1258,10 +1274,14 @@
                 const unico = document.getElementById(`timb_unico_${r.id}`).checked;
                 const attivo = document.getElementById(`timb_att_${r.id}`).checked;
                 const ordine = document.getElementById(`timb_ord_${r.id}`).value;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_tipo_timbratura", token: sessionToken, id_riga: r.id, nome: nome, unico: unico, attivo: attivo, ordine: ordine })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio dei tipi di timbratura (HTTP ${response.status}).`);
+                    return;
+                }
             }
             localStorage.removeItem('gestionale_cache_globale');
             await inizializzaDatiGlobaliCache(true);
@@ -1275,10 +1295,14 @@
                 const nome = document.getElementById(`ass_nome_${r.id}`).value;
                 const blocca = document.getElementById(`ass_blocc_${r.id}`).checked;
                 const attivo = document.getElementById(`ass_att_${r.id}`).checked;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, nome: nome, blocca: blocca, attivo: attivo })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio dei tipi di assenza (HTTP ${response.status}).`);
+                    return;
+                }
             }
             localStorage.removeItem('gestionale_cache_globale');
             await inizializzaDatiGlobaliCache(true);
@@ -1299,10 +1323,14 @@
                     dataScdEpoch = Math.floor(Date.UTC(aa, mm - 1, gg, 23, 59, 59) / 1000);
                 }
                 const attivo = document.getElementById(`avv_att_${r.id}`).checked;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_avviso", token: sessionToken, id_riga: r.id, titolo: tit, messaggio: msg, tipo_avviso: tipo, data_scadenza: dataScdEpoch, attivo: attivo })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio degli avvisi (HTTP ${response.status}).`);
+                    return;
+                }
             }
             mostraAlert("Bacheca avvisi aggiornata con successo!");
             caricaImpostazioniNative();
@@ -1873,6 +1901,8 @@
                 if (tabella === 'presenze') tornaAStoricoDaPresenze(); else tornaAStoricoDaAssenze();
             } else if (response.status === 429) {
                 mostraAlert("⚠️ Limite chiamate API Grist superato.");
+            } else {
+                mostraAlert(`Errore durante l'eliminazione del record (HTTP ${response.status}).`);
             }
         }
     </script>
