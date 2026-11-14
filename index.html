@@ -1494,49 +1494,56 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
                 });
-                if (resAss.ok) {
-                    const dAss = await resAss.json();
-                    if (dAss.esiste && dAss.bloccaTimbrature && !idRigaInModificaPresenze) {
-                        setStatoCampiTimbratura(true, "⛔ Attenzione: Per questa data risulta registrata un'assenza che blocca le timbrature.");
-                        return;
-                    }
+                if (!resAss.ok) {
+                    throw new Error(`Verifica assenze non riuscita (HTTP ${resAss.status}).`);
+                }
+                const dAss = await resAss.json();
+                if (dAss.bloccaTimbrature === true && !idRigaInModificaPresenze) {
+                    setStatoCampiTimbratura(true, "⛔ Attenzione: Per questa data risulta registrata un'assenza che blocca le timbrature.");
+                    return;
                 }
 
                 const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
                 });
-                if (response.ok) {
-                    const data = await response.json();
-                    eventiGiornoCorrente = data.eventi || [];
-                    const recordsGiorno = data.records || [];
-
-                    if (eventiGiornoCorrente.includes("Uscita") && !idRigaInModificaPresenze) {
-                        const riep = calcolaRiepilogoGiornata(recordsGiorno);
-                        let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
-                        if (riep.completata) {
-                            msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
-                        }
-                        setStatoCampiTimbratura(true, msg);
-                        return;
-                    }
-
-                    const selEvento = document.getElementById('p_evento');
-                    for (let i = 0; i < selEvento.options.length; i++) {
-                        const optVal = selEvento.options[i].value;
-                        const confTipo = listaTipiTimbraturaGrist.find(t => t.fields.Nome === optVal);
-                        const isUnico = confTipo ? Boolean(confTipo.fields.Unico_Al_Giorno) : true;
-                        
-                        if (eventiGiornoCorrente.includes(optVal) && isUnico) {
-                            selEvento.options[i].disabled = true;
-                        } else {
-                            selEvento.options[i].disabled = false;
-                        }
-                    }
-                    const primaDisponibile = Array.from(selEvento.options).find(o => !o.disabled);
-                    if (primaDisponibile) selEvento.value = primaDisponibile.value;
+                if (!response.ok) {
+                    throw new Error(`Verifica timbrature non riuscita (HTTP ${response.status}).`);
                 }
-            } catch (error) { console.error("Errore verifica timbratura:", error); }
+                const data = await response.json();
+                eventiGiornoCorrente = data.eventi || [];
+                const recordsGiorno = data.records || [];
+
+                if (eventiGiornoCorrente.includes("Uscita") && !idRigaInModificaPresenze) {
+                    const riep = calcolaRiepilogoGiornata(recordsGiorno);
+                    let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
+                    if (riep.completata) {
+                        msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
+                    }
+                    setStatoCampiTimbratura(true, msg);
+                    return;
+                }
+
+                const selEvento = document.getElementById('p_evento');
+                for (let i = 0; i < selEvento.options.length; i++) {
+                    const optVal = selEvento.options[i].value;
+                    const confTipo = listaTipiTimbraturaGrist.find(t => t.fields.Nome === optVal);
+                    const isUnico = confTipo ? Boolean(confTipo.fields.Unico_Al_Giorno) : true;
+
+                    if (eventiGiornoCorrente.includes(optVal) && isUnico) {
+                        selEvento.options[i].disabled = true;
+                    } else {
+                        selEvento.options[i].disabled = false;
+                    }
+                }
+                const primaDisponibile = Array.from(selEvento.options).find(o => !o.disabled);
+                if (primaDisponibile) selEvento.value = primaDisponibile.value;
+            } catch (error) {
+                console.error("Errore verifica timbratura:", error);
+                const messaggio = "Impossibile verificare assenze e timbrature per la data selezionata. La registrazione è stata disabilitata.";
+                setStatoCampiTimbratura(true, `⚠️ ${messaggio}`);
+                mostraAlert(messaggio);
+            }
         }
 
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
@@ -1554,14 +1561,19 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
                 });
-                if (resAss.ok) {
-                    const dAss = await resAss.json();
-                    if (dAss.esiste && !idRigaInModificaPresenze) {
-                        mostraAlert("Impossibile inserire la timbratura: in questa data è registrata un'assenza con blocco timbrature attivo!");
-                        return;
-                    }
+                if (!resAss.ok) {
+                    throw new Error(`Verifica assenze non riuscita (HTTP ${resAss.status}).`);
                 }
-            } catch(err) {}
+                const dAss = await resAss.json();
+                if (dAss.bloccaTimbrature === true && !idRigaInModificaPresenze) {
+                    mostraAlert("Impossibile inserire la timbratura: in questa data è registrata un'assenza con blocco timbrature attivo!");
+                    return;
+                }
+            } catch (error) {
+                console.error("Errore verifica assenza prima della timbratura:", error);
+                mostraAlert("Impossibile verificare le assenze per la data selezionata. La timbratura non è stata salvata.");
+                return;
+            }
 
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true; submitBtn.innerText = 'Invio in corso...';
@@ -1611,27 +1623,34 @@
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist })
                     });
-                    if (resCheck.ok) {
-                        const dChk = await resCheck.json();
-                        if (dChk.esiste) {
-                            mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
-                            submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
-                            return;
-                        }
+                    if (!resCheck.ok) {
+                        throw new Error(`Verifica assenze non riuscita (HTTP ${resCheck.status}).`);
                     }
-                } catch(err) {}
+                    const dChk = await resCheck.json();
+                    if (dChk.esiste) {
+                        mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
+                        submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
+                        return;
+                    }
 
-                const resTimbCheck = await apiFetch(WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
-                });
-                if (resTimbCheck.ok) {
+                    const resTimbCheck = await apiFetch(WORKER_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
+                    });
+                    if (!resTimbCheck.ok) {
+                        throw new Error(`Verifica timbrature non riuscita (HTTP ${resTimbCheck.status}).`);
+                    }
                     const dTimb = await resTimbCheck.json();
                     if (dTimb.eventi && dTimb.eventi.length > 0) {
                         mostraAlert("⛔ Impossibile inserire l'assenza: nella data selezionata risultano già registrate delle timbrature!");
                         submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
                         return;
                     }
+                } catch (error) {
+                    console.error("Errore verifica giornaliera prima della registrazione dell'assenza:", error);
+                    mostraAlert("Impossibile verificare assenze e timbrature per la data selezionata. L'assenza non è stata salvata.");
+                    submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
+                    return;
                 }
             }
 
