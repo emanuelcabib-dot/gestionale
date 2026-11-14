@@ -218,7 +218,12 @@ export default {
             }
           });
 
-          const assenzeDelGiorno = (datiReg.records || []).filter(r => r.fields.Data >= epochInizio && r.fields.Data <= epochFine);
+          const idRigaDaIgnorare = body.id_riga == null ? null : Number(body.id_riga);
+          const assenzeDelGiorno = (datiReg.records || []).filter(r =>
+            r.fields.Data >= epochInizio &&
+            r.fields.Data <= epochFine &&
+            (idRigaDaIgnorare === null || r.id !== idRigaDaIgnorare)
+          );
           const esisteAssenza = assenzeDelGiorno.length > 0;
           const bloccaTimbrature = assenzeDelGiorno.some(r => {
             const nomeTipo = String(r.fields.Tipo_Assenza || "").trim().toLowerCase();

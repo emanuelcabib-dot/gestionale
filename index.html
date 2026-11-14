@@ -484,6 +484,7 @@
         let listaTipiTimbraturaGrist = [];
         let listaTipiAssenzaGrist = [];
         let modalitaInserimentoPassato = false;
+        let tipoInserimentoPassato = null;
 
         async function apiFetch(url, options) {
             const banner = document.getElementById('globalApiBanner');
@@ -584,7 +585,68 @@
             document.getElementById('mobileDropdownMenu').style.display = 'none';
         }
 
+        function resetMascheraPresenze() {
+            idRigaInModificaPresenze = null;
+            if (tipoInserimentoPassato === 'presenze') {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            }
+            const form = document.getElementById('formPresenze');
+            form.reset();
+
+            const oggiStr = getOggiInLocale();
+            const dataInput = document.getElementById('p_data');
+            dataInput.type = 'hidden';
+            dataInput.removeAttribute('min');
+            dataInput.removeAttribute('max');
+            dataInput.value = oggiStr;
+            const dataEstesa = document.getElementById('p_data_estesa');
+            dataEstesa.style.display = 'block';
+            dataEstesa.innerText = formattaDataEstesaItaliana(oggiStr);
+
+            document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
+            document.getElementById('btnEliminaPresenza').style.display = 'none';
+            document.getElementById('btnAnnullaModificaPresenza').style.display = 'none';
+            document.getElementById('bannerFestivoPresenza').style.display = 'none';
+            document.getElementById('bannerAvvisoOrario').style.display = 'none';
+            document.querySelectorAll('#p_evento option').forEach(option => { option.disabled = false; });
+            eventiGiornoCorrente = [];
+            setStatoCampiTimbratura(false, '');
+            setOrarioAttuale();
+            verificaControlliOrarioDinamici();
+        }
+
+        function resetMascheraAssenze() {
+            idRigaInModificaAssenze = null;
+            if (tipoInserimentoPassato === 'assenze') {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            }
+            document.getElementById('formRegistro').reset();
+
+            const dataInput = document.getElementById('r_data');
+            dataInput.min = getOggiInLocale();
+            dataInput.removeAttribute('max');
+            dataInput.value = getOggiInLocale();
+            document.getElementById('r_quantita').value = '8';
+
+            document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
+            document.getElementById('btnEliminaAssenza').style.display = 'none';
+            document.getElementById('btnAnnullaModificaAssenza').style.display = 'none';
+            document.getElementById('bannerFestivoAssenza').style.display = 'none';
+        }
+
         function navigaASezione(sectionId) {
+            const tipoSezione = sectionId === 'timbratura' ? 'presenze' : sectionId === 'ferie' ? 'assenze' : null;
+            if (modalitaInserimentoPassato && tipoInserimentoPassato !== tipoSezione) {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            } else if (!modalitaInserimentoPassato) {
+                tipoInserimentoPassato = null;
+            }
+            if (sectionId !== 'timbratura') resetMascheraPresenze();
+            if (sectionId !== 'ferie') resetMascheraAssenze();
+
             const sections = document.getElementsByClassName("section");
             for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             const tabButtons = document.getElementsByClassName("tab-btn");
@@ -601,26 +663,14 @@
             if (sectionId === 'home') {
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
-                if (!idRigaInModificaPresenze && !modalitaInserimentoPassato) {
-                    const oggiStr = getOggiInLocale();
-                    document.getElementById('p_data').type = 'hidden';
-                    document.getElementById('p_data').value = oggiStr;
-                    document.getElementById('p_data_estesa').style.display = 'block';
-                    document.getElementById('p_data_estesa').innerText = formattaDataEstesaItaliana(oggiStr);
-                    setOrarioAttuale();
-                    document.getElementById('p_note').value = "";
+                if (!idRigaInModificaPresenze && !(modalitaInserimentoPassato && tipoInserimentoPassato === 'presenze')) {
+                    resetMascheraPresenze();
                 }
                 verificaStatoTimbraturaGiornata();
                 gestisciBannerFestivoPresenze();
             } else if (sectionId === 'ferie') {
-                const rDataInput = document.getElementById('r_data');
-                if (!idRigaInModificaAssenze && !modalitaInserimentoPassato) {
-                    const oggiStr = getOggiInLocale();
-                    rDataInput.min = oggiStr;
-                    rDataInput.removeAttribute('max');
-                    rDataInput.value = oggiStr;
-                    document.getElementById('r_quantita').value = "8";
-                    document.getElementById('r_note').value = "";
+                if (!idRigaInModificaAssenze && !(modalitaInserimentoPassato && tipoInserimentoPassato === 'assenze')) {
+                    resetMascheraAssenze();
                 }
                 gestisciBannerFestivoAssenze();
             }
@@ -657,10 +707,12 @@
         document.getElementById('r_data').addEventListener('change', gestisciBannerFestivoAssenze);
 
         function apriInserimentoPassato(tipo) {
+            resetMascheraPresenze();
+            resetMascheraAssenze();
             modalitaInserimentoPassato = true;
+            tipoInserimentoPassato = tipo;
             const ieriStr = getIeriInLocale();
             if (tipo === 'presenze') {
-                idRigaInModificaPresenze = null;
                 document.getElementById('p_data_estesa').style.display = 'none';
                 const pData = document.getElementById('p_data');
                 pData.type = 'date';
@@ -671,7 +723,6 @@
                 document.getElementById('btnAnnullaModificaPresenza').style.display = "inline-block";
                 navigaASezione('timbratura');
             } else {
-                idRigaInModificaAssenze = null;
                 const rData = document.getElementById('r_data');
                 rData.removeAttribute('min');
                 rData.max = ieriStr;
@@ -717,6 +768,10 @@
             sessionToken = "";
             cacheDatiGlobali = null;
             eventiGiornoCorrente = [];
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
+            resetMascheraPresenze();
+            resetMascheraAssenze();
             document.getElementById('companyCode').value = "";
             document.getElementById('mainPanel').style.display = 'none';
             document.getElementById('loginSection').style.display = 'block';
@@ -1483,6 +1538,13 @@
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
             if (!dataSel) return;
+            const rigaInVerifica = idRigaInModificaPresenze;
+            const verificaAncoraAttuale = () =>
+                Boolean(sessionToken) &&
+                document.getElementById('mainPanel').style.display !== 'none' &&
+                document.getElementById('timbratura').style.display !== 'none' &&
+                document.getElementById('p_data').value === dataSel &&
+                idRigaInModificaPresenze === rigaInVerifica;
             const [anno, mese, giorno] = dataSel.split('-');
             const dataGrist = `${giorno}/${mese}/${anno}`;
 
@@ -1498,6 +1560,7 @@
                     throw new Error(`Verifica assenze non riuscita (HTTP ${resAss.status}).`);
                 }
                 const dAss = await resAss.json();
+                if (!verificaAncoraAttuale()) return;
                 if (dAss.bloccaTimbrature === true && !idRigaInModificaPresenze) {
                     setStatoCampiTimbratura(true, "⛔ Attenzione: Per questa data risulta registrata un'assenza che blocca le timbrature.");
                     return;
@@ -1511,6 +1574,7 @@
                     throw new Error(`Verifica timbrature non riuscita (HTTP ${response.status}).`);
                 }
                 const data = await response.json();
+                if (!verificaAncoraAttuale()) return;
                 eventiGiornoCorrente = data.eventi || [];
                 const recordsGiorno = data.records || [];
 
@@ -1525,12 +1589,13 @@
                 }
 
                 const selEvento = document.getElementById('p_evento');
+                const eventoSelezionato = selEvento.value;
                 for (let i = 0; i < selEvento.options.length; i++) {
                     const optVal = selEvento.options[i].value;
                     const confTipo = listaTipiTimbraturaGrist.find(t => t.fields.Nome === optVal);
                     const isUnico = confTipo ? Boolean(confTipo.fields.Unico_Al_Giorno) : true;
 
-                    if (eventiGiornoCorrente.includes(optVal) && isUnico) {
+                    if (eventiGiornoCorrente.includes(optVal) && isUnico && !(idRigaInModificaPresenze && optVal === eventoSelezionato)) {
                         selEvento.options[i].disabled = true;
                     } else {
                         selEvento.options[i].disabled = false;
@@ -1539,6 +1604,7 @@
                 const primaDisponibile = Array.from(selEvento.options).find(o => !o.disabled);
                 if (primaDisponibile) selEvento.value = primaDisponibile.value;
             } catch (error) {
+                if (!verificaAncoraAttuale()) return;
                 console.error("Errore verifica timbratura:", error);
                 const messaggio = "Impossibile verificare assenze e timbrature per la data selezionata. La registrazione è stata disabilitata.";
                 setStatoCampiTimbratura(true, `⚠️ ${messaggio}`);
@@ -1583,6 +1649,7 @@
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
                     modalitaInserimentoPassato = false;
+                    tipoInserimentoPassato = null;
                     if (eventoSel === "Uscita") {
                         const resCheck = await apiFetch(WORKER_URL, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1617,41 +1684,39 @@
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
-            if (!idRigaInModificaAssenze) {
-                try {
-                    const resCheck = await apiFetch(WORKER_URL, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist })
-                    });
-                    if (!resCheck.ok) {
-                        throw new Error(`Verifica assenze non riuscita (HTTP ${resCheck.status}).`);
-                    }
-                    const dChk = await resCheck.json();
-                    if (dChk.esiste) {
-                        mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
-                        submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
-                        return;
-                    }
-
-                    const resTimbCheck = await apiFetch(WORKER_URL, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
-                    });
-                    if (!resTimbCheck.ok) {
-                        throw new Error(`Verifica timbrature non riuscita (HTTP ${resTimbCheck.status}).`);
-                    }
-                    const dTimb = await resTimbCheck.json();
-                    if (dTimb.eventi && dTimb.eventi.length > 0) {
-                        mostraAlert("⛔ Impossibile inserire l'assenza: nella data selezionata risultano già registrate delle timbrature!");
-                        submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
-                        return;
-                    }
-                } catch (error) {
-                    console.error("Errore verifica giornaliera prima della registrazione dell'assenza:", error);
-                    mostraAlert("Impossibile verificare assenze e timbrature per la data selezionata. L'assenza non è stata salvata.");
-                    submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
+            try {
+                const resCheck = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist, id_riga: idRigaInModificaAssenze })
+                });
+                if (!resCheck.ok) {
+                    throw new Error(`Verifica assenze non riuscita (HTTP ${resCheck.status}).`);
+                }
+                const dChk = await resCheck.json();
+                if (dChk.esiste) {
+                    mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
+                    submitBtn.disabled = false; submitBtn.innerText = idRigaInModificaAssenze ? '💾 Salva Modifica' : 'Invia assenza';
                     return;
                 }
+
+                const resTimbCheck = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
+                });
+                if (!resTimbCheck.ok) {
+                    throw new Error(`Verifica timbrature non riuscita (HTTP ${resTimbCheck.status}).`);
+                }
+                const dTimb = await resTimbCheck.json();
+                if (dTimb.eventi && dTimb.eventi.length > 0) {
+                    mostraAlert("⛔ Impossibile inserire l'assenza: nella data selezionata risultano già registrate delle timbrature!");
+                    submitBtn.disabled = false; submitBtn.innerText = idRigaInModificaAssenze ? '💾 Salva Modifica' : 'Invia assenza';
+                    return;
+                }
+            } catch (error) {
+                console.error("Errore verifica giornaliera prima della registrazione dell'assenza:", error);
+                mostraAlert("Impossibile verificare assenze e timbrature per la data selezionata. L'assenza non è stata salvata.");
+                submitBtn.disabled = false; submitBtn.innerText = idRigaInModificaAssenze ? '💾 Salva Modifica' : 'Invia assenza';
+                return;
             }
 
             try {
@@ -1918,12 +1983,17 @@
         }
 
         function attivaModificaPresenza(id, data, evento, ora, minuti, note) {
+            resetMascheraPresenze();
+            resetMascheraAssenze();
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             idRigaInModificaPresenze = id;
-            document.getElementById('p_evento').disabled = false;
-            document.getElementById('p_ore').disabled = false;
-            document.getElementById('p_minuti').disabled = false;
-            document.getElementById('p_note').disabled = false;
-            document.getElementById('p_data').value = formattaDataPerInput(data);
+            const dataInput = document.getElementById('p_data');
+            dataInput.type = 'date';
+            dataInput.removeAttribute('min');
+            dataInput.removeAttribute('max');
+            dataInput.value = formattaDataPerInput(data);
+            document.getElementById('p_data_estesa').style.display = 'none';
             document.getElementById('p_evento').value = evento;
             document.getElementById('p_ore').value = ora;
             document.getElementById('p_minuti').value = minuti;
@@ -1935,20 +2005,22 @@
         }
 
         function tornaAStoricoDaPresenze() {
-            idRigaInModificaPresenze = null;
-            document.getElementById('formPresenze').reset();
-            document.getElementById('p_data').value = getOggiInLocale();
-            setOrarioAttuale();
-            document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
-            document.getElementById('btnEliminaPresenza').style.display = "none";
-            document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             navigaASezione('storico_panel');
             caricaTabellaStorico();
         }
 
         function attivaModificaAssenza(id, data, tipoAssenza, quantita, note) {
+            resetMascheraPresenze();
+            resetMascheraAssenze();
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             idRigaInModificaAssenze = id;
-            document.getElementById('r_data').value = formattaDataPerInput(data);
+            const dataInput = document.getElementById('r_data');
+            dataInput.removeAttribute('min');
+            dataInput.removeAttribute('max');
+            dataInput.value = formattaDataPerInput(data);
             document.getElementById('r_tipo').value = tipoAssenza;
             document.getElementById('r_quantita').value = quantita;
             document.getElementById('r_note').value = note;
@@ -1959,12 +2031,8 @@
         }
 
         function tornaAStoricoDaAssenze() {
-            idRigaInModificaAssenze = null;
-            document.getElementById('formRegistro').reset();
-            document.getElementById('r_data').value = getOggiInLocale();
-            document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
-            document.getElementById('btnEliminaAssenza').style.display = "none";
-            document.getElementById('btnAnnullaModificaAssenza').style.display = "none";
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             navigaASezione('storico_panel');
             caricaTabellaStorico();
         }
