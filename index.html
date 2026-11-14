@@ -534,8 +534,12 @@
 
     <script>
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
+        const CACHE_CONFIGURAZIONI_KEY = 'gestionale_cache_globale';
+        const CACHE_CONFIGURAZIONI_TIMESTAMP_KEY = 'gestionale_cache_ts';
+        const CACHE_CONFIGURAZIONI_TTL_MS = 24 * 60 * 60 * 1000;
         let sessionToken = "";
         let cacheDatiGlobali = null;
+        let timestampCacheDatiGlobali = 0;
         let eventiGiornoCorrente = [];
         let configAppCache = {};
         let recordsConfigAppOriginali = [];
@@ -818,7 +822,6 @@
 
                     setOrarioAttuale();
                     await inizializzaDatiGlobaliCache();
-                    await caricaDatiHome();
                     navigaASezione('home');
                 } else {
                     errorMessage.style.display = 'block';
@@ -832,6 +835,7 @@
         function logout() {
             sessionToken = "";
             cacheDatiGlobali = null;
+            timestampCacheDatiGlobali = 0;
             eventiGiornoCorrente = [];
             modalitaInserimentoPassato = false;
             tipoInserimentoPassato = null;
@@ -842,15 +846,49 @@
             document.getElementById('loginSection').style.display = 'block';
         }
 
-        async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
-            const cacheSalvata = localStorage.getItem('gestionale_cache_globale');
-            const timestampCache = localStorage.getItem('gestionale_cache_ts');
-            const unGiorno = 24 * 60 * 60 * 1000;
+        function invalidaCacheConfigurazioniStatiche() {
+            cacheDatiGlobali = null;
+            timestampCacheDatiGlobali = 0;
+            [CACHE_CONFIGURAZIONI_KEY, CACHE_CONFIGURAZIONI_TIMESTAMP_KEY].forEach(chiave => {
+                try {
+                    localStorage.removeItem(chiave);
+                } catch (error) {
+                    console.warn(`Impossibile rimuovere la cache ${chiave}:`, error);
+                }
+            });
+        }
 
-            if (!forzaAggiornamento && cacheSalvata && timestampCache && (Date.now() - parseInt(timestampCache) < unGiorno)) {
-                cacheDatiGlobali = JSON.parse(cacheSalvata);
+        async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
+            let cacheSalvata = null;
+            let timestampCacheSalvata = 0;
+            try {
+                const cacheSerializzata = localStorage.getItem(CACHE_CONFIGURAZIONI_KEY);
+                const timestampCache = Number(localStorage.getItem(CACHE_CONFIGURAZIONI_TIMESTAMP_KEY));
+                const datiCache = cacheSerializzata ? JSON.parse(cacheSerializzata) : null;
+                const cacheValida = Number.isFinite(timestampCache) &&
+                    timestampCache > 0 &&
+                    Date.now() >= timestampCache &&
+                    Date.now() - timestampCache < CACHE_CONFIGURAZIONI_TTL_MS &&
+                    datiCache &&
+                    Array.isArray(datiCache.configApp) &&
+                    Array.isArray(datiCache.tipiTimbratura) &&
+                    Array.isArray(datiCache.tipiAssenza);
+                if (cacheValida) {
+                    cacheSalvata = datiCache;
+                    timestampCacheSalvata = timestampCache;
+                    timestampCacheDatiGlobali = timestampCache;
+                } else if (cacheSerializzata || timestampCache) {
+                    invalidaCacheConfigurazioniStatiche();
+                }
+            } catch (error) {
+                console.warn("Cache configurazioni non leggibile; verrà ricaricata dal Worker.", error);
+                invalidaCacheConfigurazioniStatiche();
+            }
+
+            if (!forzaAggiornamento && cacheSalvata) {
+                cacheDatiGlobali = cacheSalvata;
                 applicaDatiCacheLocali();
-                return;
+                return true;
             }
 
             try {
@@ -860,30 +898,42 @@
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) })
                 ]);
 
-                if (resConf.ok && resTimbl.ok && resAss.ok) {
-                    const dConf = await resConf.json();
-                    const dTimbl = await resTimbl.json();
-                    const dAss = await resAss.json();
-
-                    cacheDatiGlobali = {
-                        configApp: dConf.records || [],
-                        tipiTimbratura: dTimbl.records || [],
-                        tipiAssenza: dAss.records || []
-                    };
-
-                    localStorage.setItem('gestionale_cache_globale', JSON.stringify(cacheDatiGlobali));
-                    localStorage.setItem('gestionale_cache_ts', Date.now().toString());
-                    applicaDatiCacheLocali();
-                } else if (cacheSalvata) {
-                    cacheDatiGlobali = JSON.parse(cacheSalvata);
-                    applicaDatiCacheLocali();
+                if (!resConf.ok || !resTimbl.ok || !resAss.ok) {
+                    throw new Error(`Recupero configurazioni non riuscito (HTTP ${[resConf, resTimbl, resAss].find(res => !res.ok).status}).`);
                 }
-            } catch (e) {
-                console.error("Errore inizializzazione cache globale, utilizzo dati locali offline", e);
+
+                const [dConf, dTimbl, dAss] = await Promise.all([resConf.json(), resTimbl.json(), resAss.json()]);
+                cacheDatiGlobali = {
+                    configApp: dConf.records || [],
+                    tipiTimbratura: dTimbl.records || [],
+                    tipiAssenza: dAss.records || []
+                };
+                timestampCacheDatiGlobali = Date.now();
+                applicaDatiCacheLocali();
+                try {
+                    localStorage.setItem(CACHE_CONFIGURAZIONI_KEY, JSON.stringify(cacheDatiGlobali));
+                    localStorage.setItem(CACHE_CONFIGURAZIONI_TIMESTAMP_KEY, String(timestampCacheDatiGlobali));
+                } catch (error) {
+                    console.warn("Impossibile salvare la cache delle configurazioni statiche:", error);
+                    [CACHE_CONFIGURAZIONI_KEY, CACHE_CONFIGURAZIONI_TIMESTAMP_KEY].forEach(chiave => {
+                        try {
+                            localStorage.removeItem(chiave);
+                        } catch (erroreRimozione) {
+                            console.warn(`Impossibile rimuovere la cache ${chiave}:`, erroreRimozione);
+                        }
+                    });
+                }
+                return true;
+            } catch (error) {
+                console.error("Errore nel recupero delle configurazioni statiche.", error);
                 if (cacheSalvata) {
-                    cacheDatiGlobali = JSON.parse(cacheSalvata);
+                    cacheDatiGlobali = cacheSalvata;
+                    timestampCacheDatiGlobali = timestampCacheSalvata;
                     applicaDatiCacheLocali();
+                    return true;
                 }
+                mostraAlert("Impossibile caricare le configurazioni necessarie dal Worker.");
+                return false;
             }
         }
 
@@ -1121,35 +1171,29 @@
         async function caricaImpostazioniNative() {
             if (!sessionToken) return;
             try {
-                const [resConf, resContr, resTimbl, resAss, resAvv] = await Promise.all([
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
+                if (!cacheDatiGlobali || Date.now() < timestampCacheDatiGlobali || Date.now() - timestampCacheDatiGlobali >= CACHE_CONFIGURAZIONI_TTL_MS) {
+                    await inizializzaDatiGlobaliCache();
+                }
+                if (cacheDatiGlobali) {
+                    recordsConfigAppOriginali = cacheDatiGlobali.configApp;
+                    recordsTipiTimbraturaOriginali = cacheDatiGlobali.tipiTimbratura;
+                    recordsTipiAssenzaOriginali = cacheDatiGlobali.tipiAssenza;
+                    generaTabellaConfigAppModificabile(recordsConfigAppOriginali);
+                    generaTabellaTipiTimbraturaModificabile(recordsTipiTimbraturaOriginali);
+                    generaTabellaTipiAssenzaModificabile(recordsTipiAssenzaOriginali);
+                }
+
+                const [resContr, resAvv] = await Promise.all([
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_parametri_contrattuali", token: sessionToken}) }).catch(() => ({ok: false})),
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) }),
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_avvisi", token: sessionToken}) })
                 ]);
 
-                if (resConf.ok) {
-                    const d = await resConf.json();
-                    recordsConfigAppOriginali = d.records || [];
-                    generaTabellaConfigAppModificabile(recordsConfigAppOriginali);
-                }
                 if (resContr && resContr.ok) {
                     const d = await resContr.json();
                     recordsContrattualiOriginali = d.records || [];
                     generaTabellaContrattualiModificabile(recordsContrattualiOriginali);
                 } else {
                     document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Nessun record contrattivo disponibile o limite API raggiunto.</p>`;
-                }
-                if (resTimbl.ok) {
-                    const d = await resTimbl.json();
-                    recordsTipiTimbraturaOriginali = d.records || [];
-                    generaTabellaTipiTimbraturaModificabile(recordsTipiTimbraturaOriginali);
-                }
-                if (resAss.ok) {
-                    const d = await resAss.json();
-                    recordsTipiAssenzaOriginali = d.records || [];
-                    generaTabellaTipiAssenzaModificabile(recordsTipiAssenzaOriginali);
                 }
                 if (resAvv.ok) {
                     const d = await resAvv.json();
@@ -1284,7 +1328,7 @@
             }
             document.getElementById(`tr_timbratura_${id}`).remove();
             mostraAlert("Timbratura rimossa.");
-            localStorage.removeItem('gestionale_cache_globale');
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             caricaImpostazioniNative();
         }
@@ -1338,7 +1382,7 @@
             }
             document.getElementById(`tr_assenza_${id}`).remove();
             mostraAlert("Assenza rimossa.");
-            localStorage.removeItem('gestionale_cache_globale');
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             caricaImpostazioniNative();
         }
@@ -1380,7 +1424,7 @@
                     return;
                 }
             }
-            localStorage.removeItem('gestionale_cache_globale');
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Regole app aggiornate con successo!");
             caricaImpostazioniNative();
@@ -1456,7 +1500,7 @@
                     return;
                 }
             }
-            localStorage.removeItem('gestionale_cache_globale');
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di timbratura aggiornati con successo!");
             caricaImpostazioniNative();
@@ -1495,7 +1539,7 @@
                     return;
                 }
             }
-            localStorage.removeItem('gestionale_cache_globale');
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di assenza aggiornati con successo!");
             caricaImpostazioniNative();
