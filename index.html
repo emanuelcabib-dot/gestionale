@@ -6,6 +6,9 @@
     <title>Pannello controllo lavoro</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.19/locales-all.global.min.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
@@ -39,9 +42,10 @@
         .mobile-btn-icon { background: none; border: none; color: white; font-size: 22px; cursor: pointer; padding: 5px; }
         
         /* MENU TENDINA MOBILE */
-        .mobile-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; width: 100%; background-color: #2c3e50; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 999; }
+        .mobile-dropdown-menu { display: none; position: fixed; inset: 65px 0 0; width: 100%; box-sizing: border-box; background-color: #2c3e50; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 999; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
         .mobile-dropdown-menu .tab-btn { padding: 15px 20px; border-bottom: 1px solid #34495e; }
         .mobile-dropdown-menu .tab-btn.active { border-left: 5px solid #fff; border-bottom: 1px solid #34495e; padding-left: 15px; }
+        .mobile-dropdown-logout { margin-top: auto; flex-shrink: 0; border-top: 1px solid #34495e !important; color: #e74c3c !important; font-weight: bold !important; }
 
         .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; background-color: #f4f7f6; height: 100vh; box-sizing: border-box; }
         h2 { color: #34495e; margin-top: 0; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
@@ -63,6 +67,20 @@
         .filtri-bar { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 20px; }
         .filtri-bar .form-group { margin-bottom: 0; min-width: 150px; flex: 1; }
         .filtri-bar select { padding: 9px; font-size: 14px; }
+        #calendar { min-height: 600px; }
+        #calendar .fc-event { cursor: pointer; }
+        .dashboard-toolbar { display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
+        .dashboard-filters { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+        .dashboard-filters .form-group { margin:0; min-width:150px; }
+        .dashboard-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(155px, 1fr)); gap:14px; margin:18px 0 25px; }
+        .dashboard-kpi { background:#fff; border:1px solid #e0e0e0; border-left:5px solid #3498db; border-radius:8px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,.04); }
+        .dashboard-kpi h4 { color:#566573; font-size:13px; margin:0 0 10px; }
+        .dashboard-kpi strong { color:#2c3e50; font-size:23px; }
+        .dashboard-chart-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap:18px; }
+        .dashboard-chart-card { min-width:0; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:16px; }
+        .dashboard-chart-card h3 { margin:0 0 15px; font-size:16px; border:0; }
+        .dashboard-chart-wrap { position:relative; height:280px; }
+        .dashboard-chart-wrap.tall { height:340px; }
 
         .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 25px; }
         .home-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); position: relative; border-left: 5px solid #3498db; }
@@ -89,6 +107,9 @@
             .main-content { padding: 15px; height: auto; overflow: visible; }
             .section { padding: 15px; }
             .btn-submit { width: 100%; }
+            #calendar { min-height: 500px; }
+            .dashboard-refresh { width:100%; }
+            .dashboard-chart-wrap { height:250px; }
         }
     </style>
 </head>
@@ -112,6 +133,17 @@
             <div style="display:flex; gap:10px; justify-content:center;">
                 <button id="btnConfirmAnnulla" style="background-color:#7f8c8d; color:white; padding:10px 20px; border:none; border-radius:4px; cursor:pointer; font-size:15px;">Annulla</button>
                 <button id="btnConfirmOk" style="background-color:#2ecc71; color:white; padding:10px 20px; border:none; border-radius:4px; cursor:pointer; font-size:15px;">Conferma</button>
+            </div>
+        </div>
+    </div>
+    <div id="calendarQuickAddModal" role="dialog" aria-modal="true" aria-labelledby="calendarQuickAddTitle" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;">
+        <div style="background:white; padding:24px; border-radius:8px; max-width:420px; width:100%; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
+            <h3 id="calendarQuickAddTitle" style="margin-top:0;">Nuova registrazione</h3>
+            <p id="calendarQuickAddDate" style="color:#34495e;"></p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="button" onclick="aggiungiDaCalendario('presenze')" style="background:#27ae60; flex:1;">🕒 Timbratura</button>
+                <button type="button" onclick="aggiungiDaCalendario('assenze')" style="background:#e67e22; flex:1;">🌴 Assenza</button>
+                <button type="button" onclick="chiudiModaleCalendario()" style="background:#7f8c8d;">Annulla</button>
             </div>
         </div>
     </div>
@@ -162,11 +194,11 @@
                 <button class="tab-btn active" onclick="navigaASezione('home'); toggleMobileMenu();">🏠 Riepilogo e Avvisi</button>
                 <button class="tab-btn" onclick="navigaASezione('timbratura'); toggleMobileMenu();">🕒 Timbratura giornata</button>
                 <button class="tab-btn" onclick="navigaASezione('ferie'); toggleMobileMenu();">🌴 Ferie, permessi e malattia</button>
+                <button class="tab-btn" onclick="navigaASezione('calendario'); toggleMobileMenu();">📅 Vista Calendario</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel'); toggleMobileMenu();">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard'); toggleMobileMenu();">📊 Dashboard grafica</button>
-                <button class="tab-btn" onclick="navigaASezione('impostazioni'); toggleMobileMenu();">⚙️ Impostazioni parametri</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico(); toggleMobileMenu();">📜 Storico e Modifiche</button>
-                <button class="tab-btn" onclick="logout()" style="color:#e74c3c; font-weight:bold;">🚪 Esci</button>
+                <button class="tab-btn mobile-dropdown-logout" onclick="logout()">🚪 Esci</button>
             </div>
         </div>
 
@@ -177,6 +209,7 @@
                 <button class="tab-btn active" onclick="navigaASezione('home')">🏠 Riepilogo e Avvisi</button>
                 <button class="tab-btn" onclick="navigaASezione('timbratura')">🕒 Timbratura giornata</button>
                 <button class="tab-btn" onclick="navigaASezione('ferie')">🌴 Ferie, permessi e malattia</button>
+                <button class="tab-btn" onclick="navigaASezione('calendario')">📅 Vista Calendario</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel')">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard')">📊 Dashboard grafica</button>
                 <button class="tab-btn" onclick="navigaASezione('impostazioni')">⚙️ Impostazioni parametri</button>
@@ -291,60 +324,194 @@
             <!-- REPORT PANEL -->
             <div id="report_panel" class="section">
                 <h2>Generazione Report</h2>
-                <h3>1. Report Ferie e Permessi — Mensile</h3>
-                <form id="formReport" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
-                    <div class="form-group">
-                        <label for="rep_anno">Anno:</label>
-                        <select id="rep_anno" class="select-anno-mensile" required></select>
-                    </div>
-                    <div class="form-group">
-                        <label for="rep_mese">Mese:</label>
-                        <select id="rep_mese" required>
-                            <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
-                        </select>
-                    </div>
-                    <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile (Assenze)</button>
-                </form>
+                <div class="settings-tabs">
+                    <button type="button" class="settings-tab-btn active" onclick="switchReportTab(event, 'paneReportAssenzeMensile')">🌴 Assenze — Mensile</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportAssenzeAnnuale')">🌴 Assenze — Annuale</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportTimbratureMensile')">🕒 Timbrature — Mensile</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportTimbratureAnnuale')">🕒 Timbrature — Annuale</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportVerificaBustePaga')">💶 Verifica Buste Paga</button>
+                </div>
 
-                <h3>2. Report Ferie e Permessi — Annuale</h3>
-                <form id="formReportAnnuale" onsubmit="event.preventDefault(); generaPDFAnnuale();">
-                    <div class="form-group">
-                        <label for="rep_anno_annual">Anno:</label>
-                        <select id="rep_anno_annual" class="select-anno" required></select>
+                <div id="paneReportAssenzeMensile" class="settings-pane report-pane active">
+                    <form id="formReport" class="filtri-bar" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
+                        <div class="form-group">
+                            <label for="rep_anno">Anno:</label>
+                            <select id="rep_anno" class="select-anno-mensile select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="rep_mese">Mese:</label>
+                            <select id="rep_mese" onchange="aggiornaAnteprimaReport()" required>
+                                <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_assenze_mensile">Ordine:</label>
+                            <select id="report_ordinamento_assenze_mensile" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile (Assenze)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaAssenzeMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
                     </div>
-                    <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale (Assenze)</button>
-                </form>
+                </div>
 
-                <hr style="margin: 35px 0; border: 0; border-top: 2px solid #ecf0f1;">
+                <div id="paneReportAssenzeAnnuale" class="settings-pane report-pane">
+                    <form id="formReportAnnuale" class="filtri-bar" onsubmit="event.preventDefault(); generaPDFAnnuale();">
+                        <div class="form-group">
+                            <label for="rep_anno_annual">Anno:</label>
+                            <select id="rep_anno_annual" class="select-anno select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_assenze_annuale">Ordine:</label>
+                            <select id="report_ordinamento_assenze_annuale" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale (Assenze)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaAssenzeAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
 
-                <h3>3. Report Timbrature — Mensile</h3>
-                <form id="formReportTimbratureMensile" onsubmit="event.preventDefault(); generaPDFTimbratureMensile();">
-                    <div class="form-group">
-                        <label for="rep_timb_anno">Anno:</label>
-                        <select id="rep_timb_anno" class="select-anno-mensile" required></select>
+                <div id="paneReportTimbratureMensile" class="settings-pane report-pane">
+                    <form id="formReportTimbratureMensile" class="filtri-bar" onsubmit="event.preventDefault(); generaPDFTimbratureMensile();">
+                        <div class="form-group">
+                            <label for="rep_timb_anno">Anno:</label>
+                            <select id="rep_timb_anno" class="select-anno-mensile select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="rep_timb_mese">Mese:</label>
+                            <select id="rep_timb_mese" onchange="aggiornaAnteprimaReport()" required>
+                                <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_timbrature_mensile">Ordine:</label>
+                            <select id="report_ordinamento_timbrature_mensile" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReportTimbMensile" class="btn-submit" style="background-color: #2980b9;">Genera PDF Mensile (Timbrature)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaTimbratureMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
                     </div>
-                    <div class="form-group">
-                        <label for="rep_timb_mese">Mese:</label>
-                        <select id="rep_timb_mese" required>
-                            <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
-                        </select>
-                    </div>
-                    <button type="submit" id="btnReportTimbMensile" class="btn-submit" style="background-color: #2980b9;">Genera PDF Mensile (Timbrature)</button>
-                </form>
+                </div>
 
-                <h3>4. Report Timbrature — Annuale</h3>
-                <form id="formReportTimbratureAnnuale" onsubmit="event.preventDefault(); generaPDFTimbratureAnnuale();">
-                    <div class="form-group">
-                        <label for="rep_timb_anno_annual">Anno:</label>
-                        <select id="rep_timb_anno_annual" class="select-anno" required></select>
+                <div id="paneReportTimbratureAnnuale" class="settings-pane report-pane">
+                    <form id="formReportTimbratureAnnuale" class="filtri-bar" onsubmit="event.preventDefault(); generaPDFTimbratureAnnuale();">
+                        <div class="form-group">
+                            <label for="rep_timb_anno_annual">Anno:</label>
+                            <select id="rep_timb_anno_annual" class="select-anno select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_timbrature_annuale">Ordine:</label>
+                            <select id="report_ordinamento_timbrature_annuale" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReportTimbAnnual" class="btn-submit" style="background-color: #16a085;">Genera PDF Annuale (Timbrature)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaTimbratureAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
                     </div>
-                    <button type="submit" id="btnReportTimbAnnual" class="btn-submit" style="background-color: #16a085;">Genera PDF Annuale (Timbrature)</button>
-                </form>
+                </div>
+
+                <div id="paneReportVerificaBustePaga" class="settings-pane report-pane">
+                    <h3>Verifica residui in busta paga</h3>
+                    <p>Inserisci i residui riportati in busta paga. I valori reali e le discrepanze sono calcolati da Grist.</p>
+                    <form id="formVerificaBustePaga" class="filtri-bar" onsubmit="event.preventDefault(); salvaVerificaBustaPaga();">
+                        <div class="form-group">
+                            <label for="verificaBusteAnno">Anno:</label>
+                            <input type="number" id="verificaBusteAnno" min="1900" max="9999" step="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="verificaBusteMese">Mese:</label>
+                            <select id="verificaBusteMese" required>
+                                <option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="verificaBusteFerie">Ferie residue in busta paga:</label>
+                            <input type="number" id="verificaBusteFerie" step="any" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="verificaBustePermessi">Permessi residui in busta paga:</label>
+                            <input type="number" id="verificaBustePermessi" step="any" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn-submit">💾 Salva verifica</button>
+                            <button type="button" onclick="generaPDFVerificaBustePaga()" style="background:#9b59b6;">📄 Esporta PDF</button>
+                        </div>
+                    </form>
+                </div>
             </div>
 
-            <!-- DASHBOARD GRIST IFRAME -->
-            <div id="dashboard" class="section" style="padding:0; background:transparent; border:none; box-shadow:none;">
-                <iframe src="https://gestionale-lavoro-emanuel-00.getgrist.com/9vHK9LitS9R2/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
+            <!-- CALENDARIO -->
+            <div id="calendario" class="section">
+                <h2>Vista Calendario</h2>
+                <p>Consulta timbrature e assenze registrate. Seleziona un giorno per aggiungere una registrazione.</p>
+                <div id="calendar" aria-label="Calendario di presenze e assenze"></div>
+            </div>
+
+            <!-- DASHBOARD NATIVA -->
+            <div id="dashboard" class="section">
+                <div class="dashboard-toolbar">
+                    <div>
+                        <h2 style="margin-bottom:5px;">Dashboard grafica</h2>
+                        <p style="margin:0; color:#7f8c8d;">Riepiloghi aggiornati direttamente dai registri.</p>
+                    </div>
+                    <div class="dashboard-filters">
+                        <div class="form-group">
+                            <label for="dashboardAnno">Anno</label>
+                            <select id="dashboardAnno" onchange="aggiornaDashboard()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dashboardMese">Mese</label>
+                            <select id="dashboardMese" onchange="aggiornaDashboard()"></select>
+                        </div>
+                        <button type="button" class="dashboard-refresh" onclick="caricaDashboard()">↻ Aggiorna dati</button>
+                    </div>
+                </div>
+                <p id="dashboardStato" role="status" style="color:#7f8c8d;">Caricamento dati dashboard...</p>
+                <h3 style="margin-top:20px;">Contatori annuali</h3>
+                <div class="dashboard-kpi-grid">
+                    <div class="dashboard-kpi" style="border-left-color:#27ae60;"><h4>Ferie maturate</h4><strong id="kpiFerieMaturate">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#e67e22;"><h4>Ferie godute</h4><strong id="kpiFerieGodute">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#2980b9;"><h4>Ferie rimanenti</h4><strong id="kpiFerieResidue">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#e74c3c;"><h4>Ferie scadute (saldo negativo)</h4><strong id="kpiFerieScadute">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#8e44ad;"><h4>Permessi rimanenti</h4><strong id="kpiPermessiResidui">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#c0392b;"><h4>Malattia nell'anno</h4><strong id="kpiMalattiaAnno">—</strong></div>
+                </div>
+                <h3>Contatori mensili</h3>
+                <div class="dashboard-kpi-grid">
+                    <div class="dashboard-kpi" style="border-left-color:#f39c12;"><h4>Ferie del mese</h4><strong id="kpiFerieMese">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#9b59b6;"><h4>Permessi del mese</h4><strong id="kpiPermessiMese">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#e74c3c;"><h4>Malattia del mese</h4><strong id="kpiMalattiaMese">—</strong></div>
+                </div>
+                <p id="dashboardStatistiche" style="color:#566573;"></p>
+                <div class="dashboard-chart-grid">
+                    <article class="dashboard-chart-card"><h3>Giorni lavorati per anno</h3><div class="dashboard-chart-wrap"><canvas id="chartGiorniAnno" aria-label="Grafico giorni lavorati per anno"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Giorni lavorati per mese</h3><div class="dashboard-chart-wrap"><canvas id="chartGiorniMese" aria-label="Grafico giorni lavorati per mese"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Ore lavorate per giorno</h3><div class="dashboard-chart-wrap tall"><canvas id="chartOreGiorno" aria-label="Grafico ore lavorate per giorno"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Ferie, permessi e malattia per anno</h3><div class="dashboard-chart-wrap"><canvas id="chartAssenzeAnno" aria-label="Grafico assenze per anno"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Ferie, permessi e malattia per mese</h3><div class="dashboard-chart-wrap"><canvas id="chartAssenzeMese" aria-label="Grafico assenze per mese"></canvas></div></article>
+                </div>
             </div>
 
             <!-- IMPOSTAZIONI PARAMETRI -->
@@ -430,6 +597,12 @@
                             <option value="TUTTI">Tutti i giorni</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="storico_ordinamento">Ordine:</label>
+                        <select id="storico_ordinamento" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                            <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                        </select>
+                    </div>
                     <div>
                         <button type="button" onclick="esportaPDFStoricoFiltrato()" style="background-color: #8e44ad; padding: 10px 18px; font-size: 14px; font-weight: bold; color:white; border:none; border-radius:4px; cursor:pointer;">📄 Esporta PDF Filtrato</button>
                     </div>
@@ -471,8 +644,17 @@
 
     <script>
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
+        const CACHE_CONFIGURAZIONI_KEY = 'gestionale_cache_globale';
+        const CACHE_CONFIGURAZIONI_TIMESTAMP_KEY = 'gestionale_cache_ts';
+        const CACHE_CONFIGURAZIONI_TTL_MS = 24 * 60 * 60 * 1000;
         let sessionToken = "";
         let cacheDatiGlobali = null;
+        let timestampCacheDatiGlobali = 0;
+        let istanzaCalendario = null;
+        let dataCalendarioSelezionata = null;
+        let chartsDashboard = {};
+        let datiDashboard = null;
+        let richiestaDashboard = 0;
         let eventiGiornoCorrente = [];
         let configAppCache = {};
         let recordsConfigAppOriginali = [];
@@ -484,6 +666,7 @@
         let listaTipiTimbraturaGrist = [];
         let listaTipiAssenzaGrist = [];
         let modalitaInserimentoPassato = false;
+        let tipoInserimentoPassato = null;
 
         async function apiFetch(url, options) {
             const banner = document.getElementById('globalApiBanner');
@@ -584,7 +767,213 @@
             document.getElementById('mobileDropdownMenu').style.display = 'none';
         }
 
+        function resetMascheraPresenze() {
+            idRigaInModificaPresenze = null;
+            if (tipoInserimentoPassato === 'presenze') {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            }
+            const form = document.getElementById('formPresenze');
+            form.reset();
+
+            const oggiStr = getOggiInLocale();
+            const dataInput = document.getElementById('p_data');
+            dataInput.type = 'hidden';
+            dataInput.removeAttribute('min');
+            dataInput.removeAttribute('max');
+            dataInput.value = oggiStr;
+            const dataEstesa = document.getElementById('p_data_estesa');
+            dataEstesa.style.display = 'block';
+            dataEstesa.innerText = formattaDataEstesaItaliana(oggiStr);
+
+            document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
+            document.getElementById('btnEliminaPresenza').style.display = 'none';
+            document.getElementById('btnAnnullaModificaPresenza').style.display = 'none';
+            document.getElementById('bannerFestivoPresenza').style.display = 'none';
+            document.getElementById('bannerAvvisoOrario').style.display = 'none';
+            document.querySelectorAll('#p_evento option').forEach(option => { option.disabled = false; });
+            eventiGiornoCorrente = [];
+            setStatoCampiTimbratura(false, '');
+            setOrarioAttuale();
+            verificaControlliOrarioDinamici();
+        }
+
+        function resetMascheraAssenze() {
+            idRigaInModificaAssenze = null;
+            if (tipoInserimentoPassato === 'assenze') {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            }
+            document.getElementById('formRegistro').reset();
+
+            const dataInput = document.getElementById('r_data');
+            dataInput.min = getOggiInLocale();
+            dataInput.removeAttribute('max');
+            dataInput.value = getOggiInLocale();
+            document.getElementById('r_quantita').value = '8';
+
+            document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
+            document.getElementById('btnEliminaAssenza').style.display = 'none';
+            document.getElementById('btnAnnullaModificaAssenza').style.display = 'none';
+            document.getElementById('bannerFestivoAssenza').style.display = 'none';
+        }
+
+        function inizializzaCalendario() {
+            if (!window.FullCalendar) {
+                mostraAlert("Il calendario non è disponibile: impossibile caricare FullCalendar.");
+                return;
+            }
+            const contenitore = document.getElementById('calendar');
+            if (!istanzaCalendario) {
+                istanzaCalendario = new FullCalendar.Calendar(contenitore, {
+                    initialView: 'dayGridMonth',
+                    locale: 'it',
+                    height: 'auto',
+                    headerToolbar: {
+                        left: 'prev,next today',
+                        center: 'title',
+                        right: ''
+                    },
+                    buttonText: { today: 'oggi' },
+                    eventOrder: 'start,-duration,allDay,title',
+                    eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+                    dateClick: info => apriModaleCreazioneCalendario(info.dateStr),
+                    eventClick: info => {
+                        const dettagli = info.event.extendedProps;
+                        const righe = [info.event.title];
+                        if (dettagli.quantita) righe.push(`Quantità: ${dettagli.quantita}`);
+                        if (dettagli.note) righe.push(`Note: ${dettagli.note}`);
+                        mostraAlert(righe.join('\n'));
+                    },
+                    events: async (info, successCallback, failureCallback) => {
+                        try {
+                            const primoAnno = info.start.getFullYear();
+                            const ultimoAnno = new Date(info.end.getTime() - 1).getFullYear();
+                            const anni = Array.from({ length: ultimoAnno - primoAnno + 1 }, (_, indice) => primoAnno + indice);
+                            const risultati = await Promise.all(anni.map(async anno => {
+                                const response = await apiFetch(WORKER_URL, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno: String(anno) })
+                                });
+                                if (!response.ok) throw new Error(`Caricamento calendario non riuscito (HTTP ${response.status}).`);
+                                const dati = await response.json();
+                                if (!dati.success) throw new Error("Il Worker non ha restituito i dati del calendario.");
+                                return { presenze: dati.presenze || [], assenze: dati.assenze || [] };
+                            }));
+
+                            const eventi = [];
+                            risultati.forEach((dati, indiceAnno) => {
+                                dati.presenze.forEach((record, indiceRecord) => {
+                                    const campi = record.fields || {};
+                                    if (campi.Data == null || campi.Data === '') return;
+                                    const parti = estraiPartiData(campi.Data);
+                                    const dataIso = `${parti.aa}-${parti.mm}-${parti.gg}`;
+                                    const evento = String(campi.Evento || 'Timbratura');
+                                    const eventoNormalizzato = evento.toLowerCase();
+                                    const ore = String(Number.parseInt(campi.Ora, 10) || 0).padStart(2, '0');
+                                    const minuti = String(Number.parseInt(campi.Minuti, 10) || 0).padStart(2, '0');
+                                    const colore = eventoNormalizzato.includes('uscita') ? '#2980b9'
+                                        : eventoNormalizzato.includes('pausa') ? '#8e44ad'
+                                            : eventoNormalizzato.includes('ingresso') || eventoNormalizzato.includes('entrata') ? '#27ae60' : '#2ecc71';
+                                    eventi.push({
+                                        id: `presenza-${record.id ?? `${anni[indiceAnno]}-${indiceRecord}`}`,
+                                        title: `${ore}:${minuti} ${evento}`,
+                                        start: `${dataIso}T${ore}:${minuti}:00`,
+                                        backgroundColor: colore,
+                                        borderColor: colore,
+                                        extendedProps: { tipo: 'presenza', note: campi.Note || '' }
+                                    });
+                                });
+                                dati.assenze.forEach((record, indiceRecord) => {
+                                    const campi = record.fields || {};
+                                    if (campi.Data == null || campi.Data === '') return;
+                                    const parti = estraiPartiData(campi.Data);
+                                    const dataIso = `${parti.aa}-${parti.mm}-${parti.gg}`;
+                                    const tipoAssenza = String(campi.Tipo_Assenza || 'Assenza');
+                                    const tipoNormalizzato = tipoAssenza.toLowerCase();
+                                    const colore = tipoNormalizzato.includes('malattia') ? '#e74c3c'
+                                        : tipoNormalizzato.includes('ferie') ? '#f39c12'
+                                            : tipoNormalizzato.includes('permess') ? '#9b59b6' : '#e67e22';
+                                    eventi.push({
+                                        id: `assenza-${record.id ?? `${anni[indiceAnno]}-${indiceRecord}`}`,
+                                        title: `${tipoAssenza}${campi.Quantita ? ` (${campi.Quantita})` : ''}`,
+                                        start: dataIso,
+                                        allDay: true,
+                                        backgroundColor: colore,
+                                        borderColor: colore,
+                                        extendedProps: { tipo: 'assenza', quantita: campi.Quantita, note: campi.Note || '' }
+                                    });
+                                });
+                            });
+                            successCallback(eventi);
+                        } catch (error) {
+                            console.error("Errore caricamento eventi calendario:", error);
+                            mostraAlert("Impossibile caricare gli eventi del calendario. Riprova più tardi.");
+                            failureCallback(error);
+                        }
+                    }
+                });
+                istanzaCalendario.render();
+            } else {
+                istanzaCalendario.updateSize();
+                istanzaCalendario.refetchEvents();
+            }
+        }
+
+        function apriModaleCreazioneCalendario(dataIso) {
+            dataCalendarioSelezionata = dataIso;
+            document.getElementById('calendarQuickAddDate').innerText = formattaDataEstesaItaliana(dataIso);
+            document.getElementById('calendarQuickAddModal').style.display = 'flex';
+        }
+
+        function chiudiModaleCalendario() {
+            dataCalendarioSelezionata = null;
+            document.getElementById('calendarQuickAddModal').style.display = 'none';
+        }
+
+        function aggiungiDaCalendario(tipo) {
+            const dataIso = dataCalendarioSelezionata;
+            chiudiModaleCalendario();
+            if (!dataIso) return;
+
+            resetMascheraPresenze();
+            resetMascheraAssenze();
+            modalitaInserimentoPassato = true;
+            tipoInserimentoPassato = tipo;
+            if (tipo === 'presenze') {
+                const dataInput = document.getElementById('p_data');
+                dataInput.type = 'date';
+                dataInput.removeAttribute('min');
+                dataInput.removeAttribute('max');
+                dataInput.value = dataIso;
+                document.getElementById('p_data_estesa').style.display = 'none';
+                document.getElementById('btnAnnullaModificaPresenza').style.display = 'inline-block';
+                navigaASezione('timbratura');
+            } else if (tipo === 'assenze') {
+                const dataInput = document.getElementById('r_data');
+                dataInput.removeAttribute('min');
+                dataInput.removeAttribute('max');
+                dataInput.value = dataIso;
+                document.getElementById('btnAnnullaModificaAssenza').style.display = 'inline-block';
+                navigaASezione('ferie');
+            } else {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            }
+        }
+
         function navigaASezione(sectionId) {
+            const tipoSezione = sectionId === 'timbratura' ? 'presenze' : sectionId === 'ferie' ? 'assenze' : null;
+            if (modalitaInserimentoPassato && tipoInserimentoPassato !== tipoSezione) {
+                modalitaInserimentoPassato = false;
+                tipoInserimentoPassato = null;
+            } else if (!modalitaInserimentoPassato) {
+                tipoInserimentoPassato = null;
+            }
+            if (sectionId !== 'timbratura') resetMascheraPresenze();
+            if (sectionId !== 'ferie') resetMascheraAssenze();
+
             const sections = document.getElementsByClassName("section");
             for (let i = 0; i < sections.length; i++) { sections[i].style.display = "none"; }
             const tabButtons = document.getElementsByClassName("tab-btn");
@@ -601,28 +990,299 @@
             if (sectionId === 'home') {
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
-                if (!idRigaInModificaPresenze && !modalitaInserimentoPassato) {
-                    const oggiStr = getOggiInLocale();
-                    document.getElementById('p_data').type = 'hidden';
-                    document.getElementById('p_data').value = oggiStr;
-                    document.getElementById('p_data_estesa').style.display = 'block';
-                    document.getElementById('p_data_estesa').innerText = formattaDataEstesaItaliana(oggiStr);
-                    setOrarioAttuale();
-                    document.getElementById('p_note').value = "";
+                if (!idRigaInModificaPresenze && !(modalitaInserimentoPassato && tipoInserimentoPassato === 'presenze')) {
+                    resetMascheraPresenze();
                 }
                 verificaStatoTimbraturaGiornata();
                 gestisciBannerFestivoPresenze();
             } else if (sectionId === 'ferie') {
-                const rDataInput = document.getElementById('r_data');
-                if (!idRigaInModificaAssenze && !modalitaInserimentoPassato) {
-                    const oggiStr = getOggiInLocale();
-                    rDataInput.min = oggiStr;
-                    rDataInput.removeAttribute('max');
-                    rDataInput.value = oggiStr;
-                    document.getElementById('r_quantita').value = "8";
-                    document.getElementById('r_note').value = "";
+                if (!idRigaInModificaAssenze && !(modalitaInserimentoPassato && tipoInserimentoPassato === 'assenze')) {
+                    resetMascheraAssenze();
                 }
                 gestisciBannerFestivoAssenze();
+            } else if (sectionId === 'report_panel') {
+                if (document.querySelector('#report_panel .report-pane.active')?.id === 'paneReportVerificaBustePaga') {
+                    inizializzaFormVerificaBustePaga();
+                } else {
+                    caricaAnteprimaReport();
+                }
+            } else if (sectionId === 'calendario') {
+                inizializzaCalendario();
+            } else if (sectionId === 'dashboard') {
+                caricaDashboard();
+            }
+        }
+
+        function dataPartiDashboard(valore) {
+            if (typeof valore === 'string') {
+                const iso = valore.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (iso) return { aa: iso[1], mm: iso[2], gg: iso[3] };
+            }
+            const parti = estraiPartiData(valore);
+            if (!/^\d{4}$/.test(parti.aa) || Number(parti.mm) < 1 || Number(parti.mm) > 12 || Number(parti.gg) < 1 || Number(parti.gg) > 31) return null;
+            return parti;
+        }
+
+        function numeroDashboard(valore) {
+            const numero = Number.parseFloat(String(valore ?? 0).replace(',', '.'));
+            return Number.isFinite(numero) ? numero : 0;
+        }
+
+        function aggregaPresenzeDashboard(records) {
+            const giorni = new Map();
+            (records || []).forEach(record => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                if (!parti || !campi.Evento) return;
+                const data = `${parti.aa}-${parti.mm}-${parti.gg}`;
+                if (!giorni.has(data)) giorni.set(data, {});
+                const ora = Number.parseInt(campi.Ora, 10) || 0;
+                const minuti = Number.parseInt(campi.Minuti, 10) || 0;
+                giorni.get(data)[campi.Evento] = ora * 60 + minuti;
+            });
+
+            const riepilogo = { anni: {}, mesi: {}, oreGiornaliere: [] };
+            giorni.forEach((eventi, data) => {
+                const [anno, mese] = data.split('-');
+                const chiaveMese = `${anno}-${mese}`;
+                const annoDati = riepilogo.anni[anno] ||= { giorni: 0, ore: 0 };
+                const meseDati = riepilogo.mesi[chiaveMese] ||= { giorni: 0, ore: 0 };
+                let ore = 0;
+                if (eventi.Cantiere !== undefined && eventi.Ingresso === undefined) {
+                    annoDati.giorni++;
+                    meseDati.giorni++;
+                } else if (eventi.Ingresso !== undefined && eventi.Uscita !== undefined) {
+                    annoDati.giorni++;
+                    meseDati.giorni++;
+                    const minutiLordo = Math.max(0, eventi.Uscita - eventi.Ingresso);
+                    let minutiPausa = 0;
+                    if (eventi['Inizio Pausa'] !== undefined && eventi['Fine Pausa'] !== undefined) {
+                        minutiPausa = Math.max(0, eventi['Fine Pausa'] - eventi['Inizio Pausa']);
+                    } else if (minutiLordo > 360) {
+                        minutiPausa = 60;
+                    }
+                    ore = Math.max(0, minutiLordo - minutiPausa) / 60;
+                    annoDati.ore += ore;
+                    meseDati.ore += ore;
+                }
+                if (ore > 0) riepilogo.oreGiornaliere.push({ data, ore });
+            });
+            riepilogo.oreGiornaliere.sort((a, b) => a.data.localeCompare(b.data));
+            return riepilogo;
+        }
+
+        function aggregaAssenzeDashboard(records) {
+            const riepilogo = { anni: {}, mesi: {} };
+            (records || []).forEach(record => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                if (!parti) return;
+                const tipo = String(campi.Tipo_Assenza || '').toLowerCase().trim();
+                const categoria = tipo.includes('ferie') ? 'ferie'
+                    : tipo.includes('permess') ? 'permessi'
+                        : tipo.includes('malattia') ? 'malattia' : null;
+                if (!categoria) return;
+                const quantita = numeroDashboard(campi.Quantita);
+                const chiaveMese = `${parti.aa}-${parti.mm}`;
+                riepilogo.anni[parti.aa] ||= { ferie: 0, permessi: 0, malattia: 0 };
+                riepilogo.mesi[chiaveMese] ||= { ferie: 0, permessi: 0, malattia: 0 };
+                riepilogo.anni[parti.aa][categoria] += quantita;
+                riepilogo.mesi[chiaveMese][categoria] += quantita;
+            });
+            return riepilogo;
+        }
+
+        function aggiornaGraficoDashboard(chiave, canvasId, tipo, etichette, serie, titoloAsse) {
+            if (!window.Chart) throw new Error("Chart.js non è disponibile.");
+            const datasets = serie.map((dataset, indice) => ({
+                ...dataset,
+                borderWidth: tipo === 'line' ? 2 : 1,
+                borderRadius: tipo === 'bar' ? 4 : 0,
+                tension: 0.25,
+                fill: false
+            }));
+            const configurazione = {
+                type: tipo,
+                data: { labels: etichette, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: titoloAsse } }
+                    }
+                }
+            };
+            if (chartsDashboard[chiave]) {
+                chartsDashboard[chiave].data = configurazione.data;
+                chartsDashboard[chiave].options = configurazione.options;
+                chartsDashboard[chiave].update();
+            } else {
+                chartsDashboard[chiave] = new Chart(document.getElementById(canvasId), configurazione);
+            }
+        }
+
+        function formattaValoreDashboard(valore, unita) {
+            return `${valore.toLocaleString('it-IT', { maximumFractionDigits: 2 })} ${unita}`;
+        }
+
+        function aggiornaDashboard() {
+            if (!datiDashboard) return;
+            const anno = document.getElementById('dashboardAnno').value;
+            const mese = document.getElementById('dashboardMese').value;
+            const presenze = aggregaPresenzeDashboard(datiDashboard.presenze);
+            const assenze = aggregaAssenzeDashboard(datiDashboard.assenze);
+            const anniPresenze = Object.keys(presenze.anni).sort();
+            const anniAssenze = Object.keys(assenze.anni).sort();
+            const anni = [...new Set([...anniPresenze, ...anniAssenze])].sort();
+            const mesi = nomiMesi.slice(1);
+            const coloriAssenze = { ferie: '#f39c12', permessi: '#8e44ad', malattia: '#e74c3c' };
+            const formatta = (valore, unita) => formattaValoreDashboard(valore, unita);
+
+            aggiornaGraficoDashboard('giorniAnno', 'chartGiorniAnno', 'bar', anni, [
+                { label: 'Giorni lavorati', data: anni.map(a => presenze.anni[a]?.giorni || 0), backgroundColor: '#27ae60' }
+            ], 'Giorni');
+            aggiornaGraficoDashboard('giorniMese', 'chartGiorniMese', 'bar', mesi, [
+                { label: 'Giorni lavorati', data: mesi.map((_, indice) => presenze.mesi[`${anno}-${String(indice + 1).padStart(2, '0')}`]?.giorni || 0), backgroundColor: '#3498db' }
+            ], 'Giorni');
+            const oreMese = presenze.oreGiornaliere.filter(giorno => giorno.data.startsWith(`${anno}-${mese}-`));
+            aggiornaGraficoDashboard('oreGiorno', 'chartOreGiorno', 'line', oreMese.map(giorno => giorno.data.slice(-2)), [
+                { label: 'Ore nette', data: oreMese.map(giorno => Math.round(giorno.ore * 100) / 100), borderColor: '#16a085', backgroundColor: 'rgba(22,160,133,.18)' }
+            ], 'Ore');
+            aggiornaGraficoDashboard('assenzeAnno', 'chartAssenzeAnno', 'bar', anni, Object.entries(coloriAssenze).map(([categoria, colore]) => ({
+                label: categoria[0].toUpperCase() + categoria.slice(1),
+                data: anni.map(a => assenze.anni[a]?.[categoria] || 0),
+                backgroundColor: colore
+            })), 'Quantità');
+            aggiornaGraficoDashboard('assenzeMese', 'chartAssenzeMese', 'bar', mesi, Object.entries(coloriAssenze).map(([categoria, colore]) => ({
+                label: categoria[0].toUpperCase() + categoria.slice(1),
+                data: mesi.map((_, indice) => assenze.mesi[`${anno}-${String(indice + 1).padStart(2, '0')}`]?.[categoria] || 0),
+                backgroundColor: colore
+            })), 'Quantità');
+            chartsDashboard.giorniMese.options.scales.x = { stacked: false };
+            chartsDashboard.assenzeAnno.options.scales.x = { stacked: true };
+            chartsDashboard.assenzeAnno.options.scales.y.stacked = true;
+            chartsDashboard.assenzeMese.options.scales.x = { stacked: true };
+            chartsDashboard.assenzeMese.options.scales.y.stacked = true;
+            Object.values(chartsDashboard).forEach(chart => chart.update());
+
+            const contatore = (datiDashboard.contatori || []).find(r => Number(r.fields?.Anno) === Number(anno))?.fields || {};
+            const parametri = (datiDashboard.parametri || []).map(r => r.fields || {});
+            let ferieAnnue = 25.92, permessiAnnui = 40, annoValidita = 0;
+            parametri.forEach(p => {
+                const annoInizio = Number(p.Anno_Inizio_Validita) || 0;
+                if (annoInizio <= Number(anno) && annoInizio > annoValidita) {
+                    ferieAnnue = numeroDashboard(p.Ferie_Annuo_Spettante) || ferieAnnue;
+                    permessiAnnui = numeroDashboard(p.Permessi_Annuo_Spettante) || permessiAnnui;
+                    annoValidita = annoInizio;
+                }
+            });
+            ferieAnnue = numeroDashboard(contatore.Ferie_Annuali_Maturate) || ferieAnnue;
+            permessiAnnui = numeroDashboard(contatore.Permessi_Annuali_Maturati) || permessiAnnui;
+            const assenzeAnno = assenze.anni[anno] || { ferie: 0, permessi: 0, malattia: 0 };
+            const ferieGodute = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                const tipo = String(campi.Tipo_Assenza || '').toLowerCase();
+                return parti?.aa === anno && tipo.includes('ferie') && !tipo.includes('liquidat') && !tipo.includes('rettific')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const ferieLiquidate = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('ferie') && String(campi.Tipo_Assenza || '').toLowerCase().includes('liquidat')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const ferieRettificate = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('ferie') && String(campi.Tipo_Assenza || '').toLowerCase().includes('rettific')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const permessiLiquidati = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('permess') && String(campi.Tipo_Assenza || '').toLowerCase().includes('liquidat')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const permessiRettificati = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('permess') && String(campi.Tipo_Assenza || '').toLowerCase().includes('rettific')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const ferieSaldo = numeroDashboard(contatore.Ferie_Anno_Precedente) + ferieAnnue - ferieGodute - ferieLiquidate + ferieRettificate;
+            const permessiGoduti = assenzeAnno.permessi - permessiLiquidati - permessiRettificati;
+            const permessiSaldo = numeroDashboard(contatore.Permessi_Anno_Precedente) + permessiAnnui - permessiGoduti - permessiLiquidati + permessiRettificati;
+            const valori = {
+                kpiFerieMaturate: formatta(ferieAnnue, 'giorni'),
+                kpiFerieGodute: formatta(ferieGodute, 'giorni'),
+                kpiFerieResidue: formatta(ferieSaldo, 'giorni'),
+                kpiFerieScadute: formatta(Math.max(0, -ferieSaldo), 'giorni'),
+                kpiPermessiResidui: formatta(permessiSaldo, 'ore'),
+                kpiMalattiaAnno: formatta(assenzeAnno.malattia, 'giorni'),
+                kpiFerieMese: formatta(assenze.mesi[`${anno}-${mese}`]?.ferie || 0, 'giorni'),
+                kpiPermessiMese: formatta(assenze.mesi[`${anno}-${mese}`]?.permessi || 0, 'ore'),
+                kpiMalattiaMese: formatta(assenze.mesi[`${anno}-${mese}`]?.malattia || 0, 'giorni')
+            };
+            Object.entries(valori).forEach(([id, valore]) => { document.getElementById(id).innerText = valore; });
+            const giorniAnno = presenze.anni[anno]?.giorni || 0;
+            const oreAnno = presenze.anni[anno]?.ore || 0;
+            const giornateCompleteAnno = presenze.oreGiornaliere.filter(giorno => giorno.data.startsWith(`${anno}-`)).length;
+            document.getElementById('dashboardStatistiche').innerText = giorniAnno
+                ? `Totale anno ${anno}: ${giorniAnno} giornate registrate; media ${formatta(giornateCompleteAnno ? oreAnno / giornateCompleteAnno : 0, 'ore')} per giornata completa.`
+                : `Nessuna giornata lavorata registrata per ${anno}.`;
+            document.getElementById('dashboardStato').innerText = `Dati aggiornati: ${new Date().toLocaleString('it-IT')}.`;
+        }
+
+        async function caricaDashboard() {
+            if (!sessionToken) return;
+            const richiesta = ++richiestaDashboard;
+            const stato = document.getElementById('dashboardStato');
+            stato.innerText = 'Caricamento dati dashboard...';
+            try {
+                if (!window.Chart) throw new Error("Chart.js non è disponibile.");
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_dashboard_data", token: sessionToken })
+                });
+                if (!response.ok) throw new Error(`Caricamento dashboard non riuscito (HTTP ${response.status}).`);
+                const dati = await response.json();
+                if (!dati.success) throw new Error(dati.error || "Il Worker non ha restituito i dati della dashboard.");
+                if (richiesta !== richiestaDashboard || document.getElementById('dashboard').style.display === 'none') return;
+                datiDashboard = {
+                    presenze: dati.presenze || [],
+                    assenze: dati.assenze || [],
+                    contatori: dati.contatori || [],
+                    parametri: dati.parametri || []
+                };
+                const selezioneMese = document.getElementById('dashboardMese').value;
+                const anni = new Set([String(new Date().getFullYear())]);
+                [...datiDashboard.presenze, ...datiDashboard.assenze].forEach(record => {
+                    const parti = dataPartiDashboard(record.fields?.Data);
+                    if (parti) anni.add(parti.aa);
+                });
+                datiDashboard.contatori.forEach(record => {
+                    const anno = Number(record.fields?.Anno);
+                    if (Number.isInteger(anno) && anno > 0) anni.add(String(anno));
+                });
+                const selectAnno = document.getElementById('dashboardAnno');
+                const selezioneAnno = selectAnno.value;
+                selectAnno.innerHTML = [...anni].sort((a, b) => Number(b) - Number(a)).map(anno => `<option value="${anno}">${anno}</option>`).join('');
+                selectAnno.value = anni.has(selezioneAnno) ? selezioneAnno : String(new Date().getFullYear());
+                const selectMese = document.getElementById('dashboardMese');
+                if (!selectMese.options.length) {
+                    selectMese.innerHTML = nomiMesi.slice(1).map((nome, indice) => `<option value="${String(indice + 1).padStart(2, '0')}">${nome}</option>`).join('');
+                }
+                selectMese.value = selezioneMese || String(new Date().getMonth() + 1).padStart(2, '0');
+                aggiornaDashboard();
+            } catch (error) {
+                if (richiesta !== richiestaDashboard) return;
+                console.error("Errore caricamento dashboard:", error);
+                stato.innerText = "Impossibile caricare i dati della dashboard. Riprova più tardi.";
+                mostraAlert(error.message || "Impossibile caricare i dati della dashboard.");
             }
         }
 
@@ -657,10 +1317,12 @@
         document.getElementById('r_data').addEventListener('change', gestisciBannerFestivoAssenze);
 
         function apriInserimentoPassato(tipo) {
+            resetMascheraPresenze();
+            resetMascheraAssenze();
             modalitaInserimentoPassato = true;
+            tipoInserimentoPassato = tipo;
             const ieriStr = getIeriInLocale();
             if (tipo === 'presenze') {
-                idRigaInModificaPresenze = null;
                 document.getElementById('p_data_estesa').style.display = 'none';
                 const pData = document.getElementById('p_data');
                 pData.type = 'date';
@@ -671,7 +1333,6 @@
                 document.getElementById('btnAnnullaModificaPresenza').style.display = "inline-block";
                 navigaASezione('timbratura');
             } else {
-                idRigaInModificaAssenze = null;
                 const rData = document.getElementById('r_data');
                 rData.removeAttribute('min');
                 rData.max = ieriStr;
@@ -702,7 +1363,6 @@
 
                     setOrarioAttuale();
                     await inizializzaDatiGlobaliCache();
-                    await caricaDatiHome();
                     navigaASezione('home');
                 } else {
                     errorMessage.style.display = 'block';
@@ -716,21 +1376,60 @@
         function logout() {
             sessionToken = "";
             cacheDatiGlobali = null;
+            timestampCacheDatiGlobali = 0;
             eventiGiornoCorrente = [];
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
+            resetMascheraPresenze();
+            resetMascheraAssenze();
             document.getElementById('companyCode').value = "";
             document.getElementById('mainPanel').style.display = 'none';
             document.getElementById('loginSection').style.display = 'block';
         }
 
-        async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
-            const cacheSalvata = localStorage.getItem('gestionale_cache_globale');
-            const timestampCache = localStorage.getItem('gestionale_cache_ts');
-            const unGiorno = 24 * 60 * 60 * 1000;
+        function invalidaCacheConfigurazioniStatiche() {
+            cacheDatiGlobali = null;
+            timestampCacheDatiGlobali = 0;
+            [CACHE_CONFIGURAZIONI_KEY, CACHE_CONFIGURAZIONI_TIMESTAMP_KEY].forEach(chiave => {
+                try {
+                    localStorage.removeItem(chiave);
+                } catch (error) {
+                    console.warn(`Impossibile rimuovere la cache ${chiave}:`, error);
+                }
+            });
+        }
 
-            if (!forzaAggiornamento && cacheSalvata && timestampCache && (Date.now() - parseInt(timestampCache) < unGiorno)) {
-                cacheDatiGlobali = JSON.parse(cacheSalvata);
+        async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
+            let cacheSalvata = null;
+            let timestampCacheSalvata = 0;
+            try {
+                const cacheSerializzata = localStorage.getItem(CACHE_CONFIGURAZIONI_KEY);
+                const timestampCache = Number(localStorage.getItem(CACHE_CONFIGURAZIONI_TIMESTAMP_KEY));
+                const datiCache = cacheSerializzata ? JSON.parse(cacheSerializzata) : null;
+                const cacheValida = Number.isFinite(timestampCache) &&
+                    timestampCache > 0 &&
+                    Date.now() >= timestampCache &&
+                    Date.now() - timestampCache < CACHE_CONFIGURAZIONI_TTL_MS &&
+                    datiCache &&
+                    Array.isArray(datiCache.configApp) &&
+                    Array.isArray(datiCache.tipiTimbratura) &&
+                    Array.isArray(datiCache.tipiAssenza);
+                if (cacheValida) {
+                    cacheSalvata = datiCache;
+                    timestampCacheSalvata = timestampCache;
+                    timestampCacheDatiGlobali = timestampCache;
+                } else if (cacheSerializzata || timestampCache) {
+                    invalidaCacheConfigurazioniStatiche();
+                }
+            } catch (error) {
+                console.warn("Cache configurazioni non leggibile; verrà ricaricata dal Worker.", error);
+                invalidaCacheConfigurazioniStatiche();
+            }
+
+            if (!forzaAggiornamento && cacheSalvata) {
+                cacheDatiGlobali = cacheSalvata;
                 applicaDatiCacheLocali();
-                return;
+                return true;
             }
 
             try {
@@ -740,30 +1439,42 @@
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) })
                 ]);
 
-                if (resConf.ok && resTimbl.ok && resAss.ok) {
-                    const dConf = await resConf.json();
-                    const dTimbl = await resTimbl.json();
-                    const dAss = await resAss.json();
-
-                    cacheDatiGlobali = {
-                        configApp: dConf.records || [],
-                        tipiTimbratura: dTimbl.records || [],
-                        tipiAssenza: dAss.records || []
-                    };
-
-                    localStorage.setItem('gestionale_cache_globale', JSON.stringify(cacheDatiGlobali));
-                    localStorage.setItem('gestionale_cache_ts', Date.now().toString());
-                    applicaDatiCacheLocali();
-                } else if (cacheSalvata) {
-                    cacheDatiGlobali = JSON.parse(cacheSalvata);
-                    applicaDatiCacheLocali();
+                if (!resConf.ok || !resTimbl.ok || !resAss.ok) {
+                    throw new Error(`Recupero configurazioni non riuscito (HTTP ${[resConf, resTimbl, resAss].find(res => !res.ok).status}).`);
                 }
-            } catch (e) {
-                console.error("Errore inizializzazione cache globale, utilizzo dati locali offline", e);
+
+                const [dConf, dTimbl, dAss] = await Promise.all([resConf.json(), resTimbl.json(), resAss.json()]);
+                cacheDatiGlobali = {
+                    configApp: dConf.records || [],
+                    tipiTimbratura: dTimbl.records || [],
+                    tipiAssenza: dAss.records || []
+                };
+                timestampCacheDatiGlobali = Date.now();
+                applicaDatiCacheLocali();
+                try {
+                    localStorage.setItem(CACHE_CONFIGURAZIONI_KEY, JSON.stringify(cacheDatiGlobali));
+                    localStorage.setItem(CACHE_CONFIGURAZIONI_TIMESTAMP_KEY, String(timestampCacheDatiGlobali));
+                } catch (error) {
+                    console.warn("Impossibile salvare la cache delle configurazioni statiche:", error);
+                    [CACHE_CONFIGURAZIONI_KEY, CACHE_CONFIGURAZIONI_TIMESTAMP_KEY].forEach(chiave => {
+                        try {
+                            localStorage.removeItem(chiave);
+                        } catch (erroreRimozione) {
+                            console.warn(`Impossibile rimuovere la cache ${chiave}:`, erroreRimozione);
+                        }
+                    });
+                }
+                return true;
+            } catch (error) {
+                console.error("Errore nel recupero delle configurazioni statiche.", error);
                 if (cacheSalvata) {
-                    cacheDatiGlobali = JSON.parse(cacheSalvata);
+                    cacheDatiGlobali = cacheSalvata;
+                    timestampCacheDatiGlobali = timestampCacheSalvata;
                     applicaDatiCacheLocali();
+                    return true;
                 }
+                mostraAlert("Impossibile caricare le configurazioni necessarie dal Worker.");
+                return false;
             }
         }
 
@@ -830,6 +1541,11 @@
                 } else {
                     select.value = annoCorrente;
                 }
+            });
+
+            document.querySelectorAll('.select-report-anno').forEach(select => {
+                select.innerHTML = `<option value="${annoCorrente}">${annoCorrente}</option>`;
+                select.value = String(annoCorrente);
             });
 
             const selectStoricoAnno = document.getElementById('storico_anno');
@@ -978,45 +1694,51 @@
         }
 
         function switchSettingsTab(evt, paneId) {
-            document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#impostazioni .settings-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('#impostazioni .settings-tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
             if(paneId) caricaImpostazioniNative();
         }
 
+        function switchReportTab(evt, paneId) {
+            document.querySelectorAll('#report_panel .report-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('#report_panel .settings-tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(paneId).classList.add('active');
+            evt.currentTarget.classList.add('active');
+            if (paneId === 'paneReportVerificaBustePaga') {
+                inizializzaFormVerificaBustePaga();
+            } else {
+                caricaAnteprimaReport();
+            }
+        }
+
         async function caricaImpostazioniNative() {
             if (!sessionToken) return;
             try {
-                const [resConf, resContr, resTimbl, resAss, resAvv] = await Promise.all([
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
+                if (!cacheDatiGlobali || Date.now() < timestampCacheDatiGlobali || Date.now() - timestampCacheDatiGlobali >= CACHE_CONFIGURAZIONI_TTL_MS) {
+                    await inizializzaDatiGlobaliCache();
+                }
+                if (cacheDatiGlobali) {
+                    recordsConfigAppOriginali = cacheDatiGlobali.configApp;
+                    recordsTipiTimbraturaOriginali = cacheDatiGlobali.tipiTimbratura;
+                    recordsTipiAssenzaOriginali = cacheDatiGlobali.tipiAssenza;
+                    generaTabellaConfigAppModificabile(recordsConfigAppOriginali);
+                    generaTabellaTipiTimbraturaModificabile(recordsTipiTimbraturaOriginali);
+                    generaTabellaTipiAssenzaModificabile(recordsTipiAssenzaOriginali);
+                }
+
+                const [resContr, resAvv] = await Promise.all([
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_parametri_contrattuali", token: sessionToken}) }).catch(() => ({ok: false})),
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) }),
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_avvisi", token: sessionToken}) })
                 ]);
 
-                if (resConf.ok) {
-                    const d = await resConf.json();
-                    recordsConfigAppOriginali = d.records || [];
-                    generaTabellaConfigAppModificabile(recordsConfigAppOriginali);
-                }
                 if (resContr && resContr.ok) {
                     const d = await resContr.json();
                     recordsContrattualiOriginali = d.records || [];
                     generaTabellaContrattualiModificabile(recordsContrattualiOriginali);
                 } else {
                     document.getElementById('tableParametriContrattualiContainer').innerHTML = `<p style="color:#7f8c8d;">Nessun record contrattivo disponibile o limite API raggiunto.</p>`;
-                }
-                if (resTimbl.ok) {
-                    const d = await resTimbl.json();
-                    recordsTipiTimbraturaOriginali = d.records || [];
-                    generaTabellaTipiTimbraturaModificabile(recordsTipiTimbraturaOriginali);
-                }
-                if (resAss.ok) {
-                    const d = await resAss.json();
-                    recordsTipiAssenzaOriginali = d.records || [];
-                    generaTabellaTipiAssenzaModificabile(recordsTipiAssenzaOriginali);
                 }
                 if (resAvv.ok) {
                     const d = await resAvv.json();
@@ -1089,9 +1811,12 @@
             if (!await mostraConfirm("Vuoi eliminare questo record contrattuale?")) return;
             const res = await apiFetch(WORKER_URL, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "registro", id_riga: id })
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "parametri_contrattuali", id_riga: id })
             });
-            // Nota: Se la tabella su Grist si chiama diversamente per i contratti, adattiamo tramite elimina_record o chiamata dedicata. Nel worker attuale eliminiamo record tramite ID.
+            if (!res.ok) {
+                mostraAlert(`Errore durante l'eliminazione del record contrattuale (HTTP ${res.status}).`);
+                return;
+            }
             document.getElementById(`tr_contrattuale_${id}`).remove();
             mostraAlert("Record contrattuale eliminato.");
             caricaImpostazioniNative();
@@ -1138,8 +1863,19 @@
 
         async function rimuoviRigaTimbraturaEsistente(id) {
             if (!await mostraConfirm("Vuoi eliminare questo tipo di timbratura?")) return;
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "tipi_timbratura", id_riga: id })
+            });
+            if (!response.ok) {
+                mostraAlert(`Errore durante l'eliminazione del tipo di timbratura (HTTP ${response.status}).`);
+                return;
+            }
             document.getElementById(`tr_timbratura_${id}`).remove();
             mostraAlert("Timbratura rimossa.");
+            invalidaCacheConfigurazioniStatiche();
+            await inizializzaDatiGlobaliCache(true);
+            caricaImpostazioniNative();
         }
 
         function generaTabellaTipiAssenzaModificabile(records) {
@@ -1181,8 +1917,19 @@
 
         async function rimuoviRigaAssenzaEsistente(id) {
             if (!await mostraConfirm("Vuoi eliminare questo tipo di assenza?")) return;
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "tipi_assenza", id_riga: id })
+            });
+            if (!response.ok) {
+                mostraAlert(`Errore durante l'eliminazione del tipo di assenza (HTTP ${response.status}).`);
+                return;
+            }
             document.getElementById(`tr_assenza_${id}`).remove();
             mostraAlert("Assenza rimossa.");
+            invalidaCacheConfigurazioniStatiche();
+            await inizializzaDatiGlobaliCache(true);
+            caricaImpostazioniNative();
         }
 
         function generaTabellaAvvisiModificabile(records) {
@@ -1213,12 +1960,16 @@
             for (const r of recordsConfigAppOriginali) {
                 const val = document.getElementById(`cfg_val_${r.id}`).value;
                 const desc = document.getElementById(`cfg_desc_${r.id}`).value;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_config_app", token: sessionToken, id_riga: r.id, valore: val, descrizione: desc })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio delle regole app (HTTP ${response.status}).`);
+                    return;
+                }
             }
-            localStorage.removeItem('gestionale_cache_globale');
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Regole app aggiornate con successo!");
             caricaImpostazioniNative();
@@ -1230,10 +1981,14 @@
                 const anno = document.getElementById(`ctr_anno_${r.id}`).value;
                 const ferie = document.getElementById(`ctr_fer_${r.id}`).value;
                 const perm = document.getElementById(`ctr_perm_${r.id}`).value;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_contrattuali", token: sessionToken, id_riga: r.id, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio dei parametri contrattuali (HTTP ${response.status}).`);
+                    return;
+                }
             }
             const nuoveRighe = document.querySelectorAll('.riga-nuova-contrattuale');
             for (const riga of nuoveRighe) {
@@ -1241,10 +1996,14 @@
                 const ferie = riga.querySelector('.new_ctr_fer').value;
                 const perm = riga.querySelector('.new_ctr_perm').value;
                 if(anno && ferie && perm) {
-                    await apiFetch(WORKER_URL, {
+                    const response = await apiFetch(WORKER_URL, {
                         method: 'POST', headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ tipo: "aggiungi_contrattuali", token: sessionToken, anno_inizio: anno, ferie_annuo: ferie, permessi_annuo: perm })
                     });
+                    if (!response.ok) {
+                        mostraAlert(`Errore durante l'aggiunta del parametro contrattuale (HTTP ${response.status}).`);
+                        return;
+                    }
                 }
             }
             mostraAlert("Parametri contrattuali aggiornati con successo!");
@@ -1258,12 +2017,35 @@
                 const unico = document.getElementById(`timb_unico_${r.id}`).checked;
                 const attivo = document.getElementById(`timb_att_${r.id}`).checked;
                 const ordine = document.getElementById(`timb_ord_${r.id}`).value;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_tipo_timbratura", token: sessionToken, id_riga: r.id, nome: nome, unico: unico, attivo: attivo, ordine: ordine })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio dei tipi di timbratura (HTTP ${response.status}).`);
+                    return;
+                }
             }
-            localStorage.removeItem('gestionale_cache_globale');
+            for (const riga of document.querySelectorAll('.riga-nuova-timbratura')) {
+                const nome = riga.querySelector('.new_timb_nome').value.trim();
+                if (!nome) continue;
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tipo: "aggiungi_tipo_timbratura",
+                        token: sessionToken,
+                        nome,
+                        unico: riga.querySelector('.new_timb_unico').checked,
+                        attivo: riga.querySelector('.new_timb_att').checked,
+                        ordine: riga.querySelector('.new_timb_ord').value
+                    })
+                });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante l'aggiunta del tipo di timbratura (HTTP ${response.status}).`);
+                    return;
+                }
+            }
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di timbratura aggiornati con successo!");
             caricaImpostazioniNative();
@@ -1275,12 +2057,34 @@
                 const nome = document.getElementById(`ass_nome_${r.id}`).value;
                 const blocca = document.getElementById(`ass_blocc_${r.id}`).checked;
                 const attivo = document.getElementById(`ass_att_${r.id}`).checked;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_tipo_assenza", token: sessionToken, id_riga: r.id, nome: nome, blocca: blocca, attivo: attivo })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio dei tipi di assenza (HTTP ${response.status}).`);
+                    return;
+                }
             }
-            localStorage.removeItem('gestionale_cache_globale');
+            for (const riga of document.querySelectorAll('.riga-nuova-assenza')) {
+                const nome = riga.querySelector('.new_ass_nome').value.trim();
+                if (!nome) continue;
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tipo: "aggiungi_tipo_assenza",
+                        token: sessionToken,
+                        nome,
+                        blocca: riga.querySelector('.new_ass_blocc').checked,
+                        attivo: riga.querySelector('.new_ass_att').checked
+                    })
+                });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante l'aggiunta del tipo di assenza (HTTP ${response.status}).`);
+                    return;
+                }
+            }
+            invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
             mostraAlert("Tipi di assenza aggiornati con successo!");
             caricaImpostazioniNative();
@@ -1299,10 +2103,14 @@
                     dataScdEpoch = Math.floor(Date.UTC(aa, mm - 1, gg, 23, 59, 59) / 1000);
                 }
                 const attivo = document.getElementById(`avv_att_${r.id}`).checked;
-                await apiFetch(WORKER_URL, {
+                const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ tipo: "modifica_avviso", token: sessionToken, id_riga: r.id, titolo: tit, messaggio: msg, tipo_avviso: tipo, data_scadenza: dataScdEpoch, attivo: attivo })
                 });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio degli avvisi (HTTP ${response.status}).`);
+                    return;
+                }
             }
             mostraAlert("Bacheca avvisi aggiornata con successo!");
             caricaImpostazioniNative();
@@ -1397,6 +2205,13 @@
             if (!sessionToken) return;
             const dataSel = document.getElementById('p_data').value;
             if (!dataSel) return;
+            const rigaInVerifica = idRigaInModificaPresenze;
+            const verificaAncoraAttuale = () =>
+                Boolean(sessionToken) &&
+                document.getElementById('mainPanel').style.display !== 'none' &&
+                document.getElementById('timbratura').style.display !== 'none' &&
+                document.getElementById('p_data').value === dataSel &&
+                idRigaInModificaPresenze === rigaInVerifica;
             const [anno, mese, giorno] = dataSel.split('-');
             const dataGrist = `${giorno}/${mese}/${anno}`;
 
@@ -1408,49 +2223,60 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
                 });
-                if (resAss.ok) {
-                    const dAss = await resAss.json();
-                    if (dAss.esiste && dAss.bloccaTimbrature && !idRigaInModificaPresenze) {
-                        setStatoCampiTimbratura(true, "⛔ Attenzione: Per questa data risulta registrata un'assenza che blocca le timbrature.");
-                        return;
-                    }
+                if (!resAss.ok) {
+                    throw new Error(`Verifica assenze non riuscita (HTTP ${resAss.status}).`);
+                }
+                const dAss = await resAss.json();
+                if (!verificaAncoraAttuale()) return;
+                if (dAss.bloccaTimbrature === true && !idRigaInModificaPresenze) {
+                    setStatoCampiTimbratura(true, "⛔ Attenzione: Per questa data risulta registrata un'assenza che blocca le timbrature.");
+                    return;
                 }
 
                 const response = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataGrist })
                 });
-                if (response.ok) {
-                    const data = await response.json();
-                    eventiGiornoCorrente = data.eventi || [];
-                    const recordsGiorno = data.records || [];
-
-                    if (eventiGiornoCorrente.includes("Uscita") && !idRigaInModificaPresenze) {
-                        const riep = calcolaRiepilogoGiornata(recordsGiorno);
-                        let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
-                        if (riep.completata) {
-                            msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
-                        }
-                        setStatoCampiTimbratura(true, msg);
-                        return;
-                    }
-
-                    const selEvento = document.getElementById('p_evento');
-                    for (let i = 0; i < selEvento.options.length; i++) {
-                        const optVal = selEvento.options[i].value;
-                        const confTipo = listaTipiTimbraturaGrist.find(t => t.fields.Nome === optVal);
-                        const isUnico = confTipo ? Boolean(confTipo.fields.Unico_Al_Giorno) : true;
-                        
-                        if (eventiGiornoCorrente.includes(optVal) && isUnico) {
-                            selEvento.options[i].disabled = true;
-                        } else {
-                            selEvento.options[i].disabled = false;
-                        }
-                    }
-                    const primaDisponibile = Array.from(selEvento.options).find(o => !o.disabled);
-                    if (primaDisponibile) selEvento.value = primaDisponibile.value;
+                if (!response.ok) {
+                    throw new Error(`Verifica timbrature non riuscita (HTTP ${response.status}).`);
                 }
-            } catch (error) { console.error("Errore verifica timbratura:", error); }
+                const data = await response.json();
+                if (!verificaAncoraAttuale()) return;
+                eventiGiornoCorrente = data.eventi || [];
+                const recordsGiorno = data.records || [];
+
+                if (eventiGiornoCorrente.includes("Uscita") && !idRigaInModificaPresenze) {
+                    const riep = calcolaRiepilogoGiornata(recordsGiorno);
+                    let msg = "✅ Giornata completata! Timbratura di Uscita già registrata.";
+                    if (riep.completata) {
+                        msg += `\nOre lavorate: ${riep.lavorate} | Straordinari: ${riep.straordinari} | Permessi: ${riep.permessi}`;
+                    }
+                    setStatoCampiTimbratura(true, msg);
+                    return;
+                }
+
+                const selEvento = document.getElementById('p_evento');
+                const eventoSelezionato = selEvento.value;
+                for (let i = 0; i < selEvento.options.length; i++) {
+                    const optVal = selEvento.options[i].value;
+                    const confTipo = listaTipiTimbraturaGrist.find(t => t.fields.Nome === optVal);
+                    const isUnico = confTipo ? Boolean(confTipo.fields.Unico_Al_Giorno) : true;
+
+                    if (eventiGiornoCorrente.includes(optVal) && isUnico && !(idRigaInModificaPresenze && optVal === eventoSelezionato)) {
+                        selEvento.options[i].disabled = true;
+                    } else {
+                        selEvento.options[i].disabled = false;
+                    }
+                }
+                const primaDisponibile = Array.from(selEvento.options).find(o => !o.disabled);
+                if (primaDisponibile) selEvento.value = primaDisponibile.value;
+            } catch (error) {
+                if (!verificaAncoraAttuale()) return;
+                console.error("Errore verifica timbratura:", error);
+                const messaggio = "Impossibile verificare assenze e timbrature per la data selezionata. La registrazione è stata disabilitata.";
+                setStatoCampiTimbratura(true, `⚠️ ${messaggio}`);
+                mostraAlert(messaggio);
+            }
         }
 
         document.getElementById('formPresenze').addEventListener('submit', async (e) => {
@@ -1468,14 +2294,19 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataGrist })
                 });
-                if (resAss.ok) {
-                    const dAss = await resAss.json();
-                    if (dAss.esiste && !idRigaInModificaPresenze) {
-                        mostraAlert("Impossibile inserire la timbratura: in questa data è registrata un'assenza con blocco timbrature attivo!");
-                        return;
-                    }
+                if (!resAss.ok) {
+                    throw new Error(`Verifica assenze non riuscita (HTTP ${resAss.status}).`);
                 }
-            } catch(err) {}
+                const dAss = await resAss.json();
+                if (dAss.bloccaTimbrature === true && !idRigaInModificaPresenze) {
+                    mostraAlert("Impossibile inserire la timbratura: in questa data è registrata un'assenza con blocco timbrature attivo!");
+                    return;
+                }
+            } catch (error) {
+                console.error("Errore verifica assenza prima della timbratura:", error);
+                mostraAlert("Impossibile verificare le assenze per la data selezionata. La timbratura non è stata salvata.");
+                return;
+            }
 
             const submitBtn = e.target.querySelector('button');
             submitBtn.disabled = true; submitBtn.innerText = 'Invio in corso...';
@@ -1485,6 +2316,7 @@
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 if (response.ok) {
                     modalitaInserimentoPassato = false;
+                    tipoInserimentoPassato = null;
                     if (eventoSel === "Uscita") {
                         const resCheck = await apiFetch(WORKER_URL, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1519,34 +2351,39 @@
             const [annoR, meseR, giornoR] = dataRegistroRaw.split('-');
             const dataRegistroGrist = `${giornoR}/${meseR}/${annoR}`;
 
-            if (!idRigaInModificaAssenze) {
-                try {
-                    const resCheck = await apiFetch(WORKER_URL, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist })
-                    });
-                    if (resCheck.ok) {
-                        const dChk = await resCheck.json();
-                        if (dChk.esiste) {
-                            mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
-                            submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
-                            return;
-                        }
-                    }
-                } catch(err) {}
+            try {
+                const resCheck = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "check_assenza", token: sessionToken, data: dataRegistroGrist, id_riga: idRigaInModificaAssenze })
+                });
+                if (!resCheck.ok) {
+                    throw new Error(`Verifica assenze non riuscita (HTTP ${resCheck.status}).`);
+                }
+                const dChk = await resCheck.json();
+                if (dChk.esiste) {
+                    mostraAlert("Attenzione: risulta già registrata un'assenza in questa data. Non è possibile aggiungerne un'altra.");
+                    submitBtn.disabled = false; submitBtn.innerText = idRigaInModificaAssenze ? '💾 Salva Modifica' : 'Invia assenza';
+                    return;
+                }
 
                 const resTimbCheck = await apiFetch(WORKER_URL, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: dataRegistroGrist })
                 });
-                if (resTimbCheck.ok) {
-                    const dTimb = await resTimbCheck.json();
-                    if (dTimb.eventi && dTimb.eventi.length > 0) {
-                        mostraAlert("⛔ Impossibile inserire l'assenza: nella data selezionata risultano già registrate delle timbrature!");
-                        submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza';
-                        return;
-                    }
+                if (!resTimbCheck.ok) {
+                    throw new Error(`Verifica timbrature non riuscita (HTTP ${resTimbCheck.status}).`);
                 }
+                const dTimb = await resTimbCheck.json();
+                if (dTimb.eventi && dTimb.eventi.length > 0) {
+                    mostraAlert("⛔ Impossibile inserire l'assenza: nella data selezionata risultano già registrate delle timbrature!");
+                    submitBtn.disabled = false; submitBtn.innerText = idRigaInModificaAssenze ? '💾 Salva Modifica' : 'Invia assenza';
+                    return;
+                }
+            } catch (error) {
+                console.error("Errore verifica giornaliera prima della registrazione dell'assenza:", error);
+                mostraAlert("Impossibile verificare assenze e timbrature per la data selezionata. L'assenza non è stata salvata.");
+                submitBtn.disabled = false; submitBtn.innerText = idRigaInModificaAssenze ? '💾 Salva Modifica' : 'Invia assenza';
+                return;
             }
 
             try {
@@ -1676,6 +2513,114 @@
             } else { mostraAlert("Errore generazione report timbrature annuale."); }
         }
 
+        function formattaNumeroVerificaBustaPaga(valore) {
+            if (valore === null || valore === undefined || valore === '') return '-';
+            const numero = Number(valore);
+            return Number.isFinite(numero) ? new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(numero) : '-';
+        }
+
+        function inizializzaFormVerificaBustePaga() {
+            const anno = document.getElementById('verificaBusteAnno');
+            const mese = document.getElementById('verificaBusteMese');
+            if (!anno.value) anno.value = new Date().getFullYear();
+            if (!mese.value) mese.value = new Date().getMonth() + 1;
+        }
+
+        async function salvaVerificaBustaPaga() {
+            const annoInput = document.getElementById('verificaBusteAnno').value.trim();
+            const meseInput = document.getElementById('verificaBusteMese').value;
+            const ferieInput = document.getElementById('verificaBusteFerie').value.trim();
+            const permessiInput = document.getElementById('verificaBustePermessi').value.trim();
+            const anno = Number(annoInput);
+            const mese = Number(meseInput);
+            const ferie = Number(ferieInput);
+            const permessi = Number(permessiInput);
+            if (!sessionToken || !annoInput || anno < 1900 || anno > 9999 || !Number.isInteger(anno) ||
+                !Number.isInteger(mese) || mese < 1 || mese > 12 || !ferieInput || !permessiInput ||
+                !Number.isFinite(ferie) || !Number.isFinite(permessi)) {
+                mostraAlert('Inserisci un anno, un mese e residui numerici validi.');
+                return;
+            }
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: 'salva_verifica_busta_paga',
+                        token: sessionToken,
+                        anno,
+                        mese,
+                        ferie_residue: ferie,
+                        permessi_residui: permessi
+                    })
+                });
+                const risultato = await response.json();
+                if (!response.ok || !risultato.success) {
+                    throw new Error(risultato.error || `Salvataggio non riuscito (HTTP ${response.status}).`);
+                }
+                mostraAlert('Verifica busta paga salvata con successo.');
+            } catch (error) {
+                console.error('Errore salvataggio verifica busta paga:', error);
+                mostraAlert(`Impossibile salvare la verifica busta paga. ${error.message}`);
+            }
+        }
+
+        async function generaPDFVerificaBustePaga() {
+            if (!sessionToken) {
+                mostraAlert('Sessione non valida.');
+                return;
+            }
+            const anno = Number(document.getElementById('verificaBusteAnno').value);
+            const mese = Number(document.getElementById('verificaBusteMese').value);
+            if (!Number.isInteger(anno) || !Number.isInteger(mese) || mese < 1 || mese > 12) {
+                mostraAlert('Seleziona un anno e un mese validi per il report.');
+                return;
+            }
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'get_verifica_buste_paga', token: sessionToken })
+                });
+                const risultato = await response.json();
+                if (!response.ok || !risultato.success) {
+                    throw new Error(risultato.error || `Recupero dati non riuscito (HTTP ${response.status}).`);
+                }
+                const verifiche = (risultato.records || []).filter(record =>
+                    Number(record.fields.Anno) === anno && Number(record.fields.Mese) === mese
+                );
+                if (verifiche.length !== 1) {
+                    mostraAlert(verifiche.length ? 'Sono presenti più verifiche per il periodo selezionato. Correggi i duplicati prima di esportare.' : 'Nessuna verifica salvata per il periodo selezionato.');
+                    return;
+                }
+                const campi = verifiche[0].fields;
+                const testo = [
+                    'PERIODO DI RIFERIMENTO',
+                    `Anno: ${anno}`,
+                    `Mese: ${nomiMesi[mese]}`,
+                    '---',
+                    'RESIDUI RIPORTATI IN BUSTA PAGA',
+                    `Ferie residue: ${formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga)}`,
+                    `Permessi residui: ${formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga)}`,
+                    '---',
+                    'VALORI CALCOLATI DA GRIST',
+                    `Ferie reali: ${formattaNumeroVerificaBustaPaga(campi.Ferie_Reali)}`,
+                    `Discrepanza ferie: ${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie)}`,
+                    `Permessi reali: ${formattaNumeroVerificaBustaPaga(campi.Permessi_Reali)}`,
+                    `Discrepanza permessi: ${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)}`
+                ].join('\n');
+                await buildPdfFromText(
+                    'CONTROLLO RESIDUI BUSTA PAGA',
+                    `VERIFICA BUSTA PAGA - ${nomiMesi[mese]} ${anno}`,
+                    testo,
+                    `Verifica_Busta_Paga_${anno}_${String(mese).padStart(2, '0')}.pdf`
+                );
+            } catch (error) {
+                console.error('Errore generazione PDF verifica busta paga:', error);
+                mostraAlert(`Impossibile generare il PDF di verifica. ${error.message}`);
+            }
+        }
+
         async function esportaPDFStoricoFiltrato() {
             if (!datiAttualmenteFiltrati || datiAttualmenteFiltrati.length === 0) {
                 mostraAlert("Nessun dato filtrato disponibile per la stampa.");
@@ -1710,6 +2655,10 @@
         let datiStoricoPresenze = [];
         let datiStoricoAssenze = [];
         let datiAttualmenteFiltrati = [];
+        let datiAnteprimaReport = null;
+        let annoDatiAnteprimaReport = null;
+        let richiestaAnteprimaReport = 0;
+        let ordinamentoCronologico = 'desc';
         let vistaStoricoAttiva = 'presenze';
         const nomiMesi = ["", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
@@ -1727,6 +2676,119 @@
 
         function formattaDataTabella(val) { const p = estraiPartiData(val); return `${p.gg}/${p.mm}/${p.aa}`; }
         function formattaDataPerInput(dataGrist) { const p = estraiPartiData(dataGrist); return `${p.aa}-${p.mm}-${p.gg}`; }
+
+        function ordinaRecordCronologicamente(records, tipo, ordinamento = ordinamentoCronologico) {
+            const direzione = ordinamento === 'asc' ? 1 : -1;
+            const timestampRecord = record => {
+                const campi = record.fields;
+                const parti = estraiPartiData(campi.Data);
+                const data = Date.UTC(Number(parti.aa), Number(parti.mm) - 1, Number(parti.gg));
+                if (!Number.isFinite(data)) return 0;
+                if (tipo !== 'presenze') return data;
+                const ore = Number.parseInt(campi.Ora, 10) || 0;
+                const minuti = Number.parseInt(campi.Minuti, 10) || 0;
+                return data + ((ore * 60 + minuti) * 60 * 1000);
+            };
+            return records
+                .map((record, indice) => ({ record, indice, timestamp: timestampRecord(record) }))
+                .sort((a, b) => (a.timestamp - b.timestamp) * direzione || a.indice - b.indice)
+                .map(elemento => elemento.record);
+        }
+
+        function cambiaOrdinamento(ordinamento) {
+            ordinamentoCronologico = ordinamento === 'asc' ? 'asc' : 'desc';
+            document.querySelectorAll('.select-ordinamento').forEach(select => {
+                select.value = ordinamentoCronologico;
+            });
+            if (document.getElementById('storico_panel').style.display !== 'none') {
+                renderizzaTabellaAttiva();
+            }
+            if (document.getElementById('report_panel').style.display !== 'none') {
+                aggiornaAnteprimaReport();
+            }
+        }
+
+        function escapeHtmlReport(valore) {
+            return String(valore ?? '-').replace(/[&<>"']/g, carattere => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[carattere]);
+        }
+
+        async function caricaAnteprimaReport() {
+            if (!sessionToken) return;
+            const richiesta = ++richiestaAnteprimaReport;
+            const configurazione = configurazioneAnteprimaReport();
+            if (!configurazione) return;
+            const anno = document.getElementById(configurazione.annoId).value;
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno })
+                });
+                if (!response.ok) throw new Error(`Caricamento anteprima non riuscito (HTTP ${response.status}).`);
+                const dati = await response.json();
+                if (!dati.success) throw new Error("Il servizio non ha restituito i dati per l'anteprima.");
+                if (richiesta !== richiestaAnteprimaReport || document.getElementById('report_panel').style.display === 'none') return;
+                datiAnteprimaReport = {
+                    assenze: dati.assenze || [],
+                    presenze: dati.presenze || []
+                };
+                annoDatiAnteprimaReport = anno;
+                aggiornaAnteprimaReport();
+            } catch (error) {
+                if (richiesta !== richiestaAnteprimaReport) return;
+                console.error("Errore caricamento anteprima report:", error);
+                const messaggio = "Impossibile caricare l'anteprima dei dati.";
+                document.getElementById(configurazione.tabellaId).innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center;">${messaggio}</td></tr>`;
+            }
+        }
+
+        function configurazioneAnteprimaReport() {
+            const paneId = document.querySelector('#report_panel .report-pane.active')?.id;
+            const configurazioni = {
+                paneReportAssenzeMensile: { tipo: 'assenze', annoId: 'rep_anno', meseId: 'rep_mese', tabellaId: 'tabellaAnteprimaAssenzeMensile' },
+                paneReportAssenzeAnnuale: { tipo: 'assenze', annoId: 'rep_anno_annual', tabellaId: 'tabellaAnteprimaAssenzeAnnuale' },
+                paneReportTimbratureMensile: { tipo: 'presenze', annoId: 'rep_timb_anno', meseId: 'rep_timb_mese', tabellaId: 'tabellaAnteprimaTimbratureMensile' },
+                paneReportTimbratureAnnuale: { tipo: 'presenze', annoId: 'rep_timb_anno_annual', tabellaId: 'tabellaAnteprimaTimbratureAnnuale' }
+            };
+            return configurazioni[paneId] || null;
+        }
+
+        function aggiornaAnteprimaReport() {
+            if (!datiAnteprimaReport) return;
+            const configurazione = configurazioneAnteprimaReport();
+            if (!configurazione) return;
+            const anno = document.getElementById(configurazione.annoId).value;
+            if (anno !== annoDatiAnteprimaReport) {
+                caricaAnteprimaReport();
+                return;
+            }
+            const mese = configurazione.meseId
+                ? String(nomiMesi.indexOf(document.getElementById(configurazione.meseId).value)).padStart(2, '0')
+                : null;
+            const recordFiltrati = ordinaRecordCronologicamente(datiAnteprimaReport[configurazione.tipo].filter(record => {
+                const parti = estraiPartiData(record.fields.Data);
+                return parti.aa === anno && (!mese || parti.mm === mese);
+            }), configurazione.tipo);
+            const eAssenza = configurazione.tipo === 'assenze';
+            document.getElementById(configurazione.tabellaId).innerHTML = recordFiltrati.length ? recordFiltrati.map(record => {
+                const campi = record.fields;
+                return eAssenza ? `
+                    <tr style="border-bottom:1px solid #e0e0e0;">
+                        <td style="padding:10px;">${escapeHtmlReport(formattaDataTabella(campi.Data))}</td>
+                        <td style="padding:10px;"><b>${escapeHtmlReport(campi.Tipo_Assenza)}</b></td>
+                        <td style="padding:10px;">${escapeHtmlReport(campi.Quantita)}</td>
+                        <td style="padding:10px;">${escapeHtmlReport(campi.Note)}</td>
+                    </tr>` : `
+                    <tr style="border-bottom:1px solid #e0e0e0;">
+                        <td style="padding:10px;">${escapeHtmlReport(formattaDataTabella(campi.Data))}</td>
+                        <td style="padding:10px;"><b>${escapeHtmlReport(campi.Evento)}</b></td>
+                        <td style="padding:10px;">${escapeHtmlReport(String(campi.Ora ?? 0).padStart(2, '0'))}:${escapeHtmlReport(String(campi.Minuti ?? 0).padStart(2, '0'))}</td>
+                        <td style="padding:10px;">${escapeHtmlReport(campi.Note)}</td>
+                    </tr>`;
+            }).join('') : `<tr><td colspan="4" style="padding:15px; text-align:center;">Nessun${eAssenza ? "a assenza" : "a timbratura"} per i filtri selezionati.</td></tr>`;
+        }
 
         function cambiaVistaStorico(nuovaVista) {
             vistaStoricoAttiva = nuovaVista;
@@ -1790,7 +2852,7 @@
             };
 
             if (vistaStoricoAttiva === 'presenze') {
-                datiAttualmenteFiltrati = datiStoricoPresenze.filter(filtraRiga);
+                datiAttualmenteFiltrati = ordinaRecordCronologicamente(datiStoricoPresenze.filter(filtraRiga), 'presenze');
                 document.getElementById("tabellaStoricoPresenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => `
                     <tr style="border-bottom:1px solid #e0e0e0;">
                         <td style="padding:10px;">${formattaDataTabella(r.fields.Data)}</td>
@@ -1800,7 +2862,7 @@
                         <td style="padding:10px;"><button onclick="attivaModificaPresenza(${r.id}, '${r.fields.Data}', '${r.fields.Evento}', ${parseInt(r.fields.Ora)}, ${parseInt(r.fields.Minuti)}, '${r.fields.Note || ''}')" style="background:#3498db; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
                     </tr>`).join('') : `<tr><td colspan="5" style="padding:15px; text-align:center;">Nessuna timbratura trovata.</td></tr>`;
             } else {
-                datiAttualmenteFiltrati = datiStoricoAssenze.filter(filtraRiga);
+                datiAttualmenteFiltrati = ordinaRecordCronologicamente(datiStoricoAssenze.filter(filtraRiga), 'assenze');
                 document.getElementById("tabellaStoricoAssenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => `
                     <tr style="border-bottom:1px solid #e0e0e0;">
                         <td style="padding:10px;">${formattaDataTabella(r.fields.Data)}</td>
@@ -1813,12 +2875,17 @@
         }
 
         function attivaModificaPresenza(id, data, evento, ora, minuti, note) {
+            resetMascheraPresenze();
+            resetMascheraAssenze();
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             idRigaInModificaPresenze = id;
-            document.getElementById('p_evento').disabled = false;
-            document.getElementById('p_ore').disabled = false;
-            document.getElementById('p_minuti').disabled = false;
-            document.getElementById('p_note').disabled = false;
-            document.getElementById('p_data').value = formattaDataPerInput(data);
+            const dataInput = document.getElementById('p_data');
+            dataInput.type = 'date';
+            dataInput.removeAttribute('min');
+            dataInput.removeAttribute('max');
+            dataInput.value = formattaDataPerInput(data);
+            document.getElementById('p_data_estesa').style.display = 'none';
             document.getElementById('p_evento').value = evento;
             document.getElementById('p_ore').value = ora;
             document.getElementById('p_minuti').value = minuti;
@@ -1830,20 +2897,22 @@
         }
 
         function tornaAStoricoDaPresenze() {
-            idRigaInModificaPresenze = null;
-            document.getElementById('formPresenze').reset();
-            document.getElementById('p_data').value = getOggiInLocale();
-            setOrarioAttuale();
-            document.querySelector('#formPresenze .btn-submit').innerText = 'Conferma presenza';
-            document.getElementById('btnEliminaPresenza').style.display = "none";
-            document.getElementById('btnAnnullaModificaPresenza').style.display = "none";
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             navigaASezione('storico_panel');
             caricaTabellaStorico();
         }
 
         function attivaModificaAssenza(id, data, tipoAssenza, quantita, note) {
+            resetMascheraPresenze();
+            resetMascheraAssenze();
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             idRigaInModificaAssenze = id;
-            document.getElementById('r_data').value = formattaDataPerInput(data);
+            const dataInput = document.getElementById('r_data');
+            dataInput.removeAttribute('min');
+            dataInput.removeAttribute('max');
+            dataInput.value = formattaDataPerInput(data);
             document.getElementById('r_tipo').value = tipoAssenza;
             document.getElementById('r_quantita').value = quantita;
             document.getElementById('r_note').value = note;
@@ -1854,12 +2923,8 @@
         }
 
         function tornaAStoricoDaAssenze() {
-            idRigaInModificaAssenze = null;
-            document.getElementById('formRegistro').reset();
-            document.getElementById('r_data').value = getOggiInLocale();
-            document.querySelector('#formRegistro .btn-submit').innerText = 'Invia assenza';
-            document.getElementById('btnEliminaAssenza').style.display = "none";
-            document.getElementById('btnAnnullaModificaAssenza').style.display = "none";
+            modalitaInserimentoPassato = false;
+            tipoInserimentoPassato = null;
             navigaASezione('storico_panel');
             caricaTabellaStorico();
         }
@@ -1873,6 +2938,8 @@
                 if (tabella === 'presenze') tornaAStoricoDaPresenze(); else tornaAStoricoDaAssenze();
             } else if (response.status === 429) {
                 mostraAlert("⚠️ Limite chiamate API Grist superato.");
+            } else {
+                mostraAlert(`Errore durante l'eliminazione del record (HTTP ${response.status}).`);
             }
         }
     </script>
