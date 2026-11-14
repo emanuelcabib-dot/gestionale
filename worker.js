@@ -614,6 +614,52 @@ export default {
           }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        if (body.tipo === "get_verifica_buste_paga") {
+          const response = await fetch(`${BASE_GRIST}/Verifica_Buste_Paga2/records`, { headers: headersGrist });
+          if (!response.ok) {
+            return new Response(JSON.stringify({ success: false, error: "Errore recupero Verifica_Buste_Paga2" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const data = await response.json();
+          return new Response(JSON.stringify({ success: true, records: data.records || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (body.tipo === "salva_verifica_busta_paga") {
+          const ferieInput = body.ferie_residue;
+          const permessiInput = body.permessi_residui;
+          const anno = Number(body.anno);
+          const mese = Number(body.mese);
+          const ferieResidue = Number(ferieInput);
+          const permessiResidui = Number(permessiInput);
+          const idRecord = body.id_riga == null ? null : Number(body.id_riga);
+          if (!Number.isInteger(anno) || anno < 1900 || anno > 9999 ||
+              !Number.isInteger(mese) || mese < 1 || mese > 12 ||
+              ferieInput === undefined || ferieInput === null || ferieInput === "" ||
+              permessiInput === undefined || permessiInput === null || permessiInput === "" ||
+              !Number.isFinite(ferieResidue) || !Number.isFinite(permessiResidui) ||
+              (idRecord !== null && (!Number.isSafeInteger(idRecord) || idRecord <= 0))) {
+            return new Response(JSON.stringify({ success: false, error: "Dati della verifica busta paga non validi" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const fields = {
+            "Anno": anno,
+            "Mese": mese,
+            "Ferie_Residuo_BustaPaga": ferieResidue,
+            "Permessi_Residuo_BustaPaga": permessiResidui
+          };
+          const isModifica = idRecord !== null;
+          const response = await fetch(`${BASE_GRIST}/Verifica_Buste_Paga2/records`, {
+            method: isModifica ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json", ...headersGrist },
+            body: JSON.stringify({
+              records: [isModifica ? { id: idRecord, fields } : { fields }]
+            })
+          });
+          if (!response.ok) {
+            return new Response(JSON.stringify({ success: false, error: "Errore salvataggio Verifica_Buste_Paga2" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const data = await response.json();
+          return new Response(JSON.stringify({ success: true, records: data.records || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         if (body.tipo === "get_dashboard_data") {
           const [resPresenze, resAssenze, resContatori, resParametri] = await Promise.all([
             fetch(`${BASE_GRIST}/Prova/records`, { headers: headersGrist }),
@@ -677,7 +723,8 @@ export default {
             registro: "Registro_Ferie_Permessi",
             parametri_contrattuali: "Parametri_contrattuali",
             tipi_timbratura: "Tipi_Timbratura",
-            tipi_assenza: "Tipi_Assenza"
+            tipi_assenza: "Tipi_Assenza",
+            verifica_buste_paga: "Verifica_Buste_Paga2"
           };
           const tabellaId = Object.hasOwn(tabelleEliminabili, body.tabella) ? tabelleEliminabili[body.tabella] : null;
           const idRecord = Number(body.id_riga);
