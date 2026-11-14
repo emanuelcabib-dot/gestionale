@@ -39,9 +39,10 @@
         .mobile-btn-icon { background: none; border: none; color: white; font-size: 22px; cursor: pointer; padding: 5px; }
         
         /* MENU TENDINA MOBILE */
-        .mobile-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; width: 100%; background-color: #2c3e50; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 999; }
+        .mobile-dropdown-menu { display: none; position: fixed; inset: 65px 0 0; width: 100%; box-sizing: border-box; background-color: #2c3e50; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 999; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
         .mobile-dropdown-menu .tab-btn { padding: 15px 20px; border-bottom: 1px solid #34495e; }
         .mobile-dropdown-menu .tab-btn.active { border-left: 5px solid #fff; border-bottom: 1px solid #34495e; padding-left: 15px; }
+        .mobile-dropdown-logout { margin-top: auto; flex-shrink: 0; border-top: 1px solid #34495e !important; color: #e74c3c !important; font-weight: bold !important; }
 
         .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; background-color: #f4f7f6; height: 100vh; box-sizing: border-box; }
         h2 { color: #34495e; margin-top: 0; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
@@ -164,9 +165,8 @@
                 <button class="tab-btn" onclick="navigaASezione('ferie'); toggleMobileMenu();">🌴 Ferie, permessi e malattia</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel'); toggleMobileMenu();">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard'); toggleMobileMenu();">📊 Dashboard grafica</button>
-                <button class="tab-btn" onclick="navigaASezione('impostazioni'); toggleMobileMenu();">⚙️ Impostazioni parametri</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico(); toggleMobileMenu();">📜 Storico e Modifiche</button>
-                <button class="tab-btn" onclick="logout()" style="color:#e74c3c; font-weight:bold;">🚪 Esci</button>
+                <button class="tab-btn mobile-dropdown-logout" onclick="logout()">🚪 Esci</button>
             </div>
         </div>
 
@@ -291,55 +291,112 @@
             <!-- REPORT PANEL -->
             <div id="report_panel" class="section">
                 <h2>Generazione Report</h2>
-                <h3>1. Report Ferie e Permessi — Mensile</h3>
-                <form id="formReport" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
-                    <div class="form-group">
-                        <label for="rep_anno">Anno:</label>
-                        <select id="rep_anno" class="select-anno-mensile" required></select>
-                    </div>
-                    <div class="form-group">
-                        <label for="rep_mese">Mese:</label>
-                        <select id="rep_mese" required>
-                            <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
-                        </select>
-                    </div>
-                    <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile (Assenze)</button>
-                </form>
+                <div class="settings-tabs">
+                    <button type="button" class="settings-tab-btn active" onclick="switchReportTab(event, 'paneReportAssenzeMensile')">🌴 Assenze — Mensile</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportAssenzeAnnuale')">🌴 Assenze — Annuale</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportTimbratureMensile')">🕒 Timbrature — Mensile</button>
+                    <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportTimbratureAnnuale')">🕒 Timbrature — Annuale</button>
+                </div>
 
-                <h3>2. Report Ferie e Permessi — Annuale</h3>
-                <form id="formReportAnnuale" onsubmit="event.preventDefault(); generaPDFAnnuale();">
-                    <div class="form-group">
-                        <label for="rep_anno_annual">Anno:</label>
-                        <select id="rep_anno_annual" class="select-anno" required></select>
+                <div id="paneReportAssenzeMensile" class="settings-pane report-pane active">
+                    <form id="formReport" class="filtri-bar" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
+                        <div class="form-group">
+                            <label for="rep_anno">Anno:</label>
+                            <select id="rep_anno" class="select-anno-mensile select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="rep_mese">Mese:</label>
+                            <select id="rep_mese" onchange="aggiornaAnteprimaReport()" required>
+                                <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_assenze_mensile">Ordine:</label>
+                            <select id="report_ordinamento_assenze_mensile" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile (Assenze)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaAssenzeMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
                     </div>
-                    <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale (Assenze)</button>
-                </form>
+                </div>
 
-                <hr style="margin: 35px 0; border: 0; border-top: 2px solid #ecf0f1;">
+                <div id="paneReportAssenzeAnnuale" class="settings-pane report-pane">
+                    <form id="formReportAnnuale" class="filtri-bar" onsubmit="event.preventDefault(); generaPDFAnnuale();">
+                        <div class="form-group">
+                            <label for="rep_anno_annual">Anno:</label>
+                            <select id="rep_anno_annual" class="select-anno select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_assenze_annuale">Ordine:</label>
+                            <select id="report_ordinamento_assenze_annuale" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale (Assenze)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaAssenzeAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
 
-                <h3>3. Report Timbrature — Mensile</h3>
-                <form id="formReportTimbratureMensile" onsubmit="event.preventDefault(); generaPDFTimbratureMensile();">
-                    <div class="form-group">
-                        <label for="rep_timb_anno">Anno:</label>
-                        <select id="rep_timb_anno" class="select-anno-mensile" required></select>
+                <div id="paneReportTimbratureMensile" class="settings-pane report-pane">
+                    <form id="formReportTimbratureMensile" class="filtri-bar" onsubmit="event.preventDefault(); generaPDFTimbratureMensile();">
+                        <div class="form-group">
+                            <label for="rep_timb_anno">Anno:</label>
+                            <select id="rep_timb_anno" class="select-anno-mensile select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="rep_timb_mese">Mese:</label>
+                            <select id="rep_timb_mese" onchange="aggiornaAnteprimaReport()" required>
+                                <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_timbrature_mensile">Ordine:</label>
+                            <select id="report_ordinamento_timbrature_mensile" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReportTimbMensile" class="btn-submit" style="background-color: #2980b9;">Genera PDF Mensile (Timbrature)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaTimbratureMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
                     </div>
-                    <div class="form-group">
-                        <label for="rep_timb_mese">Mese:</label>
-                        <select id="rep_timb_mese" required>
-                            <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
-                        </select>
-                    </div>
-                    <button type="submit" id="btnReportTimbMensile" class="btn-submit" style="background-color: #2980b9;">Genera PDF Mensile (Timbrature)</button>
-                </form>
+                </div>
 
-                <h3>4. Report Timbrature — Annuale</h3>
-                <form id="formReportTimbratureAnnuale" onsubmit="event.preventDefault(); generaPDFTimbratureAnnuale();">
-                    <div class="form-group">
-                        <label for="rep_timb_anno_annual">Anno:</label>
-                        <select id="rep_timb_anno_annual" class="select-anno" required></select>
+                <div id="paneReportTimbratureAnnuale" class="settings-pane report-pane">
+                    <form id="formReportTimbratureAnnuale" class="filtri-bar" onsubmit="event.preventDefault(); generaPDFTimbratureAnnuale();">
+                        <div class="form-group">
+                            <label for="rep_timb_anno_annual">Anno:</label>
+                            <select id="rep_timb_anno_annual" class="select-anno select-report-anno" onchange="aggiornaAnteprimaReport()" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="report_ordinamento_timbrature_annuale">Ordine:</label>
+                            <select id="report_ordinamento_timbrature_annuale" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                                <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
+                            </select>
+                        </div>
+                        <button type="submit" id="btnReportTimbAnnual" class="btn-submit" style="background-color: #16a085;">Genera PDF Annuale (Timbrature)</button>
+                    </form>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
+                            <tbody id="tabellaAnteprimaTimbratureAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
+                        </table>
                     </div>
-                    <button type="submit" id="btnReportTimbAnnual" class="btn-submit" style="background-color: #16a085;">Genera PDF Annuale (Timbrature)</button>
-                </form>
+                </div>
             </div>
 
             <!-- DASHBOARD GRIST IFRAME -->
@@ -428,6 +485,12 @@
                         <label for="storico_giorno">3. Giorno:</label>
                         <select id="storico_giorno" onchange="renderizzaTabellaAttiva()">
                             <option value="TUTTI">Tutti i giorni</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="storico_ordinamento">Ordine:</label>
+                        <select id="storico_ordinamento" class="select-ordinamento" onchange="cambiaOrdinamento(this.value)">
+                            <option value="desc" selected>Dal più recente</option><option value="asc">Dal più vecchio</option>
                         </select>
                     </div>
                     <div>
@@ -673,6 +736,8 @@
                     resetMascheraAssenze();
                 }
                 gestisciBannerFestivoAssenze();
+            } else if (sectionId === 'report_panel') {
+                caricaAnteprimaReport();
             }
         }
 
@@ -887,6 +952,11 @@
                 }
             });
 
+            document.querySelectorAll('.select-report-anno').forEach(select => {
+                select.innerHTML = `<option value="${annoCorrente}">${annoCorrente}</option>`;
+                select.value = String(annoCorrente);
+            });
+
             const selectStoricoAnno = document.getElementById('storico_anno');
             if(selectStoricoAnno) {
                 selectStoricoAnno.innerHTML = htmlOptions;
@@ -1033,11 +1103,19 @@
         }
 
         function switchSettingsTab(evt, paneId) {
-            document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#impostazioni .settings-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('#impostazioni .settings-tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
             if(paneId) caricaImpostazioniNative();
+        }
+
+        function switchReportTab(evt, paneId) {
+            document.querySelectorAll('#report_panel .report-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('#report_panel .settings-tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(paneId).classList.add('active');
+            evt.currentTarget.classList.add('active');
+            caricaAnteprimaReport();
         }
 
         async function caricaImpostazioniNative() {
@@ -1880,6 +1958,10 @@
         let datiStoricoPresenze = [];
         let datiStoricoAssenze = [];
         let datiAttualmenteFiltrati = [];
+        let datiAnteprimaReport = null;
+        let annoDatiAnteprimaReport = null;
+        let richiestaAnteprimaReport = 0;
+        let ordinamentoCronologico = 'desc';
         let vistaStoricoAttiva = 'presenze';
         const nomiMesi = ["", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
@@ -1897,6 +1979,119 @@
 
         function formattaDataTabella(val) { const p = estraiPartiData(val); return `${p.gg}/${p.mm}/${p.aa}`; }
         function formattaDataPerInput(dataGrist) { const p = estraiPartiData(dataGrist); return `${p.aa}-${p.mm}-${p.gg}`; }
+
+        function ordinaRecordCronologicamente(records, tipo, ordinamento = ordinamentoCronologico) {
+            const direzione = ordinamento === 'asc' ? 1 : -1;
+            const timestampRecord = record => {
+                const campi = record.fields;
+                const parti = estraiPartiData(campi.Data);
+                const data = Date.UTC(Number(parti.aa), Number(parti.mm) - 1, Number(parti.gg));
+                if (!Number.isFinite(data)) return 0;
+                if (tipo !== 'presenze') return data;
+                const ore = Number.parseInt(campi.Ora, 10) || 0;
+                const minuti = Number.parseInt(campi.Minuti, 10) || 0;
+                return data + ((ore * 60 + minuti) * 60 * 1000);
+            };
+            return records
+                .map((record, indice) => ({ record, indice, timestamp: timestampRecord(record) }))
+                .sort((a, b) => (a.timestamp - b.timestamp) * direzione || a.indice - b.indice)
+                .map(elemento => elemento.record);
+        }
+
+        function cambiaOrdinamento(ordinamento) {
+            ordinamentoCronologico = ordinamento === 'asc' ? 'asc' : 'desc';
+            document.querySelectorAll('.select-ordinamento').forEach(select => {
+                select.value = ordinamentoCronologico;
+            });
+            if (document.getElementById('storico_panel').style.display !== 'none') {
+                renderizzaTabellaAttiva();
+            }
+            if (document.getElementById('report_panel').style.display !== 'none') {
+                aggiornaAnteprimaReport();
+            }
+        }
+
+        function escapeHtmlReport(valore) {
+            return String(valore ?? '-').replace(/[&<>"']/g, carattere => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[carattere]);
+        }
+
+        async function caricaAnteprimaReport() {
+            if (!sessionToken) return;
+            const richiesta = ++richiestaAnteprimaReport;
+            const configurazione = configurazioneAnteprimaReport();
+            if (!configurazione) return;
+            const anno = document.getElementById(configurazione.annoId).value;
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_storico", token: sessionToken, anno })
+                });
+                if (!response.ok) throw new Error(`Caricamento anteprima non riuscito (HTTP ${response.status}).`);
+                const dati = await response.json();
+                if (!dati.success) throw new Error("Il servizio non ha restituito i dati per l'anteprima.");
+                if (richiesta !== richiestaAnteprimaReport || document.getElementById('report_panel').style.display === 'none') return;
+                datiAnteprimaReport = {
+                    assenze: dati.assenze || [],
+                    presenze: dati.presenze || []
+                };
+                annoDatiAnteprimaReport = anno;
+                aggiornaAnteprimaReport();
+            } catch (error) {
+                if (richiesta !== richiestaAnteprimaReport) return;
+                console.error("Errore caricamento anteprima report:", error);
+                const messaggio = "Impossibile caricare l'anteprima dei dati.";
+                document.getElementById(configurazione.tabellaId).innerHTML = `<tr><td colspan="4" style="padding:15px; text-align:center;">${messaggio}</td></tr>`;
+            }
+        }
+
+        function configurazioneAnteprimaReport() {
+            const paneId = document.querySelector('#report_panel .report-pane.active')?.id;
+            const configurazioni = {
+                paneReportAssenzeMensile: { tipo: 'assenze', annoId: 'rep_anno', meseId: 'rep_mese', tabellaId: 'tabellaAnteprimaAssenzeMensile' },
+                paneReportAssenzeAnnuale: { tipo: 'assenze', annoId: 'rep_anno_annual', tabellaId: 'tabellaAnteprimaAssenzeAnnuale' },
+                paneReportTimbratureMensile: { tipo: 'presenze', annoId: 'rep_timb_anno', meseId: 'rep_timb_mese', tabellaId: 'tabellaAnteprimaTimbratureMensile' },
+                paneReportTimbratureAnnuale: { tipo: 'presenze', annoId: 'rep_timb_anno_annual', tabellaId: 'tabellaAnteprimaTimbratureAnnuale' }
+            };
+            return configurazioni[paneId] || null;
+        }
+
+        function aggiornaAnteprimaReport() {
+            if (!datiAnteprimaReport) return;
+            const configurazione = configurazioneAnteprimaReport();
+            if (!configurazione) return;
+            const anno = document.getElementById(configurazione.annoId).value;
+            if (anno !== annoDatiAnteprimaReport) {
+                caricaAnteprimaReport();
+                return;
+            }
+            const mese = configurazione.meseId
+                ? String(nomiMesi.indexOf(document.getElementById(configurazione.meseId).value)).padStart(2, '0')
+                : null;
+            const recordFiltrati = ordinaRecordCronologicamente(datiAnteprimaReport[configurazione.tipo].filter(record => {
+                const parti = estraiPartiData(record.fields.Data);
+                return parti.aa === anno && (!mese || parti.mm === mese);
+            }), configurazione.tipo);
+            const eAssenza = configurazione.tipo === 'assenze';
+            document.getElementById(configurazione.tabellaId).innerHTML = recordFiltrati.length ? recordFiltrati.map(record => {
+                const campi = record.fields;
+                return eAssenza ? `
+                    <tr style="border-bottom:1px solid #e0e0e0;">
+                        <td style="padding:10px;">${escapeHtmlReport(formattaDataTabella(campi.Data))}</td>
+                        <td style="padding:10px;"><b>${escapeHtmlReport(campi.Tipo_Assenza)}</b></td>
+                        <td style="padding:10px;">${escapeHtmlReport(campi.Quantita)}</td>
+                        <td style="padding:10px;">${escapeHtmlReport(campi.Note)}</td>
+                    </tr>` : `
+                    <tr style="border-bottom:1px solid #e0e0e0;">
+                        <td style="padding:10px;">${escapeHtmlReport(formattaDataTabella(campi.Data))}</td>
+                        <td style="padding:10px;"><b>${escapeHtmlReport(campi.Evento)}</b></td>
+                        <td style="padding:10px;">${escapeHtmlReport(String(campi.Ora ?? 0).padStart(2, '0'))}:${escapeHtmlReport(String(campi.Minuti ?? 0).padStart(2, '0'))}</td>
+                        <td style="padding:10px;">${escapeHtmlReport(campi.Note)}</td>
+                    </tr>`;
+            }).join('') : `<tr><td colspan="4" style="padding:15px; text-align:center;">Nessun${eAssenza ? "a assenza" : "a timbratura"} per i filtri selezionati.</td></tr>`;
+        }
 
         function cambiaVistaStorico(nuovaVista) {
             vistaStoricoAttiva = nuovaVista;
@@ -1960,7 +2155,7 @@
             };
 
             if (vistaStoricoAttiva === 'presenze') {
-                datiAttualmenteFiltrati = datiStoricoPresenze.filter(filtraRiga);
+                datiAttualmenteFiltrati = ordinaRecordCronologicamente(datiStoricoPresenze.filter(filtraRiga), 'presenze');
                 document.getElementById("tabellaStoricoPresenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => `
                     <tr style="border-bottom:1px solid #e0e0e0;">
                         <td style="padding:10px;">${formattaDataTabella(r.fields.Data)}</td>
@@ -1970,7 +2165,7 @@
                         <td style="padding:10px;"><button onclick="attivaModificaPresenza(${r.id}, '${r.fields.Data}', '${r.fields.Evento}', ${parseInt(r.fields.Ora)}, ${parseInt(r.fields.Minuti)}, '${r.fields.Note || ''}')" style="background:#3498db; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
                     </tr>`).join('') : `<tr><td colspan="5" style="padding:15px; text-align:center;">Nessuna timbratura trovata.</td></tr>`;
             } else {
-                datiAttualmenteFiltrati = datiStoricoAssenze.filter(filtraRiga);
+                datiAttualmenteFiltrati = ordinaRecordCronologicamente(datiStoricoAssenze.filter(filtraRiga), 'assenze');
                 document.getElementById("tabellaStoricoAssenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => `
                     <tr style="border-bottom:1px solid #e0e0e0;">
                         <td style="padding:10px;">${formattaDataTabella(r.fields.Data)}</td>
