@@ -6,6 +6,7 @@
     <title>Pannello controllo lavoro</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.19/locales-all.global.min.js"></script>
     <script>
@@ -68,6 +69,18 @@
         .filtri-bar select { padding: 9px; font-size: 14px; }
         #calendar { min-height: 600px; }
         #calendar .fc-event { cursor: pointer; }
+        .dashboard-toolbar { display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
+        .dashboard-filters { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+        .dashboard-filters .form-group { margin:0; min-width:150px; }
+        .dashboard-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(155px, 1fr)); gap:14px; margin:18px 0 25px; }
+        .dashboard-kpi { background:#fff; border:1px solid #e0e0e0; border-left:5px solid #3498db; border-radius:8px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,.04); }
+        .dashboard-kpi h4 { color:#566573; font-size:13px; margin:0 0 10px; }
+        .dashboard-kpi strong { color:#2c3e50; font-size:23px; }
+        .dashboard-chart-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap:18px; }
+        .dashboard-chart-card { min-width:0; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:16px; }
+        .dashboard-chart-card h3 { margin:0 0 15px; font-size:16px; border:0; }
+        .dashboard-chart-wrap { position:relative; height:280px; }
+        .dashboard-chart-wrap.tall { height:340px; }
 
         .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 25px; }
         .home-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); position: relative; border-left: 5px solid #3498db; }
@@ -95,6 +108,8 @@
             .section { padding: 15px; }
             .btn-submit { width: 100%; }
             #calendar { min-height: 500px; }
+            .dashboard-refresh { width:100%; }
+            .dashboard-chart-wrap { height:250px; }
         }
     </style>
 </head>
@@ -424,9 +439,49 @@
                 <div id="calendar" aria-label="Calendario di presenze e assenze"></div>
             </div>
 
-            <!-- DASHBOARD GRIST IFRAME -->
-            <div id="dashboard" class="section" style="padding:0; background:transparent; border:none; box-shadow:none;">
-                <iframe src="https://gestionale-lavoro-emanuel-00.getgrist.com/9vHK9LitS9R2/Gestionale/p/5?style=singlePage" style="width: 100%; height: calc(100vh - 80px); border: none; border-radius: 8px; background: white;" title="Dashboard Grist"></iframe>
+            <!-- DASHBOARD NATIVA -->
+            <div id="dashboard" class="section">
+                <div class="dashboard-toolbar">
+                    <div>
+                        <h2 style="margin-bottom:5px;">Dashboard grafica</h2>
+                        <p style="margin:0; color:#7f8c8d;">Riepiloghi aggiornati direttamente dai registri.</p>
+                    </div>
+                    <div class="dashboard-filters">
+                        <div class="form-group">
+                            <label for="dashboardAnno">Anno</label>
+                            <select id="dashboardAnno" onchange="aggiornaDashboard()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="dashboardMese">Mese</label>
+                            <select id="dashboardMese" onchange="aggiornaDashboard()"></select>
+                        </div>
+                        <button type="button" class="dashboard-refresh" onclick="caricaDashboard()">↻ Aggiorna dati</button>
+                    </div>
+                </div>
+                <p id="dashboardStato" role="status" style="color:#7f8c8d;">Caricamento dati dashboard...</p>
+                <h3 style="margin-top:20px;">Contatori annuali</h3>
+                <div class="dashboard-kpi-grid">
+                    <div class="dashboard-kpi" style="border-left-color:#27ae60;"><h4>Ferie maturate</h4><strong id="kpiFerieMaturate">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#e67e22;"><h4>Ferie godute</h4><strong id="kpiFerieGodute">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#2980b9;"><h4>Ferie rimanenti</h4><strong id="kpiFerieResidue">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#e74c3c;"><h4>Ferie scadute (saldo negativo)</h4><strong id="kpiFerieScadute">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#8e44ad;"><h4>Permessi rimanenti</h4><strong id="kpiPermessiResidui">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#c0392b;"><h4>Malattia nell'anno</h4><strong id="kpiMalattiaAnno">—</strong></div>
+                </div>
+                <h3>Contatori mensili</h3>
+                <div class="dashboard-kpi-grid">
+                    <div class="dashboard-kpi" style="border-left-color:#f39c12;"><h4>Ferie del mese</h4><strong id="kpiFerieMese">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#9b59b6;"><h4>Permessi del mese</h4><strong id="kpiPermessiMese">—</strong></div>
+                    <div class="dashboard-kpi" style="border-left-color:#e74c3c;"><h4>Malattia del mese</h4><strong id="kpiMalattiaMese">—</strong></div>
+                </div>
+                <p id="dashboardStatistiche" style="color:#566573;"></p>
+                <div class="dashboard-chart-grid">
+                    <article class="dashboard-chart-card"><h3>Giorni lavorati per anno</h3><div class="dashboard-chart-wrap"><canvas id="chartGiorniAnno" aria-label="Grafico giorni lavorati per anno"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Giorni lavorati per mese</h3><div class="dashboard-chart-wrap"><canvas id="chartGiorniMese" aria-label="Grafico giorni lavorati per mese"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Ore lavorate per giorno</h3><div class="dashboard-chart-wrap tall"><canvas id="chartOreGiorno" aria-label="Grafico ore lavorate per giorno"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Ferie, permessi e malattia per anno</h3><div class="dashboard-chart-wrap"><canvas id="chartAssenzeAnno" aria-label="Grafico assenze per anno"></canvas></div></article>
+                    <article class="dashboard-chart-card"><h3>Ferie, permessi e malattia per mese</h3><div class="dashboard-chart-wrap"><canvas id="chartAssenzeMese" aria-label="Grafico assenze per mese"></canvas></div></article>
+                </div>
             </div>
 
             <!-- IMPOSTAZIONI PARAMETRI -->
@@ -567,6 +622,9 @@
         let timestampCacheDatiGlobali = 0;
         let istanzaCalendario = null;
         let dataCalendarioSelezionata = null;
+        let chartsDashboard = {};
+        let datiDashboard = null;
+        let richiestaDashboard = 0;
         let eventiGiornoCorrente = [];
         let configAppCache = {};
         let recordsConfigAppOriginali = [];
@@ -916,6 +974,281 @@
                 caricaAnteprimaReport();
             } else if (sectionId === 'calendario') {
                 inizializzaCalendario();
+            } else if (sectionId === 'dashboard') {
+                caricaDashboard();
+            }
+        }
+
+        function dataPartiDashboard(valore) {
+            if (typeof valore === 'string') {
+                const iso = valore.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (iso) return { aa: iso[1], mm: iso[2], gg: iso[3] };
+            }
+            const parti = estraiPartiData(valore);
+            if (!/^\d{4}$/.test(parti.aa) || Number(parti.mm) < 1 || Number(parti.mm) > 12 || Number(parti.gg) < 1 || Number(parti.gg) > 31) return null;
+            return parti;
+        }
+
+        function numeroDashboard(valore) {
+            const numero = Number.parseFloat(String(valore ?? 0).replace(',', '.'));
+            return Number.isFinite(numero) ? numero : 0;
+        }
+
+        function aggregaPresenzeDashboard(records) {
+            const giorni = new Map();
+            (records || []).forEach(record => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                if (!parti || !campi.Evento) return;
+                const data = `${parti.aa}-${parti.mm}-${parti.gg}`;
+                if (!giorni.has(data)) giorni.set(data, {});
+                const ora = Number.parseInt(campi.Ora, 10) || 0;
+                const minuti = Number.parseInt(campi.Minuti, 10) || 0;
+                giorni.get(data)[campi.Evento] = ora * 60 + minuti;
+            });
+
+            const riepilogo = { anni: {}, mesi: {}, oreGiornaliere: [] };
+            giorni.forEach((eventi, data) => {
+                const [anno, mese] = data.split('-');
+                const chiaveMese = `${anno}-${mese}`;
+                const annoDati = riepilogo.anni[anno] ||= { giorni: 0, ore: 0 };
+                const meseDati = riepilogo.mesi[chiaveMese] ||= { giorni: 0, ore: 0 };
+                let ore = 0;
+                if (eventi.Cantiere !== undefined && eventi.Ingresso === undefined) {
+                    annoDati.giorni++;
+                    meseDati.giorni++;
+                } else if (eventi.Ingresso !== undefined && eventi.Uscita !== undefined) {
+                    annoDati.giorni++;
+                    meseDati.giorni++;
+                    const minutiLordo = Math.max(0, eventi.Uscita - eventi.Ingresso);
+                    let minutiPausa = 0;
+                    if (eventi['Inizio Pausa'] !== undefined && eventi['Fine Pausa'] !== undefined) {
+                        minutiPausa = Math.max(0, eventi['Fine Pausa'] - eventi['Inizio Pausa']);
+                    } else if (minutiLordo > 360) {
+                        minutiPausa = 60;
+                    }
+                    ore = Math.max(0, minutiLordo - minutiPausa) / 60;
+                    annoDati.ore += ore;
+                    meseDati.ore += ore;
+                }
+                if (ore > 0) riepilogo.oreGiornaliere.push({ data, ore });
+            });
+            riepilogo.oreGiornaliere.sort((a, b) => a.data.localeCompare(b.data));
+            return riepilogo;
+        }
+
+        function aggregaAssenzeDashboard(records) {
+            const riepilogo = { anni: {}, mesi: {} };
+            (records || []).forEach(record => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                if (!parti) return;
+                const tipo = String(campi.Tipo_Assenza || '').toLowerCase().trim();
+                const categoria = tipo.includes('ferie') ? 'ferie'
+                    : tipo.includes('permess') ? 'permessi'
+                        : tipo.includes('malattia') ? 'malattia' : null;
+                if (!categoria) return;
+                const quantita = numeroDashboard(campi.Quantita);
+                const chiaveMese = `${parti.aa}-${parti.mm}`;
+                riepilogo.anni[parti.aa] ||= { ferie: 0, permessi: 0, malattia: 0 };
+                riepilogo.mesi[chiaveMese] ||= { ferie: 0, permessi: 0, malattia: 0 };
+                riepilogo.anni[parti.aa][categoria] += quantita;
+                riepilogo.mesi[chiaveMese][categoria] += quantita;
+            });
+            return riepilogo;
+        }
+
+        function aggiornaGraficoDashboard(chiave, canvasId, tipo, etichette, serie, titoloAsse) {
+            if (!window.Chart) throw new Error("Chart.js non è disponibile.");
+            const datasets = serie.map((dataset, indice) => ({
+                ...dataset,
+                borderWidth: tipo === 'line' ? 2 : 1,
+                borderRadius: tipo === 'bar' ? 4 : 0,
+                tension: 0.25,
+                fill: false
+            }));
+            const configurazione = {
+                type: tipo,
+                data: { labels: etichette, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: titoloAsse } }
+                    }
+                }
+            };
+            if (chartsDashboard[chiave]) {
+                chartsDashboard[chiave].data = configurazione.data;
+                chartsDashboard[chiave].options = configurazione.options;
+                chartsDashboard[chiave].update();
+            } else {
+                chartsDashboard[chiave] = new Chart(document.getElementById(canvasId), configurazione);
+            }
+        }
+
+        function formattaValoreDashboard(valore, unita) {
+            return `${valore.toLocaleString('it-IT', { maximumFractionDigits: 2 })} ${unita}`;
+        }
+
+        function aggiornaDashboard() {
+            if (!datiDashboard) return;
+            const anno = document.getElementById('dashboardAnno').value;
+            const mese = document.getElementById('dashboardMese').value;
+            const presenze = aggregaPresenzeDashboard(datiDashboard.presenze);
+            const assenze = aggregaAssenzeDashboard(datiDashboard.assenze);
+            const anniPresenze = Object.keys(presenze.anni).sort();
+            const anniAssenze = Object.keys(assenze.anni).sort();
+            const anni = [...new Set([...anniPresenze, ...anniAssenze])].sort();
+            const mesi = nomiMesi.slice(1);
+            const coloriAssenze = { ferie: '#f39c12', permessi: '#8e44ad', malattia: '#e74c3c' };
+            const formatta = (valore, unita) => formattaValoreDashboard(valore, unita);
+
+            aggiornaGraficoDashboard('giorniAnno', 'chartGiorniAnno', 'bar', anni, [
+                { label: 'Giorni lavorati', data: anni.map(a => presenze.anni[a]?.giorni || 0), backgroundColor: '#27ae60' }
+            ], 'Giorni');
+            aggiornaGraficoDashboard('giorniMese', 'chartGiorniMese', 'bar', mesi, [
+                { label: 'Giorni lavorati', data: mesi.map((_, indice) => presenze.mesi[`${anno}-${String(indice + 1).padStart(2, '0')}`]?.giorni || 0), backgroundColor: '#3498db' }
+            ], 'Giorni');
+            const oreMese = presenze.oreGiornaliere.filter(giorno => giorno.data.startsWith(`${anno}-${mese}-`));
+            aggiornaGraficoDashboard('oreGiorno', 'chartOreGiorno', 'line', oreMese.map(giorno => giorno.data.slice(-2)), [
+                { label: 'Ore nette', data: oreMese.map(giorno => Math.round(giorno.ore * 100) / 100), borderColor: '#16a085', backgroundColor: 'rgba(22,160,133,.18)' }
+            ], 'Ore');
+            aggiornaGraficoDashboard('assenzeAnno', 'chartAssenzeAnno', 'bar', anni, Object.entries(coloriAssenze).map(([categoria, colore]) => ({
+                label: categoria[0].toUpperCase() + categoria.slice(1),
+                data: anni.map(a => assenze.anni[a]?.[categoria] || 0),
+                backgroundColor: colore
+            })), 'Quantità');
+            aggiornaGraficoDashboard('assenzeMese', 'chartAssenzeMese', 'bar', mesi, Object.entries(coloriAssenze).map(([categoria, colore]) => ({
+                label: categoria[0].toUpperCase() + categoria.slice(1),
+                data: mesi.map((_, indice) => assenze.mesi[`${anno}-${String(indice + 1).padStart(2, '0')}`]?.[categoria] || 0),
+                backgroundColor: colore
+            })), 'Quantità');
+            chartsDashboard.giorniMese.options.scales.x = { stacked: false };
+            chartsDashboard.assenzeAnno.options.scales.x = { stacked: true };
+            chartsDashboard.assenzeAnno.options.scales.y.stacked = true;
+            chartsDashboard.assenzeMese.options.scales.x = { stacked: true };
+            chartsDashboard.assenzeMese.options.scales.y.stacked = true;
+            Object.values(chartsDashboard).forEach(chart => chart.update());
+
+            const contatore = (datiDashboard.contatori || []).find(r => Number(r.fields?.Anno) === Number(anno))?.fields || {};
+            const parametri = (datiDashboard.parametri || []).map(r => r.fields || {});
+            let ferieAnnue = 25.92, permessiAnnui = 40, annoValidita = 0;
+            parametri.forEach(p => {
+                const annoInizio = Number(p.Anno_Inizio_Validita) || 0;
+                if (annoInizio <= Number(anno) && annoInizio > annoValidita) {
+                    ferieAnnue = numeroDashboard(p.Ferie_Annuo_Spettante) || ferieAnnue;
+                    permessiAnnui = numeroDashboard(p.Permessi_Annuo_Spettante) || permessiAnnui;
+                    annoValidita = annoInizio;
+                }
+            });
+            ferieAnnue = numeroDashboard(contatore.Ferie_Annuali_Maturate) || ferieAnnue;
+            permessiAnnui = numeroDashboard(contatore.Permessi_Annuali_Maturati) || permessiAnnui;
+            const assenzeAnno = assenze.anni[anno] || { ferie: 0, permessi: 0, malattia: 0 };
+            const ferieGodute = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                const tipo = String(campi.Tipo_Assenza || '').toLowerCase();
+                return parti?.aa === anno && tipo.includes('ferie') && !tipo.includes('liquidat') && !tipo.includes('rettific')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const ferieLiquidate = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('ferie') && String(campi.Tipo_Assenza || '').toLowerCase().includes('liquidat')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const ferieRettificate = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('ferie') && String(campi.Tipo_Assenza || '').toLowerCase().includes('rettific')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const permessiLiquidati = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('permess') && String(campi.Tipo_Assenza || '').toLowerCase().includes('liquidat')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const permessiRettificati = (datiDashboard.assenze || []).reduce((totale, record) => {
+                const campi = record.fields || {};
+                const parti = dataPartiDashboard(campi.Data);
+                return parti?.aa === anno && String(campi.Tipo_Assenza || '').toLowerCase().includes('permess') && String(campi.Tipo_Assenza || '').toLowerCase().includes('rettific')
+                    ? totale + numeroDashboard(campi.Quantita) : totale;
+            }, 0);
+            const ferieSaldo = numeroDashboard(contatore.Ferie_Anno_Precedente) + ferieAnnue - ferieGodute - ferieLiquidate + ferieRettificate;
+            const permessiGoduti = assenzeAnno.permessi - permessiLiquidati - permessiRettificati;
+            const permessiSaldo = numeroDashboard(contatore.Permessi_Anno_Precedente) + permessiAnnui - permessiGoduti - permessiLiquidati + permessiRettificati;
+            const valori = {
+                kpiFerieMaturate: formatta(ferieAnnue, 'giorni'),
+                kpiFerieGodute: formatta(ferieGodute, 'giorni'),
+                kpiFerieResidue: formatta(ferieSaldo, 'giorni'),
+                kpiFerieScadute: formatta(Math.max(0, -ferieSaldo), 'giorni'),
+                kpiPermessiResidui: formatta(permessiSaldo, 'ore'),
+                kpiMalattiaAnno: formatta(assenzeAnno.malattia, 'giorni'),
+                kpiFerieMese: formatta(assenze.mesi[`${anno}-${mese}`]?.ferie || 0, 'giorni'),
+                kpiPermessiMese: formatta(assenze.mesi[`${anno}-${mese}`]?.permessi || 0, 'ore'),
+                kpiMalattiaMese: formatta(assenze.mesi[`${anno}-${mese}`]?.malattia || 0, 'giorni')
+            };
+            Object.entries(valori).forEach(([id, valore]) => { document.getElementById(id).innerText = valore; });
+            const giorniAnno = presenze.anni[anno]?.giorni || 0;
+            const oreAnno = presenze.anni[anno]?.ore || 0;
+            const giornateCompleteAnno = presenze.oreGiornaliere.filter(giorno => giorno.data.startsWith(`${anno}-`)).length;
+            document.getElementById('dashboardStatistiche').innerText = giorniAnno
+                ? `Totale anno ${anno}: ${giorniAnno} giornate registrate; media ${formatta(giornateCompleteAnno ? oreAnno / giornateCompleteAnno : 0, 'ore')} per giornata completa.`
+                : `Nessuna giornata lavorata registrata per ${anno}.`;
+            document.getElementById('dashboardStato').innerText = `Dati aggiornati: ${new Date().toLocaleString('it-IT')}.`;
+        }
+
+        async function caricaDashboard() {
+            if (!sessionToken) return;
+            const richiesta = ++richiestaDashboard;
+            const stato = document.getElementById('dashboardStato');
+            stato.innerText = 'Caricamento dati dashboard...';
+            try {
+                if (!window.Chart) throw new Error("Chart.js non è disponibile.");
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: "get_dashboard_data", token: sessionToken })
+                });
+                if (!response.ok) throw new Error(`Caricamento dashboard non riuscito (HTTP ${response.status}).`);
+                const dati = await response.json();
+                if (!dati.success) throw new Error(dati.error || "Il Worker non ha restituito i dati della dashboard.");
+                if (richiesta !== richiestaDashboard || document.getElementById('dashboard').style.display === 'none') return;
+                datiDashboard = {
+                    presenze: dati.presenze || [],
+                    assenze: dati.assenze || [],
+                    contatori: dati.contatori || [],
+                    parametri: dati.parametri || []
+                };
+                const selezioneMese = document.getElementById('dashboardMese').value;
+                const anni = new Set([String(new Date().getFullYear())]);
+                [...datiDashboard.presenze, ...datiDashboard.assenze].forEach(record => {
+                    const parti = dataPartiDashboard(record.fields?.Data);
+                    if (parti) anni.add(parti.aa);
+                });
+                datiDashboard.contatori.forEach(record => {
+                    const anno = Number(record.fields?.Anno);
+                    if (Number.isInteger(anno) && anno > 0) anni.add(String(anno));
+                });
+                const selectAnno = document.getElementById('dashboardAnno');
+                const selezioneAnno = selectAnno.value;
+                selectAnno.innerHTML = [...anni].sort((a, b) => Number(b) - Number(a)).map(anno => `<option value="${anno}">${anno}</option>`).join('');
+                selectAnno.value = anni.has(selezioneAnno) ? selezioneAnno : String(new Date().getFullYear());
+                const selectMese = document.getElementById('dashboardMese');
+                if (!selectMese.options.length) {
+                    selectMese.innerHTML = nomiMesi.slice(1).map((nome, indice) => `<option value="${String(indice + 1).padStart(2, '0')}">${nome}</option>`).join('');
+                }
+                selectMese.value = selezioneMese || String(new Date().getMonth() + 1).padStart(2, '0');
+                aggiornaDashboard();
+            } catch (error) {
+                if (richiesta !== richiestaDashboard) return;
+                console.error("Errore caricamento dashboard:", error);
+                stato.innerText = "Impossibile caricare i dati della dashboard. Riprova più tardi.";
+                mostraAlert(error.message || "Impossibile caricare i dati della dashboard.");
             }
         }
 

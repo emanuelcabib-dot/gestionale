@@ -614,6 +614,28 @@ export default {
           }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        if (body.tipo === "get_dashboard_data") {
+          const [resPresenze, resAssenze, resContatori, resParametri] = await Promise.all([
+            fetch(`${BASE_GRIST}/Prova/records`, { headers: headersGrist }),
+            fetch(`${BASE_GRIST}/Registro_Ferie_Permessi/records`, { headers: headersGrist }),
+            fetch(`${BASE_GRIST}/Contatori/records`, { headers: headersGrist }),
+            fetch(`${BASE_GRIST}/Parametri_contrattuali/records`, { headers: headersGrist })
+          ]);
+          if (!resPresenze.ok || !resAssenze.ok || !resContatori.ok || !resParametri.ok) {
+            return new Response(JSON.stringify({ success: false, error: "Impossibile recuperare i dati della dashboard da Grist" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          const [presenzeData, assenzeData, contatoriData, parametriData] = await Promise.all([
+            resPresenze.json(), resAssenze.json(), resContatori.json(), resParametri.json()
+          ]);
+          return new Response(JSON.stringify({
+            success: true,
+            presenze: presenzeData.records || [],
+            assenze: assenzeData.records || [],
+            contatori: contatoriData.records || [],
+            parametri: parametriData.records || []
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         if (body.tipo === "get_storico") {
           const annoFiltro = String(body.anno || new Date().getFullYear());
           const [resPresenze, resAssenze] = await Promise.all([
