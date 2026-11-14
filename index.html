@@ -457,18 +457,8 @@
                         <div class="form-actions">
                             <button type="submit" class="btn-submit">💾 Salva verifica</button>
                             <button type="button" onclick="generaPDFVerificaBustePaga()" style="background:#9b59b6;">📄 Esporta PDF</button>
-                            <button type="button" id="btnAnnullaVerificaBustePaga" onclick="resetFormVerificaBustePaga()" style="display:none; background:#7f8c8d;">Annulla modifica</button>
                         </div>
                     </form>
-                    <p id="statoVerificaBustePaga" role="status" style="color:#7f8c8d;">Caricamento verifiche...</p>
-                    <div style="overflow-x:auto;">
-                        <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                            <thead><tr style="background:#2c3e50; color:white;">
-                                <th style="padding:10px;">Anno</th><th style="padding:10px;">Mese</th><th style="padding:10px;">Ferie busta paga</th><th style="padding:10px;">Ferie reali</th><th style="padding:10px;">Discrepanza ferie</th><th style="padding:10px;">Permessi busta paga</th><th style="padding:10px;">Permessi reali</th><th style="padding:10px;">Discrepanza permessi</th><th style="padding:10px;">Azioni</th>
-                            </tr></thead>
-                            <tbody id="tabellaVerificaBustePaga"><tr><td colspan="9" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento verifiche...</td></tr></tbody>
-                        </table>
-                    </div>
                 </div>
             </div>
 
@@ -1012,7 +1002,7 @@
                 gestisciBannerFestivoAssenze();
             } else if (sectionId === 'report_panel') {
                 if (document.querySelector('#report_panel .report-pane.active')?.id === 'paneReportVerificaBustePaga') {
-                    caricaVerificheBustePaga();
+                    inizializzaFormVerificaBustePaga();
                 } else {
                     caricaAnteprimaReport();
                 }
@@ -1717,7 +1707,7 @@
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
             if (paneId === 'paneReportVerificaBustePaga') {
-                caricaVerificheBustePaga();
+                inizializzaFormVerificaBustePaga();
             } else {
                 caricaAnteprimaReport();
             }
@@ -2523,94 +2513,17 @@
             } else { mostraAlert("Errore generazione report timbrature annuale."); }
         }
 
-        let datiVerificaBustePaga = [];
-        let idVerificaBustaPagaInModifica = null;
-
         function formattaNumeroVerificaBustaPaga(valore) {
             if (valore === null || valore === undefined || valore === '') return '-';
             const numero = Number(valore);
             return Number.isFinite(numero) ? new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(numero) : '-';
         }
 
-        async function caricaVerificheBustePaga() {
-            if (!sessionToken) return;
-            const stato = document.getElementById('statoVerificaBustePaga');
-            stato.innerText = 'Caricamento verifiche...';
-            try {
-                const response = await apiFetch(WORKER_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: 'get_verifica_buste_paga', token: sessionToken })
-                });
-                const risultato = await response.json();
-                if (!response.ok || !risultato.success) {
-                    throw new Error(risultato.error || `Caricamento non riuscito (HTTP ${response.status}).`);
-                }
-                datiVerificaBustePaga = risultato.records || [];
-                const anno = document.getElementById('verificaBusteAnno');
-                const mese = document.getElementById('verificaBusteMese');
-                if (!anno.value) {
-                    anno.value = new Date().getFullYear();
-                    mese.value = new Date().getMonth() + 1;
-                }
-                if (!mese.value) mese.value = new Date().getMonth() + 1;
-                renderizzaVerificheBustePaga();
-                stato.innerText = `${datiVerificaBustePaga.length} verifiche caricate.`;
-            } catch (error) {
-                console.error('Errore caricamento verifiche buste paga:', error);
-                datiVerificaBustePaga = [];
-                document.getElementById('tabellaVerificaBustePaga').innerHTML = '<tr><td colspan="9" style="padding:15px; text-align:center; color:#e74c3c;">Impossibile caricare le verifiche buste paga.</td></tr>';
-                stato.innerText = 'Impossibile caricare le verifiche buste paga.';
-            }
-        }
-
-        function renderizzaVerificheBustePaga() {
-            const records = [...datiVerificaBustePaga].sort((a, b) =>
-                Number(b.fields.Anno) - Number(a.fields.Anno) || Number(b.fields.Mese) - Number(a.fields.Mese)
-            );
-            const tbody = document.getElementById('tabellaVerificaBustePaga');
-            tbody.innerHTML = records.length ? records.map(record => {
-                const campi = record.fields;
-                const mese = nomiMesi[Number(campi.Mese)] || String(campi.Mese ?? '-');
-                return `<tr style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;">${escapeHtmlReport(campi.Anno)}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(mese)}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga))}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(formattaNumeroVerificaBustaPaga(campi.Ferie_Reali))}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie))}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga))}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(formattaNumeroVerificaBustaPaga(campi.Permessi_Reali))}</td>
-                    <td style="padding:10px;">${escapeHtmlReport(formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi))}</td>
-                    <td style="padding:10px; white-space:nowrap;">
-                        <button type="button" onclick="modificaVerificaBustaPaga(${Number(record.id)})" style="background:#3498db; padding:6px 10px;">Modifica</button>
-                        <button type="button" onclick="eliminaVerificaBustaPaga(${Number(record.id)})" style="background:#e74c3c; padding:6px 10px;">Elimina</button>
-                    </td>
-                </tr>`;
-            }).join('') : '<tr><td colspan="9" style="padding:15px; text-align:center;">Nessuna verifica buste paga registrata.</td></tr>';
-        }
-
-        function modificaVerificaBustaPaga(id) {
-            const record = datiVerificaBustePaga.find(elemento => Number(elemento.id) === Number(id));
-            if (!record) {
-                mostraAlert('La verifica selezionata non è più disponibile. Aggiorna la scheda e riprova.');
-                return;
-            }
-            const campi = record.fields;
-            idVerificaBustaPagaInModifica = record.id;
-            document.getElementById('verificaBusteAnno').value = campi.Anno ?? '';
-            document.getElementById('verificaBusteMese').value = campi.Mese ?? '';
-            document.getElementById('verificaBusteFerie').value = campi.Ferie_Residuo_BustaPaga ?? '';
-            document.getElementById('verificaBustePermessi').value = campi.Permessi_Residuo_BustaPaga ?? '';
-            document.getElementById('btnAnnullaVerificaBustePaga').style.display = 'inline-block';
-            document.getElementById('formVerificaBustePaga').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-
-        function resetFormVerificaBustePaga() {
-            idVerificaBustaPagaInModifica = null;
-            document.getElementById('formVerificaBustePaga').reset();
-            document.getElementById('verificaBusteAnno').value = new Date().getFullYear();
-            document.getElementById('verificaBusteMese').value = new Date().getMonth() + 1;
-            document.getElementById('btnAnnullaVerificaBustePaga').style.display = 'none';
+        function inizializzaFormVerificaBustePaga() {
+            const anno = document.getElementById('verificaBusteAnno');
+            const mese = document.getElementById('verificaBusteMese');
+            if (!anno.value) anno.value = new Date().getFullYear();
+            if (!mese.value) mese.value = new Date().getMonth() + 1;
         }
 
         async function salvaVerificaBustaPaga() {
@@ -2635,7 +2548,6 @@
                     body: JSON.stringify({
                         tipo: 'salva_verifica_busta_paga',
                         token: sessionToken,
-                        id_riga: idVerificaBustaPagaInModifica,
                         anno,
                         mese,
                         ferie_residue: ferie,
@@ -2647,32 +2559,9 @@
                     throw new Error(risultato.error || `Salvataggio non riuscito (HTTP ${response.status}).`);
                 }
                 mostraAlert('Verifica busta paga salvata con successo.');
-                resetFormVerificaBustePaga();
-                await caricaVerificheBustePaga();
             } catch (error) {
                 console.error('Errore salvataggio verifica busta paga:', error);
                 mostraAlert(`Impossibile salvare la verifica busta paga. ${error.message}`);
-            }
-        }
-
-        async function eliminaVerificaBustaPaga(id) {
-            if (!await mostraConfirm('Vuoi eliminare questa verifica busta paga?')) return;
-            try {
-                const response = await apiFetch(WORKER_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: 'elimina_record', token: sessionToken, tabella: 'verifica_buste_paga', id_riga: id })
-                });
-                const risultato = await response.json();
-                if (!response.ok || !risultato.success) {
-                    throw new Error(risultato.error || `Eliminazione non riuscita (HTTP ${response.status}).`);
-                }
-                if (Number(idVerificaBustaPagaInModifica) === Number(id)) resetFormVerificaBustePaga();
-                await caricaVerificheBustePaga();
-                mostraAlert('Verifica busta paga eliminata.');
-            } catch (error) {
-                console.error('Errore eliminazione verifica busta paga:', error);
-                mostraAlert(`Impossibile eliminare la verifica busta paga. ${error.message}`);
             }
         }
 
