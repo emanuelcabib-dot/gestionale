@@ -18,12 +18,40 @@
     </script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; height: 100vh; overflow: hidden; }
-        .login-container { max-width: 400px; margin: 100px auto 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
-        input[type="password"] { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .login-container { min-height: 100vh; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 24px; background: radial-gradient(ellipse at top left, #e0f2fe 0, transparent 48%), linear-gradient(135deg, #f8fafc, #edf2f7); }
+        .login-card { width: min(100%, 420px); padding: 42px 38px; border: 1px solid rgba(255,255,255,.85); border-radius: 24px; background: rgba(255,255,255,.94); box-shadow: 0 24px 70px rgba(31, 56, 88, .14); text-align: center; box-sizing: border-box; }
+        .login-brand-icon { width: 64px; height: 64px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 20px; color: #fff; background: linear-gradient(145deg, #2878d0, #1555a5); box-shadow: 0 10px 24px rgba(21, 85, 165, .25); }
+        .login-brand-icon svg { width: 32px; height: 32px; }
+        .login-card h1 { margin: 0 0 8px; color: #172b4d; font-size: 26px; letter-spacing: -.5px; }
+        .login-subtitle { margin: 0 0 28px; color: #718096; font-size: 14px; }
+        .login-field { margin: 0 0 18px; text-align: left; }
+        .login-field label { display: block; margin: 0 0 8px; color: #344563; font-size: 13px; font-weight: 700; }
+        .login-input-wrap { position: relative; }
+        .login-input-wrap > svg { position: absolute; top: 50%; left: 14px; width: 19px; height: 19px; transform: translateY(-50%); color: #8a9ab0; pointer-events: none; }
+        .login-input-wrap input { width: 100%; height: 50px; padding: 0 48px; border: 1px solid #d9e2ec; border-radius: 12px; box-sizing: border-box; background: #fbfcfe; color: #243b53; font-size: 15px; outline: none; transition: border-color .2s, box-shadow .2s; }
+        .login-input-wrap input:focus { border-color: #3783d4; box-shadow: 0 0 0 3px rgba(55, 131, 212, .13); background: #fff; }
+        .login-container button { width: 100%; min-height: 48px; border-radius: 12px; font-weight: 650; transition: transform .15s, box-shadow .15s, background .15s; }
+        .login-container button:hover { transform: translateY(-1px); }
+        .login-container .password-toggle { position: absolute; top: 50%; right: 7px; width: 36px; min-height: 36px; padding: 7px; transform: translateY(-50%); background: transparent; color: #718096; }
+        .password-toggle svg { width: 19px; height: 19px; vertical-align: middle; }
+        .login-submit { background: linear-gradient(110deg, #2878d0, #1555a5); box-shadow: 0 8px 18px rgba(21, 85, 165, .2); }
+        .login-submit:hover { background: linear-gradient(110deg, #226bbd, #104a91); }
+        .login-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: #9aa8b8; font-size: 12px; }
+        .login-divider::before, .login-divider::after { content: ""; height: 1px; flex: 1; background: #e7edf3; }
+        .login-container .login-biometric { display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #cbd9e8; background: #fff; color: #245b91; }
+        .login-biometric:hover { background: #f3f8fd; box-shadow: 0 5px 15px rgba(31, 56, 88, .08); }
+        .login-biometric svg { width: 20px; height: 20px; }
+        .login-container .login-biometric:disabled { cursor: not-allowed; opacity: .55; transform: none; }
+        .error-message { color: #c0392b; margin: 16px 0 0; display: none; font-size: 13px; }
+        .login-footnote { margin: 22px 0 0; color: #9aa8b8; font-size: 12px; }
+        .biometric-setup-banner { position: fixed; top: 16px; right: 16px; z-index: 1200; display: flex; align-items: center; gap: 14px; max-width: min(540px, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid #d7e6f5; border-radius: 14px; background: #fff; box-shadow: 0 12px 36px rgba(31, 56, 88, .18); color: #344563; }
+        .biometric-setup-banner p { margin: 0; font-size: 13px; line-height: 1.4; }
+        .biometric-setup-actions { display: flex; flex-shrink: 0; gap: 8px; }
+        .biometric-setup-actions button { padding: 9px 12px; border-radius: 9px; font-size: 13px; }
+        .biometric-setup-actions .setup-dismiss { background: #edf2f7; color: #526579; }
+        .biometric-setup-actions .setup-enable { background: #2878d0; }
         button { background-color: #3498db; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #2980b9; }
-        .login-container button { width: 100%; }
-        .error-message { color: #e74c3c; margin-top: 15px; display: none; }
         
         .panel-container { display: flex; height: 100vh; width: 100vw; }
         
@@ -101,6 +129,11 @@
 
         @media (max-width: 768px) {
             body { overflow: auto; }
+            .login-container { min-height: 100vh; padding: 18px; }
+            .login-card { padding: 34px 24px; border-radius: 20px; }
+            .biometric-setup-banner { left: 12px; right: 12px; top: 12px; max-width: none; flex-wrap: wrap; }
+            .biometric-setup-actions { width: 100%; }
+            .biometric-setup-actions button { flex: 1; }
             .panel-container { flex-direction: column; height: auto; }
             .sidebar { display: none; }
             .mobile-topbar { display: flex; }
@@ -173,15 +206,51 @@
 
     <!-- LOGIN SECTION -->
     <div id="loginSection" class="login-container">
-        <h2>Accesso Riservato</h2>
-        <p>Inserisci il codice di sblocco</p>
-        <input type="password" id="companyCode" placeholder="Inserire codice">
-        <button onclick="checkCode()">Accedi</button>
-        <p id="errorMessage" class="error-message">Codice errato. Riprova.</p>
+        <div class="login-card">
+            <div class="login-brand-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 6v5c0 4.7-3 8-7 10-4-2-7-5.3-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <h1>Benvenuto</h1>
+            <p class="login-subtitle">Accedi al tuo spazio di lavoro</p>
+            <form id="loginForm" onsubmit="event.preventDefault(); checkCode();">
+                <div class="login-field">
+                    <label for="companyUsername">Nome utente</label>
+                    <div class="login-input-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+                        <input type="text" id="companyUsername" name="username" placeholder="Il tuo nome utente" autocomplete="username" required>
+                    </div>
+                </div>
+                <div class="login-field">
+                    <label for="companyPassword">Password</label>
+                    <div class="login-input-wrap">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                        <input type="password" id="companyPassword" name="password" placeholder="Inserisci la password" autocomplete="current-password" required>
+                        <button class="password-toggle" type="button" aria-label="Mostra password" aria-pressed="false" onclick="togglePasswordVisibility()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <button class="login-submit" type="submit">Accedi</button>
+            </form>
+            <div class="login-divider">oppure</div>
+            <button id="biometricLoginButton" class="login-biometric" type="button" onclick="loginWithBiometrics()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 11a2 2 0 0 0-2 2c0 4-.8 6.5-2 8"/><path d="M14 13c0 3.2-.3 5.7-1 7.5"/><path d="M8 13a4 4 0 0 1 8 0c0 2.2-.1 4.4-.5 6.5"/><path d="M5 13a7 7 0 0 1 14 0v1"/><path d="M3 13a9 9 0 0 1 18 0"/><path d="M4.5 17c.3 1.3.8 2.5 1.5 3.6"/></svg>
+                Accedi con Impronta Digitale
+            </button>
+            <p id="errorMessage" class="error-message" role="alert" aria-live="polite"></p>
+            <p class="login-footnote">Accesso protetto e riservato</p>
+        </div>
     </div>
 
     <!-- MAIN PANEL -->
     <div id="mainPanel" class="panel-container" style="display: none;">
+        <div id="biometricSetupBanner" class="biometric-setup-banner" style="display:none;">
+            <p>Attiva l'accesso biometrico su questo dispositivo per accedere più rapidamente.</p>
+            <div class="biometric-setup-actions">
+                <button class="setup-enable" type="button" onclick="registerBiometrics()">Attiva</button>
+                <button class="setup-dismiss" type="button" onclick="dismissBiometricSetup()">Non ora</button>
+            </div>
+        </div>
         
         <!-- BARRA SUPERIORE MOBILE -->
         <div class="mobile-topbar" id="mobileTopbar">
@@ -459,6 +528,24 @@
                             <button type="button" onclick="generaPDFVerificaBustePaga()" style="background:#9b59b6;">📄 Esporta PDF</button>
                         </div>
                     </form>
+                    <div style="overflow-x:auto; margin-top:20px;">
+                        <table style="width:100%; min-width:850px; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead>
+                                <tr style="background:#2c3e50; color:white;">
+                                    <th style="padding:10px;">Periodo</th>
+                                    <th style="padding:10px;">Ferie Busta</th>
+                                    <th style="padding:10px;">Ferie Reali</th>
+                                    <th style="padding:10px;">Discrepanza Ferie</th>
+                                    <th style="padding:10px;">Permessi Busta</th>
+                                    <th style="padding:10px;">Permessi Reali</th>
+                                    <th style="padding:10px;">Discrepanza Permessi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabellaAnteprimaVerificaBuste">
+                                <tr><td colspan="7" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna verifica registrata in questa sessione.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -1003,6 +1090,7 @@
             } else if (sectionId === 'report_panel') {
                 if (document.querySelector('#report_panel .report-pane.active')?.id === 'paneReportVerificaBustePaga') {
                     inizializzaFormVerificaBustePaga();
+                    resetTabellaVerificaBustePaga();
                 } else {
                     caricaAnteprimaReport();
                 }
@@ -1343,34 +1431,204 @@
             }
         }
 
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('companyPassword');
+            const toggle = document.querySelector('.password-toggle');
+            const showPassword = passwordInput.type === 'password';
+            passwordInput.type = showPassword ? 'text' : 'password';
+            toggle.setAttribute('aria-pressed', String(showPassword));
+            toggle.setAttribute('aria-label', showPassword ? 'Nascondi password' : 'Mostra password');
+        }
+
+        function arrayBufferToBase64Url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+
+        function base64UrlToArrayBuffer(value) {
+            const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64 + '='.repeat((4 - base64.length % 4) % 4));
+            const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+            return bytes.buffer;
+        }
+
+        function prepareCredentialOptions(options, isRegistration) {
+            const publicKey = { ...options };
+            publicKey.challenge = base64UrlToArrayBuffer(options.challenge);
+            if (isRegistration) {
+                publicKey.user = { ...options.user, id: base64UrlToArrayBuffer(options.user.id) };
+                publicKey.excludeCredentials = (options.excludeCredentials || []).map(credential => ({
+                    ...credential,
+                    id: base64UrlToArrayBuffer(credential.id)
+                }));
+            } else {
+                publicKey.allowCredentials = (options.allowCredentials || []).map(credential => ({
+                    ...credential,
+                    id: base64UrlToArrayBuffer(credential.id)
+                }));
+            }
+            return publicKey;
+        }
+
+        function serializeCredential(credential) {
+            const result = {
+                id: credential.id,
+                rawId: arrayBufferToBase64Url(credential.rawId),
+                type: credential.type,
+                response: {
+                    clientDataJSON: arrayBufferToBase64Url(credential.response.clientDataJSON)
+                }
+            };
+            if (credential.response.attestationObject) {
+                result.response.attestationObject = arrayBufferToBase64Url(credential.response.attestationObject);
+            } else {
+                result.response.authenticatorData = arrayBufferToBase64Url(credential.response.authenticatorData);
+                result.response.signature = arrayBufferToBase64Url(credential.response.signature);
+                result.response.userHandle = credential.response.userHandle
+                    ? arrayBufferToBase64Url(credential.response.userHandle)
+                    : null;
+            }
+            return result;
+        }
+
+        async function parseWorkerResponse(response, fallbackMessage) {
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || fallbackMessage);
+            }
+            return data;
+        }
+
+        function updateBiometricSupport() {
+            const button = document.getElementById('biometricLoginButton');
+            if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials) {
+                button.disabled = true;
+                button.title = 'Biometria non disponibile in questo browser o contesto';
+            }
+        }
+
+        async function completeLogin(username, offerBiometricSetup) {
+            document.getElementById('companyUsername').value = username;
+            document.getElementById('companyPassword').value = '';
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('mainPanel').style.display = 'flex';
+            document.getElementById('p_data').value = getOggiInLocale();
+            document.getElementById('r_data').value = getOggiInLocale();
+            setOrarioAttuale();
+            await inizializzaDatiGlobaliCache();
+            navigaASezione('home');
+            document.getElementById('biometricSetupBanner').style.display =
+                offerBiometricSetup && window.isSecureContext && window.PublicKeyCredential && navigator.credentials
+                    ? 'flex'
+                    : 'none';
+        }
+
         async function checkCode() {
-            const codeInput = document.getElementById('companyCode').value;
+            const username = document.getElementById('companyUsername').value.trim();
+            const password = document.getElementById('companyPassword').value;
             const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.display = 'none';
             try {
                 const response = await apiFetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "auth", code: codeInput })
+                    body: JSON.stringify({ tipo: "auth", username, password })
                 });
-                if (response.ok) {
-                    const resData = await response.json();
-                    sessionToken = resData.token;
-                    document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('mainPanel').style.display = 'flex';
-                    
-                    document.getElementById('p_data').value = getOggiInLocale();
-                    document.getElementById('r_data').value = getOggiInLocale();
-
-                    setOrarioAttuale();
-                    await inizializzaDatiGlobaliCache();
-                    navigaASezione('home');
-                } else {
-                    errorMessage.style.display = 'block';
-                }
+                const result = await parseWorkerResponse(response, 'Nome utente o password non validi.');
+                sessionToken = result.token;
+                await completeLogin(username, true);
             } catch (error) {
                 console.error('Errore Auth:', error);
-                mostraAlert('Impossibile connettersi al servizio di autenticazione o limite Grist raggiunto.');
+                sessionToken = '';
+                document.getElementById('mainPanel').style.display = 'none';
+                document.getElementById('loginSection').style.display = 'flex';
+                errorMessage.textContent = error.message || 'Impossibile completare l’accesso.';
+                errorMessage.style.display = 'block';
             }
+        }
+
+        async function loginWithBiometrics() {
+            const username = document.getElementById('companyUsername').value.trim();
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.display = 'none';
+            if (!username) {
+                errorMessage.textContent = 'Inserisci il nome utente prima di usare la biometria.';
+                errorMessage.style.display = 'block';
+                document.getElementById('companyUsername').focus();
+                return;
+            }
+            if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials) {
+                errorMessage.textContent = 'La biometria richiede un browser supportato e una connessione HTTPS.';
+                errorMessage.style.display = 'block';
+                return;
+            }
+            try {
+                const optionsResponse = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'webauthn_auth_options', username })
+                });
+                const optionsData = await parseWorkerResponse(optionsResponse, 'Impossibile avviare l’accesso biometrico.');
+                const credential = await navigator.credentials.get({
+                    publicKey: prepareCredentialOptions(optionsData.publicKey, false)
+                });
+                if (!credential) throw new Error('Autenticazione biometrica annullata.');
+                const verifyResponse = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: 'webauthn_auth_verify',
+                        username,
+                        credential: serializeCredential(credential)
+                    })
+                });
+                const result = await parseWorkerResponse(verifyResponse, 'Verifica biometrica non riuscita.');
+                sessionToken = result.token;
+                await completeLogin(username, false);
+            } catch (error) {
+                sessionToken = '';
+                document.getElementById('mainPanel').style.display = 'none';
+                document.getElementById('loginSection').style.display = 'flex';
+                errorMessage.textContent = error.message || 'Accesso biometrico non riuscito.';
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        async function registerBiometrics() {
+            const username = document.getElementById('companyUsername').value.trim();
+            try {
+                const optionsResponse = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'webauthn_register_options', username, token: sessionToken })
+                });
+                const optionsData = await parseWorkerResponse(optionsResponse, 'Impossibile avviare la registrazione biometrica.');
+                const credential = await navigator.credentials.create({
+                    publicKey: prepareCredentialOptions(optionsData.publicKey, true)
+                });
+                if (!credential) throw new Error('Registrazione biometrica annullata.');
+                const verifyResponse = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: 'webauthn_register_verify',
+                        username,
+                        token: sessionToken,
+                        credential: serializeCredential(credential)
+                    })
+                });
+                await parseWorkerResponse(verifyResponse, 'Impossibile completare la registrazione biometrica.');
+                document.getElementById('biometricSetupBanner').style.display = 'none';
+                mostraAlert('Accesso biometrico attivato su questo dispositivo.');
+            } catch (error) {
+                mostraAlert(error.message || 'Registrazione biometrica non riuscita.');
+            }
+        }
+
+        function dismissBiometricSetup() {
+            document.getElementById('biometricSetupBanner').style.display = 'none';
         }
 
         function logout() {
@@ -1382,9 +1640,11 @@
             tipoInserimentoPassato = null;
             resetMascheraPresenze();
             resetMascheraAssenze();
-            document.getElementById('companyCode').value = "";
+            document.getElementById('companyUsername').value = "";
+            document.getElementById('companyPassword').value = "";
+            document.getElementById('biometricSetupBanner').style.display = 'none';
             document.getElementById('mainPanel').style.display = 'none';
-            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('loginSection').style.display = 'flex';
         }
 
         function invalidaCacheConfigurazioniStatiche() {
@@ -1515,8 +1775,11 @@
         }
 
         function popolaTendineAnniDinamiche() {
-            const annoInizio = parseInt(configAppCache["Anno inizio storico"] || "2024", 10);
             const annoCorrente = new Date().getFullYear();
+            const annoInizioConfigurato = Number.parseInt(configAppCache["Anno inizio storico"] || "2024", 10);
+            const annoInizio = Number.isInteger(annoInizioConfigurato)
+                ? Math.min(annoInizioConfigurato, annoCorrente)
+                : Math.min(2024, annoCorrente);
             
             let htmlOptions = '';
             for (let a = annoCorrente; a >= annoInizio; a--) {
@@ -1544,7 +1807,7 @@
             });
 
             document.querySelectorAll('.select-report-anno').forEach(select => {
-                select.innerHTML = `<option value="${annoCorrente}">${annoCorrente}</option>`;
+                select.innerHTML = htmlOptions;
                 select.value = String(annoCorrente);
             });
 
@@ -1707,7 +1970,8 @@
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
             if (paneId === 'paneReportVerificaBustePaga') {
-                inizializzaFormVerificaBustePaga();
+                resetFormVerificaBustaPaga();
+                resetTabellaVerificaBustePaga();
             } else {
                 caricaAnteprimaReport();
             }
@@ -2520,10 +2784,93 @@
         }
 
         function inizializzaFormVerificaBustePaga() {
-            const anno = document.getElementById('verificaBusteAnno');
-            const mese = document.getElementById('verificaBusteMese');
-            if (!anno.value) anno.value = new Date().getFullYear();
-            if (!mese.value) mese.value = new Date().getMonth() + 1;
+            resetFormVerificaBustaPaga();
+        }
+
+        function resetFormVerificaBustaPaga() {
+            const oggi = new Date();
+            document.getElementById('verificaBusteAnno').value = oggi.getFullYear();
+            document.getElementById('verificaBusteMese').value = String(oggi.getMonth() + 1);
+            document.getElementById('verificaBusteFerie').value = '';
+            document.getElementById('verificaBustePermessi').value = '';
+        }
+
+        function resetTabellaVerificaBustePaga() {
+            const tbody = document.getElementById('tabellaAnteprimaVerificaBuste');
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 7;
+            cell.style.cssText = 'padding:15px; text-align:center; color:#7f8c8d;';
+            cell.textContent = 'Nessuna verifica registrata in questa sessione.';
+            row.appendChild(cell);
+            tbody.replaceChildren(row);
+        }
+
+        async function caricaTabellaVerificaBustePaga(annoSalvato, meseSalvato) {
+            const tbody = document.getElementById('tabellaAnteprimaVerificaBuste');
+            const mostraStato = messaggio => {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 7;
+                cell.style.cssText = 'padding:15px; text-align:center; color:#7f8c8d;';
+                cell.textContent = messaggio;
+                row.appendChild(cell);
+                tbody.replaceChildren(row);
+            };
+            if (!sessionToken) {
+                mostraStato('Sessione non valida.');
+                return;
+            }
+            mostraStato('Caricamento verifiche...');
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'get_verifica_buste_paga', token: sessionToken })
+                });
+                const risultato = await response.json();
+                if (!response.ok || !risultato.success) {
+                    throw new Error(risultato.error || `Recupero dati non riuscito (HTTP ${response.status}).`);
+                }
+                const verifiche = (Array.isArray(risultato.records) ? risultato.records : [])
+                    .filter(record => record && Number(record.id) === 1 && record.fields &&
+                        Number(record.fields.Anno) === annoSalvato &&
+                        Number(record.fields.Mese) === meseSalvato);
+                if (!verifiche.length) {
+                    mostraStato('Nessuna verifica busta paga salvata.');
+                    return;
+                }
+                const fragment = document.createDocumentFragment();
+                verifiche.forEach(record => {
+                    const campi = record.fields;
+                    const mese = Number(campi.Mese);
+                    const anno = Number(campi.Anno);
+                    const periodo = Number.isInteger(mese) && mese >= 1 && mese <= 12
+                        ? `${nomiMesi[mese]} ${anno}`
+                        : `${campi.Mese ?? '-'} ${campi.Anno ?? '-'}`;
+                    const valori = [
+                        periodo,
+                        formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga),
+                        formattaNumeroVerificaBustaPaga(campi.Ferie_Reali),
+                        formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie),
+                        formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga),
+                        formattaNumeroVerificaBustaPaga(campi.Permessi_Reali),
+                        formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)
+                    ];
+                    const row = document.createElement('tr');
+                    valori.forEach(valore => {
+                        const cell = document.createElement('td');
+                        cell.style.cssText = 'padding:10px; border-top:1px solid #e0e0e0;';
+                        cell.textContent = valore;
+                        row.appendChild(cell);
+                    });
+                    fragment.appendChild(row);
+                });
+                tbody.replaceChildren(fragment);
+            } catch (error) {
+                console.error('Errore caricamento verifiche buste paga:', error);
+                mostraStato(`Impossibile caricare le verifiche. ${error.message}`);
+            }
         }
 
         async function salvaVerificaBustaPaga() {
@@ -2558,6 +2905,8 @@
                 if (!response.ok || !risultato.success) {
                     throw new Error(risultato.error || `Salvataggio non riuscito (HTTP ${response.status}).`);
                 }
+                resetFormVerificaBustaPaga();
+                await caricaTabellaVerificaBustePaga(anno, mese);
                 mostraAlert('Verifica busta paga salvata con successo.');
             } catch (error) {
                 console.error('Errore salvataggio verifica busta paga:', error);
@@ -2942,6 +3291,8 @@
                 mostraAlert(`Errore durante l'eliminazione del record (HTTP ${response.status}).`);
             }
         }
+
+        updateBiometricSupport();
     </script>
 </body>
 </html>

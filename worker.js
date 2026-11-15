@@ -1,3 +1,277 @@
+const textEncoder = new TextEncoder();
+
+function base64UrlEncode(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("Valore WebAuthn non valido");
+  }
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
+
+function encodeCredentialId(username) {
+  return encodeURIComponent(username);
+}
+
+function jsonResponse(data, corsHeaders, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
+  });
+}
+
+function equalSecret(actual, expected) {
+  if (typeof actual !== "string" || typeof expected !== "string") return false;
+  const actualBytes = textEncoder.encode(actual);
+  const expectedBytes = textEncoder.encode(expected);
+  let difference = actualBytes.length ^ expectedBytes.length;
+  const length = Math.max(actualBytes.length, expectedBytes.length);
+  for (let i = 0; i < length; i++) {
+    difference |= (actualBytes[i] || 0) ^ (expectedBytes[i] || 0);
+  }
+  return difference === 0;
+}
+
+function getWebAuthnContext(request) {
+  const origin = request.headers.get("Origin");
+  if (!origin) throw new Error("Origine WebAuthn mancante");
+  const parsedOrigin = new URL(origin);
+  if (parsedOrigin.origin !== origin || (parsedOrigin.protocol !== "https:" && parsedOrigin.hostname !== "localhost")) {
+    throw new Error("Origine WebAuthn non valida");
+  }
+  return { origin, rpId: parsedOrigin.hostname };
+}
+
+async function createWebAuthnChallenge(env, username, purpose, context) {
+  const challenge = new Uint8Array(32);
+  crypto.getRandomValues(challenge);
+  const challengeString = base64UrlEncode(challenge);
+  await env.AUTH_KV.put(`challenge:${challengeString}`, JSON.stringify({
+    username,
+    purpose,
+    origin: context.origin,
+    rpId: context.rpId
+  }), { expirationTtl: 300 });
+  return challengeString;
+}
+
+async function consumeWebAuthnChallenge(env, challenge, username, purpose) {
+  const key = `challenge:${challenge}`;
+  const value = await env.AUTH_KV.get(key);
+  if (value) await env.AUTH_KV.delete(key);
+  if (!value) return null;
+  const record = JSON.parse(value);
+  return record.username === username && record.purpose === purpose ? record : null;
+}
+
+function decodeCbor(bytes, start = 0) {
+  let offset = start;
+  const readLength = additional => {
+    if (additional < 24) return additional;
+    const sizes = { 24: 1, 25: 2, 26: 4, 27: 8 };
+    const size = sizes[additional];
+    if (!size || offset + size > bytes.length) throw new Error("CBOR non valido");
+    let length = 0;
+    for (let i = 0; i < size; i++) length = length * 256 + bytes[offset++];
+    return length;
+  };
+  const parse = depth => {
+    if (depth > 20 || offset >= bytes.length) throw new Error("CBOR non valido");
+    const initial = bytes[offset++];
+    const major = initial >> 5;
+    const additional = initial & 31;
+    if (major === 7) {
+      if (additional === 20) return false;
+      if (additional === 21) return true;
+      if (additional === 22) return null;
+      throw new Error("Valore CBOR non supportato");
+    }
+    const length = readLength(additional);
+    if (major === 0) return length;
+    if (major === 1) return -1 - length;
+    if (major === 2 || major === 3) {
+      if (length > bytes.length - offset) throw new Error("CBOR non valido");
+      const value = bytes.slice(offset, offset + length);
+      offset += length;
+      return major === 2 ? value : new TextDecoder().decode(value);
+    }
+    if (major === 4) {
+      const values = [];
+      for (let i = 0; i < length; i++) values.push(parse(depth + 1));
+      return values;
+    }
+    if (major === 5) {
+      const values = new Map();
+      for (let i = 0; i < length; i++) values.set(parse(depth + 1), parse(depth + 1));
+      return values;
+    }
+    if (major === 6) return parse(depth + 1);
+    throw new Error("CBOR non valido");
+  };
+  const value = parse(0);
+  return { value, bytesRead: offset - start };
+}
+
+function parseAuthenticatorData(bytes, requireAttestedCredential = false) {
+  if (bytes.length < 37) throw new Error("Dati autenticatore incompleti");
+  const flags = bytes[32];
+  if (!(flags & 0x01) || !(flags & 0x04)) throw new Error("Biometria o verifica utente non confermata");
+  const signCount = new DataView(bytes.buffer, bytes.byteOffset + 33, 4).getUint32(0);
+  const result = { flags, signCount };
+  if (!requireAttestedCredential) return result;
+  if (!(flags & 0x40) || bytes.length < 55) throw new Error("Credenziale WebAuthn non presente");
+  const credentialLength = new DataView(bytes.buffer, bytes.byteOffset + 53, 2).getUint16(0);
+  const credentialStart = 55;
+  const credentialEnd = credentialStart + credentialLength;
+  if (!credentialLength || credentialEnd >= bytes.length) throw new Error("ID credenziale non valido");
+  const credentialId = bytes.slice(credentialStart, credentialEnd);
+  const coseStart = credentialEnd;
+  const decodedKey = decodeCbor(bytes, coseStart);
+  return {
+    ...result,
+    credentialId,
+    coseKey: decodedKey.value,
+    coseBytes: bytes.slice(coseStart, coseStart + decodedKey.bytesRead)
+  };
+}
+
+async function assertRpIdHash(authenticatorData, rpId) {
+  const expected = new Uint8Array(await crypto.subtle.digest("SHA-256", textEncoder.encode(rpId)));
+  const actual = authenticatorData.slice(0, 32);
+  return actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
+}
+
+async function verifyClientData(clientDataBytes, expectedType, challenge, context) {
+  const clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+  if (clientData.type !== expectedType ||
+      clientData.challenge !== challenge ||
+      clientData.origin !== context.origin ||
+      clientData.crossOrigin === true) {
+    throw new Error("Risposta WebAuthn non valida");
+  }
+}
+
+function credentialPublicKey(coseKey) {
+  if (!(coseKey instanceof Map)) throw new Error("Chiave pubblica WebAuthn non valida");
+  const keyType = coseKey.get(1);
+  const algorithm = coseKey.get(3);
+  if (keyType === 2 && algorithm === -7 && coseKey.get(-1) === 1) {
+    const x = coseKey.get(-2);
+    const y = coseKey.get(-3);
+    if (!(x instanceof Uint8Array) || x.length !== 32 || !(y instanceof Uint8Array) || y.length !== 32) {
+      throw new Error("Chiave ES256 non valida");
+    }
+    return {
+      algorithm,
+      jwk: {
+        kty: "EC",
+        crv: "P-256",
+        x: base64UrlEncode(x),
+        y: base64UrlEncode(y),
+        ext: true
+      }
+    };
+  }
+  if (keyType === 3 && algorithm === -257) {
+    const modulus = coseKey.get(-1);
+    const exponent = coseKey.get(-2);
+    if (!(modulus instanceof Uint8Array) || !(exponent instanceof Uint8Array)) {
+      throw new Error("Chiave RS256 non valida");
+    }
+    return {
+      algorithm,
+      jwk: {
+        kty: "RSA",
+        n: base64UrlEncode(modulus),
+        e: base64UrlEncode(exponent),
+        alg: "RS256",
+        ext: true
+      }
+    };
+  }
+  throw new Error("Algoritmo WebAuthn non supportato");
+}
+
+function derEcdsaToRaw(signature) {
+  if (signature.length === 64) return signature;
+  if (signature.length < 8 || signature.length > 72 ||
+      signature[0] !== 0x30 || signature[1] !== signature.length - 2) {
+    throw new Error("Firma ECDSA non valida");
+  }
+  let offset = 2;
+  const normalize = value => {
+    let start = 0;
+    while (start < value.length - 32 && value[start] === 0) start++;
+    const trimmed = value.slice(start);
+    if (trimmed.length > 32) throw new Error("Firma ECDSA non valida");
+    const padded = new Uint8Array(32);
+    padded.set(trimmed, 32 - trimmed.length);
+    return padded;
+  };
+  const readInteger = () => {
+    if (signature[offset++] !== 0x02) throw new Error("Firma ECDSA non valida");
+    const length = signature[offset++];
+    if (!length || length > 33 || offset + length > signature.length) throw new Error("Firma ECDSA non valida");
+    const value = signature.slice(offset, offset + length);
+    offset += length;
+    if ((value[0] & 0x80) || (value.length > 1 && value[0] === 0 && !(value[1] & 0x80))) {
+      throw new Error("Firma ECDSA non valida");
+    }
+    return normalize(value);
+  };
+  const r = readInteger();
+  const s = readInteger();
+  if (offset !== signature.length) throw new Error("Firma ECDSA non valida");
+  const raw = new Uint8Array(64);
+  raw.set(r, 0);
+  raw.set(s, 32);
+  return raw;
+}
+
+async function verifyAssertionSignature(credential, authenticatorData, clientDataJSON, signature) {
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    credential.publicKey,
+    credential.algorithm === -7 ? { name: "ECDSA", namedCurve: "P-256" } : { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+  const clientDataHash = new Uint8Array(await crypto.subtle.digest("SHA-256", clientDataJSON));
+  const signedData = new Uint8Array(authenticatorData.length + clientDataHash.length);
+  signedData.set(authenticatorData);
+  signedData.set(clientDataHash, authenticatorData.length);
+  const signatureBytes = credential.algorithm === -7 ? derEcdsaToRaw(signature) : signature;
+  const algorithm = credential.algorithm === -7 ? { name: "ECDSA", hash: "SHA-256" } : { name: "RSASSA-PKCS1-v1_5" };
+  return crypto.subtle.verify(algorithm, key, signatureBytes, signedData);
+}
+
+async function listCredentials(env, username) {
+  const prefix = `credential:${encodeCredentialId(username)}:`;
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.AUTH_KV.list({ prefix, cursor, limit: 1000 });
+    keys.push(...page.keys);
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return keys;
+}
+
+function issueSession(env, corsHeaders) {
+  const sessionToken = btoa(env.GRIST_API_KEY).substring(0, 30);
+  return jsonResponse({
+    success: true,
+    token: sessionToken,
+    urls: { dashboard: env.URL_DASHBOARD, impostazioni: env.URL_IMPOSTAZIONI }
+  }, corsHeaders);
+}
+
 export default {
   async fetch(request, env, ctx) {
     const corsHeaders = {
@@ -23,24 +297,206 @@ export default {
         }
 
         if (body.tipo === "auth") {
-          if (body.code && body.code === env.COMPANY_PASSWORD) {
-            const sessionToken = btoa(env.GRIST_API_KEY).substring(0, 30);
-            return new Response(JSON.stringify({ 
-              success: true, 
-              token: sessionToken, 
-              urls: { 
-                dashboard: env.URL_DASHBOARD, 
-                impostazioni: env.URL_IMPOSTAZIONI 
-              } 
-            }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          } else {
-            return new Response(JSON.stringify({ success: false, error: "Codice non valido" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.GRIST_API_KEY) {
+            return jsonResponse({ success: false, error: "Configurazione credenziali incompleta sul Worker" }, corsHeaders, 500);
           }
+          const username = typeof body.username === "string" ? body.username.trim() : "";
+          const validUsername = equalSecret(username, env.COMPANY_USERNAME.trim());
+          const validPassword = equalSecret(body.password, env.COMPANY_PASSWORD);
+          if (!username || !validUsername || !validPassword) {
+            return jsonResponse({ success: false, error: "Nome utente o password non validi" }, corsHeaders, 401);
+          }
+          return issueSession(env, corsHeaders);
+        }
+
+        if (body.tipo === "webauthn_auth_options") {
+          if (!env.COMPANY_USERNAME || !env.AUTH_KV) {
+            return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
+          }
+          const username = typeof body.username === "string" ? body.username.trim() : "";
+          if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
+            return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
+          }
+          const credentials = await listCredentials(env, username);
+          if (!credentials.length) {
+            return jsonResponse({ success: false, error: "Nessuna credenziale biometrica registrata per questo utente" }, corsHeaders, 404);
+          }
+          const context = getWebAuthnContext(request);
+          const challenge = await createWebAuthnChallenge(env, username, "assertion", context);
+          const prefix = `credential:${encodeCredentialId(username)}:`;
+          return jsonResponse({
+            success: true,
+            publicKey: {
+              challenge,
+              timeout: 60000,
+              rpId: context.rpId,
+              userVerification: "required",
+              allowCredentials: credentials.map(key => ({
+                type: "public-key",
+                id: key.name.slice(prefix.length)
+              }))
+            }
+          }, corsHeaders);
+        }
+
+        if (body.tipo === "webauthn_auth_verify") {
+          if (!env.COMPANY_USERNAME || !env.AUTH_KV || !env.GRIST_API_KEY) {
+            return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
+          }
+          const username = typeof body.username === "string" ? body.username.trim() : "";
+          if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
+            return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
+          }
+          const response = body.credential?.response;
+          let clientDataJSON;
+          let clientData;
+          try {
+            clientDataJSON = base64UrlDecode(response?.clientDataJSON);
+            clientData = JSON.parse(new TextDecoder().decode(clientDataJSON));
+          } catch (error) {
+            return jsonResponse({ success: false, error: "Dati client WebAuthn non validi" }, corsHeaders, 401);
+          }
+          const challengeRecord = await consumeWebAuthnChallenge(env, clientData.challenge, username, "assertion");
+          if (!challengeRecord) {
+            return jsonResponse({ success: false, error: "Sfida WebAuthn scaduta o non valida" }, corsHeaders, 401);
+          }
+          const context = { origin: challengeRecord.origin, rpId: challengeRecord.rpId };
+          let credentialId;
+          try {
+            await verifyClientData(clientDataJSON, "webauthn.get", clientData.challenge, context);
+            credentialId = base64UrlEncode(base64UrlDecode(body.credential?.rawId));
+            if (body.credential?.type !== "public-key" || credentialId !== body.credential?.id) {
+              return jsonResponse({ success: false, error: "Credenziale WebAuthn non valida" }, corsHeaders, 401);
+            }
+          } catch (error) {
+            return jsonResponse({ success: false, error: "Risposta WebAuthn non valida" }, corsHeaders, 401);
+          }
+          const credentialKey = `credential:${encodeCredentialId(username)}:${credentialId}`;
+          const storedCredential = await env.AUTH_KV.get(credentialKey);
+          if (!storedCredential) {
+            return jsonResponse({ success: false, error: "Credenziale WebAuthn non riconosciuta" }, corsHeaders, 401);
+          }
+          const credential = JSON.parse(storedCredential);
+          let parsedData;
+          try {
+            const authenticatorData = base64UrlDecode(response.authenticatorData);
+            const signature = base64UrlDecode(response.signature);
+            parsedData = parseAuthenticatorData(authenticatorData);
+            if (!await assertRpIdHash(authenticatorData, context.rpId) ||
+                !await verifyAssertionSignature(credential, authenticatorData, clientDataJSON, signature)) {
+              return jsonResponse({ success: false, error: "Verifica biometrica non riuscita" }, corsHeaders, 401);
+            }
+          } catch (error) {
+            return jsonResponse({ success: false, error: "Firma WebAuthn non valida" }, corsHeaders, 401);
+          }
+          if (credential.signCount > 0 && parsedData.signCount <= credential.signCount) {
+            return jsonResponse({ success: false, error: "Contatore WebAuthn non valido" }, corsHeaders, 401);
+          }
+          credential.signCount = parsedData.signCount;
+          await env.AUTH_KV.put(credentialKey, JSON.stringify(credential));
+          return issueSession(env, corsHeaders);
         }
 
         const expectedToken = btoa(env.GRIST_API_KEY).substring(0, 30);
         if (!body.token || body.token !== expectedToken) {
           return new Response(JSON.stringify({ success: false, error: "Sessione non autorizzata o scaduta" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (body.tipo === "webauthn_register_options" || body.tipo === "webauthn_register_verify") {
+          if (!env.COMPANY_USERNAME || !env.AUTH_KV) {
+            return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
+          }
+          const username = typeof body.username === "string" ? body.username.trim() : "";
+          if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
+            return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
+          }
+          const context = getWebAuthnContext(request);
+          if (body.tipo === "webauthn_register_options") {
+            const credentials = await listCredentials(env, username);
+            const challenge = await createWebAuthnChallenge(env, username, "registration", context);
+            const userId = new Uint8Array(await crypto.subtle.digest("SHA-256", textEncoder.encode(username)));
+            const prefix = `credential:${encodeCredentialId(username)}:`;
+            return jsonResponse({
+              success: true,
+              publicKey: {
+                challenge,
+                rp: { id: context.rpId, name: "Gestionale" },
+                user: { id: base64UrlEncode(userId), name: username, displayName: username },
+                pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+                timeout: 60000,
+                attestation: "none",
+                authenticatorSelection: {
+                  authenticatorAttachment: "platform",
+                  residentKey: "discouraged",
+                  userVerification: "required"
+                },
+                excludeCredentials: credentials.map(key => ({
+                  type: "public-key",
+                  id: key.name.slice(prefix.length)
+                }))
+              }
+            }, corsHeaders);
+          }
+
+          const response = body.credential?.response;
+          let clientDataJSON;
+          let clientData;
+          try {
+            clientDataJSON = base64UrlDecode(response?.clientDataJSON);
+            clientData = JSON.parse(new TextDecoder().decode(clientDataJSON));
+          } catch (error) {
+            return jsonResponse({ success: false, error: "Dati client WebAuthn non validi" }, corsHeaders, 400);
+          }
+          const challengeRecord = await consumeWebAuthnChallenge(env, clientData.challenge, username, "registration");
+          if (!challengeRecord) {
+            return jsonResponse({ success: false, error: "Sfida WebAuthn scaduta o non valida" }, corsHeaders, 401);
+          }
+          const registrationContext = { origin: challengeRecord.origin, rpId: challengeRecord.rpId };
+          let parsedData;
+          let publicKey;
+          let credentialId;
+          try {
+            await verifyClientData(clientDataJSON, "webauthn.create", clientData.challenge, registrationContext);
+            const attestationObject = decodeCbor(base64UrlDecode(response.attestationObject)).value;
+            if (!(attestationObject instanceof Map) ||
+                attestationObject.get("fmt") !== "none" ||
+                !(attestationObject.get("attStmt") instanceof Map) ||
+                attestationObject.get("attStmt").size !== 0 ||
+                !(attestationObject.get("authData") instanceof Uint8Array)) {
+              return jsonResponse({ success: false, error: "Attestazione WebAuthn non valida" }, corsHeaders, 401);
+            }
+            const authenticatorData = attestationObject.get("authData");
+            if (!await assertRpIdHash(authenticatorData, registrationContext.rpId)) {
+              return jsonResponse({ success: false, error: "RP ID WebAuthn non valido" }, corsHeaders, 401);
+            }
+            parsedData = parseAuthenticatorData(authenticatorData, true);
+            credentialId = base64UrlEncode(parsedData.credentialId);
+            if (body.credential?.type !== "public-key" ||
+                credentialId !== body.credential?.id ||
+                credentialId !== base64UrlEncode(base64UrlDecode(body.credential?.rawId))) {
+              return jsonResponse({ success: false, error: "ID credenziale WebAuthn non valido" }, corsHeaders, 401);
+            }
+            publicKey = credentialPublicKey(parsedData.coseKey);
+            await crypto.subtle.importKey(
+              "jwk",
+              publicKey.jwk,
+              publicKey.algorithm === -7 ? { name: "ECDSA", namedCurve: "P-256" } : { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+              false,
+              ["verify"]
+            );
+          } catch (error) {
+            return jsonResponse({ success: false, error: `Registrazione WebAuthn non valida: ${error.message}` }, corsHeaders, 400);
+          }
+          const credentialKey = `credential:${encodeCredentialId(username)}:${credentialId}`;
+          if (await env.AUTH_KV.get(credentialKey)) {
+            return jsonResponse({ success: false, error: "Questa credenziale è già registrata" }, corsHeaders, 409);
+          }
+          await env.AUTH_KV.put(credentialKey, JSON.stringify({
+            publicKey: publicKey.jwk,
+            algorithm: publicKey.algorithm,
+            signCount: parsedData.signCount
+          }));
+          return jsonResponse({ success: true }, corsHeaders);
         }
 
         const DOC_ID = env.GRIST_DOC_ID;
@@ -653,8 +1109,9 @@ export default {
           if (!response.ok) {
             return new Response(JSON.stringify({ success: false, error: "Errore aggiornamento della riga ID 1 in Verifica_Buste_Paga" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
-          const data = await response.json();
-          return new Response(JSON.stringify({ success: true, records: data.records || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const data = (await response.json()) || {};
+          const records = Array.isArray(data.records) ? data.records : [];
+          return new Response(JSON.stringify({ success: true, records }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (body.tipo === "get_dashboard_data") {
