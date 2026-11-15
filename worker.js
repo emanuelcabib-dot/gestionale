@@ -263,6 +263,21 @@ async function listCredentials(env, username) {
   return keys;
 }
 
+async function syncPasswordVersion(env, username) {
+  const versionKey = `password-version:${encodeCredentialId(username)}`;
+  const passwordVersion = base64UrlEncode(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", textEncoder.encode(env.COMPANY_PASSWORD)))
+  );
+  const previousVersion = await env.AUTH_KV.get(versionKey);
+  if (previousVersion && !equalSecret(previousVersion, passwordVersion)) {
+    const credentials = await listCredentials(env, username);
+    for (const credential of credentials) {
+      await env.AUTH_KV.delete(credential.name);
+    }
+  }
+  await env.AUTH_KV.put(versionKey, passwordVersion);
+}
+
 function issueSession(env, corsHeaders) {
   const sessionToken = btoa(env.GRIST_API_KEY).substring(0, 30);
   return jsonResponse({
@@ -297,7 +312,7 @@ export default {
         }
 
         if (body.tipo === "auth") {
-          if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.GRIST_API_KEY) {
+          if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.GRIST_API_KEY || !env.AUTH_KV) {
             return jsonResponse({ success: false, error: "Configurazione credenziali incompleta sul Worker" }, corsHeaders, 500);
           }
           const username = typeof body.username === "string" ? body.username.trim() : "";
@@ -306,17 +321,19 @@ export default {
           if (!username || !validUsername || !validPassword) {
             return jsonResponse({ success: false, error: "Nome utente o password non validi" }, corsHeaders, 401);
           }
+          await syncPasswordVersion(env, username);
           return issueSession(env, corsHeaders);
         }
 
         if (body.tipo === "webauthn_auth_options") {
-          if (!env.COMPANY_USERNAME || !env.AUTH_KV) {
+          if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.AUTH_KV) {
             return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
           }
           const username = typeof body.username === "string" ? body.username.trim() : "";
           if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
             return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
           }
+          await syncPasswordVersion(env, username);
           const credentials = await listCredentials(env, username);
           if (!credentials.length) {
             return jsonResponse({ success: false, error: "Nessuna credenziale biometrica registrata per questo utente" }, corsHeaders, 404);
@@ -340,13 +357,14 @@ export default {
         }
 
         if (body.tipo === "webauthn_auth_verify") {
-          if (!env.COMPANY_USERNAME || !env.AUTH_KV || !env.GRIST_API_KEY) {
+          if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.AUTH_KV || !env.GRIST_API_KEY) {
             return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
           }
           const username = typeof body.username === "string" ? body.username.trim() : "";
           if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
             return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
           }
+          await syncPasswordVersion(env, username);
           const response = body.credential?.response;
           let clientDataJSON;
           let clientData;
@@ -403,13 +421,14 @@ export default {
         }
 
         if (body.tipo === "webauthn_register_options" || body.tipo === "webauthn_register_verify") {
-          if (!env.COMPANY_USERNAME || !env.AUTH_KV) {
+          if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.AUTH_KV) {
             return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
           }
           const username = typeof body.username === "string" ? body.username.trim() : "";
           if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
             return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
           }
+          await syncPasswordVersion(env, username);
           const context = getWebAuthnContext(request);
           if (body.tipo === "webauthn_register_options") {
             const credentials = await listCredentials(env, username);
