@@ -1109,8 +1109,9 @@ export default {
           if (!response.ok) {
             return new Response(JSON.stringify({ success: false, error: "Errore aggiornamento della riga ID 1 in Verifica_Buste_Paga" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
-          const data = await response.json();
-          return new Response(JSON.stringify({ success: true, records: data.records || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const data = (await response.json()) || {};
+          const records = Array.isArray(data.records) ? data.records : [];
+          return new Response(JSON.stringify({ success: true, records }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (body.tipo === "get_dashboard_data") {

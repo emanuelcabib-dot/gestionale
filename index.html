@@ -528,6 +528,24 @@
                             <button type="button" onclick="generaPDFVerificaBustePaga()" style="background:#9b59b6;">📄 Esporta PDF</button>
                         </div>
                     </form>
+                    <div style="overflow-x:auto; margin-top:20px;">
+                        <table style="width:100%; min-width:850px; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                            <thead>
+                                <tr style="background:#2c3e50; color:white;">
+                                    <th style="padding:10px;">Periodo</th>
+                                    <th style="padding:10px;">Ferie Busta</th>
+                                    <th style="padding:10px;">Ferie Reali</th>
+                                    <th style="padding:10px;">Discrepanza Ferie</th>
+                                    <th style="padding:10px;">Permessi Busta</th>
+                                    <th style="padding:10px;">Permessi Reali</th>
+                                    <th style="padding:10px;">Discrepanza Permessi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabellaAnteprimaVerificaBuste">
+                                <tr><td colspan="7" style="padding:15px; text-align:center; color:#7f8c8d;">Nessuna verifica registrata in questa sessione.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -1072,6 +1090,7 @@
             } else if (sectionId === 'report_panel') {
                 if (document.querySelector('#report_panel .report-pane.active')?.id === 'paneReportVerificaBustePaga') {
                     inizializzaFormVerificaBustePaga();
+                    resetTabellaVerificaBustePaga();
                 } else {
                     caricaAnteprimaReport();
                 }
@@ -1948,7 +1967,8 @@
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
             if (paneId === 'paneReportVerificaBustePaga') {
-                inizializzaFormVerificaBustePaga();
+                resetFormVerificaBustaPaga();
+                resetTabellaVerificaBustePaga();
             } else {
                 caricaAnteprimaReport();
             }
@@ -2761,10 +2781,93 @@
         }
 
         function inizializzaFormVerificaBustePaga() {
-            const anno = document.getElementById('verificaBusteAnno');
-            const mese = document.getElementById('verificaBusteMese');
-            if (!anno.value) anno.value = new Date().getFullYear();
-            if (!mese.value) mese.value = new Date().getMonth() + 1;
+            resetFormVerificaBustaPaga();
+        }
+
+        function resetFormVerificaBustaPaga() {
+            const oggi = new Date();
+            document.getElementById('verificaBusteAnno').value = oggi.getFullYear();
+            document.getElementById('verificaBusteMese').value = String(oggi.getMonth() + 1);
+            document.getElementById('verificaBusteFerie').value = '';
+            document.getElementById('verificaBustePermessi').value = '';
+        }
+
+        function resetTabellaVerificaBustePaga() {
+            const tbody = document.getElementById('tabellaAnteprimaVerificaBuste');
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 7;
+            cell.style.cssText = 'padding:15px; text-align:center; color:#7f8c8d;';
+            cell.textContent = 'Nessuna verifica registrata in questa sessione.';
+            row.appendChild(cell);
+            tbody.replaceChildren(row);
+        }
+
+        async function caricaTabellaVerificaBustePaga(annoSalvato, meseSalvato) {
+            const tbody = document.getElementById('tabellaAnteprimaVerificaBuste');
+            const mostraStato = messaggio => {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 7;
+                cell.style.cssText = 'padding:15px; text-align:center; color:#7f8c8d;';
+                cell.textContent = messaggio;
+                row.appendChild(cell);
+                tbody.replaceChildren(row);
+            };
+            if (!sessionToken) {
+                mostraStato('Sessione non valida.');
+                return;
+            }
+            mostraStato('Caricamento verifiche...');
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'get_verifica_buste_paga', token: sessionToken })
+                });
+                const risultato = await response.json();
+                if (!response.ok || !risultato.success) {
+                    throw new Error(risultato.error || `Recupero dati non riuscito (HTTP ${response.status}).`);
+                }
+                const verifiche = (Array.isArray(risultato.records) ? risultato.records : [])
+                    .filter(record => record && Number(record.id) === 1 && record.fields &&
+                        Number(record.fields.Anno) === annoSalvato &&
+                        Number(record.fields.Mese) === meseSalvato);
+                if (!verifiche.length) {
+                    mostraStato('Nessuna verifica busta paga salvata.');
+                    return;
+                }
+                const fragment = document.createDocumentFragment();
+                verifiche.forEach(record => {
+                    const campi = record.fields;
+                    const mese = Number(campi.Mese);
+                    const anno = Number(campi.Anno);
+                    const periodo = Number.isInteger(mese) && mese >= 1 && mese <= 12
+                        ? `${nomiMesi[mese]} ${anno}`
+                        : `${campi.Mese ?? '-'} ${campi.Anno ?? '-'}`;
+                    const valori = [
+                        periodo,
+                        formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga),
+                        formattaNumeroVerificaBustaPaga(campi.Ferie_Reali),
+                        formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie),
+                        formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga),
+                        formattaNumeroVerificaBustaPaga(campi.Permessi_Reali),
+                        formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)
+                    ];
+                    const row = document.createElement('tr');
+                    valori.forEach(valore => {
+                        const cell = document.createElement('td');
+                        cell.style.cssText = 'padding:10px; border-top:1px solid #e0e0e0;';
+                        cell.textContent = valore;
+                        row.appendChild(cell);
+                    });
+                    fragment.appendChild(row);
+                });
+                tbody.replaceChildren(fragment);
+            } catch (error) {
+                console.error('Errore caricamento verifiche buste paga:', error);
+                mostraStato(`Impossibile caricare le verifiche. ${error.message}`);
+            }
         }
 
         async function salvaVerificaBustaPaga() {
@@ -2799,6 +2902,8 @@
                 if (!response.ok || !risultato.success) {
                     throw new Error(risultato.error || `Salvataggio non riuscito (HTTP ${response.status}).`);
                 }
+                resetFormVerificaBustaPaga();
+                await caricaTabellaVerificaBustePaga(anno, mese);
                 mostraAlert('Verifica busta paga salvata con successo.');
             } catch (error) {
                 console.error('Errore salvataggio verifica busta paga:', error);
