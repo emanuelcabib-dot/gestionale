@@ -1775,8 +1775,11 @@
         }
 
         function popolaTendineAnniDinamiche() {
-            const annoInizio = parseInt(configAppCache["Anno inizio storico"] || "2024", 10);
             const annoCorrente = new Date().getFullYear();
+            const annoInizioConfigurato = Number.parseInt(configAppCache["Anno inizio storico"] || "2024", 10);
+            const annoInizio = Number.isInteger(annoInizioConfigurato)
+                ? Math.min(annoInizioConfigurato, annoCorrente)
+                : Math.min(2024, annoCorrente);
             
             let htmlOptions = '';
             for (let a = annoCorrente; a >= annoInizio; a--) {
@@ -1804,7 +1807,7 @@
             });
 
             document.querySelectorAll('.select-report-anno').forEach(select => {
-                select.innerHTML = `<option value="${annoCorrente}">${annoCorrente}</option>`;
+                select.innerHTML = htmlOptions;
                 select.value = String(annoCorrente);
             });
 
