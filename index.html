@@ -276,6 +276,7 @@
                 <button class="tab-btn" onclick="navigaASezione('calendario'); toggleMobileMenu();">📅 Vista Calendario</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel'); toggleMobileMenu();">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard'); toggleMobileMenu();">📊 Dashboard grafica</button>
+                <button class="tab-btn" onclick="navigaASezione('documenti_pdf'); toggleMobileMenu();">📁 Documenti PDF</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico(); toggleMobileMenu();">📜 Storico e Modifiche</button>
                 <button class="tab-btn mobile-dropdown-logout" onclick="logout()">🚪 Esci</button>
             </div>
@@ -291,6 +292,7 @@
                 <button class="tab-btn" onclick="navigaASezione('calendario')">📅 Vista Calendario</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel')">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard')">📊 Dashboard grafica</button>
+                <button class="tab-btn" onclick="navigaASezione('documenti_pdf')">📁 Documenti PDF</button>
                 <button class="tab-btn" onclick="navigaASezione('impostazioni')">⚙️ Impostazioni parametri</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico();">📜 Storico e Modifiche</button>
                 <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
@@ -611,6 +613,35 @@
                 </div>
             </div>
 
+            <div id="documenti_pdf" class="section">
+                <h2>Documenti PDF</h2>
+                <p>Carica e consulta i documenti PDF archiviati in Grist.</p>
+                <form id="formUploadDocumentoPDF" class="form-actions" style="margin-bottom:20px;">
+                    <div class="form-group" style="flex:1; min-width:220px; margin:0;">
+                        <label for="fileDocumentoPDF">Seleziona un file PDF (max 10 MB)</label>
+                        <input id="fileDocumentoPDF" type="file" accept="application/pdf,.pdf" required>
+                    </div>
+                    <button id="btnUploadDocumentoPDF" type="submit" class="btn-submit">Carica PDF</button>
+                    <button type="button" onclick="caricaDocumentiPDF()">↻ Aggiorna elenco</button>
+                </form>
+                <p id="statoDocumentiPDF" role="status" aria-live="polite" style="color:#566573;">Caricamento documenti...</p>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; min-width:560px; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                        <thead>
+                            <tr style="background:#2c3e50; color:white;">
+                                <th style="padding:10px;">Nome documento</th>
+                                <th style="padding:10px;">Dimensione</th>
+                                <th style="padding:10px;">Ultima modifica</th>
+                                <th style="padding:10px;">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabellaDocumentiPDF">
+                            <tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento documenti...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- IMPOSTAZIONI PARAMETRI -->
             <div id="impostazioni" class="section">
                 <h2>Impostazioni parametri</h2>
@@ -745,7 +776,9 @@
         const CACHE_CONFIGURAZIONI_KEY = 'gestionale_cache_globale';
         const CACHE_CONFIGURAZIONI_TIMESTAMP_KEY = 'gestionale_cache_ts';
         const CACHE_CONFIGURAZIONI_TTL_MS = 24 * 60 * 60 * 1000;
+        const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
         let sessionToken = "";
+        let inactivityTimeoutId = null;
         let cacheDatiGlobali = null;
         let timestampCacheDatiGlobali = 0;
         let istanzaCalendario = null;
@@ -781,6 +814,18 @@
                 throw error;
             }
         }
+
+        function resetInactivityTimer() {
+            if (!sessionToken) return;
+            window.clearTimeout(inactivityTimeoutId);
+            inactivityTimeoutId = window.setTimeout(() => {
+                logout('Sessione scaduta per inattività. Accedi di nuovo.');
+            }, INACTIVITY_TIMEOUT_MS);
+        }
+
+        ['mousemove', 'click', 'keydown', 'touchstart'].forEach(eventName => {
+            document.addEventListener(eventName, resetInactivityTimer, { passive: true });
+        });
 
         function getIeriInLocale() {
             const d = new Date();
@@ -1109,8 +1154,209 @@
                 inizializzaCalendario();
             } else if (sectionId === 'dashboard') {
                 caricaDashboard();
+            } else if (sectionId === 'documenti_pdf') {
+                caricaDocumentiPDF();
             }
         }
+
+        function impostaStatoDocumentiPDF(messaggio, errore = false) {
+            const stato = document.getElementById('statoDocumentiPDF');
+            stato.innerText = messaggio;
+            stato.style.color = errore ? '#c0392b' : '#566573';
+        }
+
+        async function leggiErroreDocumentiPDF(response) {
+            try {
+                const risultato = await response.json();
+                return risultato.error || `Operazione non riuscita (HTTP ${response.status}).`;
+            } catch {
+                return `Operazione non riuscita (HTTP ${response.status}).`;
+            }
+        }
+
+        function formattaDimensionePDF(size) {
+            const bytes = Number(size);
+            if (!Number.isFinite(bytes) || bytes < 0) return '—';
+            if (bytes < 1024) return `${bytes} B`;
+            const unita = bytes < 1024 * 1024 ? 'KB' : 'MB';
+            const divisore = unita === 'KB' ? 1024 : 1024 * 1024;
+            return `${(bytes / divisore).toLocaleString('it-IT', { maximumFractionDigits: 1 })} ${unita}`;
+        }
+
+        async function convertiPDFBase64(file) {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const chunkSize = 0x8000;
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+            }
+            return btoa(binary);
+        }
+
+        function renderizzaDocumentiPDF(files) {
+            const tbody = document.getElementById('tabellaDocumentiPDF');
+            tbody.replaceChildren();
+            if (!files.length) {
+                const row = tbody.insertRow();
+                const cell = row.insertCell();
+                cell.colSpan = 4;
+                cell.style.cssText = 'padding:15px; text-align:center; color:#7f8c8d;';
+                cell.textContent = 'Nessun documento PDF presente.';
+                return;
+            }
+            files.forEach(file => {
+                const row = tbody.insertRow();
+                const nameCell = row.insertCell();
+                nameCell.style.padding = '10px';
+                nameCell.textContent = String(file.name || 'Documento PDF');
+
+                const sizeCell = row.insertCell();
+                sizeCell.style.padding = '10px';
+                sizeCell.textContent = formattaDimensionePDF(file.size);
+
+                const modifiedCell = row.insertCell();
+                modifiedCell.style.padding = '10px';
+                const modifiedDate = new Date(file.modifiedTime);
+                modifiedCell.textContent = Number.isNaN(modifiedDate.getTime())
+                    ? '—'
+                    : modifiedDate.toLocaleString('it-IT');
+
+                const actionsCell = row.insertCell();
+                actionsCell.style.cssText = 'padding:10px; white-space:nowrap;';
+                const viewButton = document.createElement('button');
+                viewButton.type = 'button';
+                viewButton.textContent = '👁️ Visualizza';
+                viewButton.style.cssText = 'padding:8px 10px; margin-right:6px; font-size:13px;';
+                viewButton.addEventListener('click', () => apriDocumentoPDF(file, true));
+                const downloadButton = document.createElement('button');
+                downloadButton.type = 'button';
+                downloadButton.textContent = '📥 Scarica';
+                downloadButton.style.cssText = 'padding:8px 10px; font-size:13px;';
+                downloadButton.addEventListener('click', () => apriDocumentoPDF(file, false));
+                actionsCell.append(viewButton, downloadButton);
+            });
+        }
+
+        async function caricaDocumentiPDF() {
+            if (!sessionToken) {
+                impostaStatoDocumentiPDF('Sessione non autorizzata. Accedi di nuovo.', true);
+                return;
+            }
+            impostaStatoDocumentiPDF('Caricamento documenti...');
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'elenco_documenti_pdf', token: sessionToken })
+                });
+                if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
+                const risultato = await response.json();
+                if (!risultato.success || !Array.isArray(risultato.files)) {
+                    throw new Error(risultato.error || 'Elenco documenti non valido.');
+                }
+                renderizzaDocumentiPDF(risultato.files);
+                impostaStatoDocumentiPDF(`${risultato.files.length} documenti PDF.`);
+            } catch (error) {
+                impostaStatoDocumentiPDF(error.message || 'Impossibile caricare i documenti PDF.', true);
+            }
+        }
+
+        async function caricaDocumentoPDF(event) {
+            event.preventDefault();
+            if (!sessionToken) {
+                impostaStatoDocumentiPDF('Sessione non autorizzata. Accedi di nuovo.', true);
+                return;
+            }
+            const input = document.getElementById('fileDocumentoPDF');
+            const file = input.files[0];
+            if (!file) {
+                impostaStatoDocumentiPDF('Seleziona un file PDF.', true);
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                impostaStatoDocumentiPDF('Il PDF supera la dimensione massima di 10 MB.', true);
+                return;
+            }
+            if (file.type && file.type !== 'application/pdf') {
+                impostaStatoDocumentiPDF('Il file selezionato non è un PDF.', true);
+                return;
+            }
+            const button = document.getElementById('btnUploadDocumentoPDF');
+            button.disabled = true;
+            impostaStatoDocumentiPDF('Caricamento PDF in corso...');
+            try {
+                const contenutoBase64 = await convertiPDFBase64(file);
+                const url = new URL(WORKER_URL);
+                url.searchParams.set('tipo', 'upload_documento_pdf');
+                const response = await apiFetch(url, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${sessionToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        nome: file.name,
+                        mimeType: 'application/pdf',
+                        contenutoBase64
+                    })
+                });
+                if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
+                const risultato = await response.json();
+                if (!risultato.success) throw new Error(risultato.error || 'Caricamento PDF non riuscito.');
+                input.value = '';
+                impostaStatoDocumentiPDF('PDF caricato correttamente.');
+                await caricaDocumentiPDF();
+            } catch (error) {
+                impostaStatoDocumentiPDF(error.message || 'Impossibile caricare il PDF.', true);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function apriDocumentoPDF(file, visualizza) {
+            if (!sessionToken) {
+                mostraAlert('Sessione non autorizzata. Accedi di nuovo.');
+                return;
+            }
+            const viewer = visualizza ? window.open('about:blank', '_blank') : null;
+            if (visualizza && !viewer) {
+                mostraAlert('Consenti l’apertura di nuove schede per visualizzare il PDF.');
+                return;
+            }
+            if (viewer) {
+                viewer.opener = null;
+                viewer.document.title = 'Caricamento documento PDF';
+                viewer.document.body.textContent = 'Caricamento documento...';
+            }
+            try {
+                const url = new URL(WORKER_URL);
+                url.searchParams.set('tipo', 'download_documento_pdf');
+                url.searchParams.set('fileId', file.id);
+                const response = await apiFetch(url, {
+                    method: 'GET',
+                    headers: { Authorization: `Bearer ${sessionToken}` }
+                });
+                if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
+                const blobUrl = URL.createObjectURL(new Blob([await response.blob()], { type: 'application/pdf' }));
+                if (viewer) {
+                    viewer.location.replace(blobUrl);
+                    window.addEventListener('pagehide', () => URL.revokeObjectURL(blobUrl), { once: true });
+                } else {
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = String(file.name || 'documento.pdf').replace(/[\/\\]/g, '_');
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                }
+            } catch (error) {
+                if (viewer) viewer.close();
+                mostraAlert(error.message || 'Impossibile recuperare il documento PDF.');
+            }
+        }
+
+        document.getElementById('formUploadDocumentoPDF').addEventListener('submit', caricaDocumentoPDF);
 
         function dataPartiDashboard(valore) {
             if (typeof valore === 'string') {
@@ -1558,6 +1804,7 @@
         }
 
         async function completeLogin(username, offerBiometricSetup) {
+            resetInactivityTimer();
             salvaNomeUtenteLocale(username);
             document.getElementById('companyUsername').value = username;
             document.getElementById('companyPassword').value = '';
@@ -1693,7 +1940,9 @@
             document.getElementById('biometricSetupBanner').style.display = 'none';
         }
 
-        function logout() {
+        function logout(messaggio = '') {
+            window.clearTimeout(inactivityTimeoutId);
+            inactivityTimeoutId = null;
             sessionToken = "";
             cacheDatiGlobali = null;
             timestampCacheDatiGlobali = 0;
@@ -1709,6 +1958,9 @@
             document.getElementById('biometricSetupBanner').style.display = 'none';
             document.getElementById('mainPanel').style.display = 'none';
             document.getElementById('loginSection').style.display = 'flex';
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = messaggio;
+            errorMessage.style.display = messaggio ? 'block' : 'none';
         }
 
         function invalidaCacheConfigurazioniStatiche() {
@@ -2004,8 +2256,8 @@
 
                             return `
                                 <div class="bacheca-item ${tipoCls}">
-                                    <h4 style="margin:0 0 5px 0; color:#2c3e50;">📌 ${f.Titolo} <span style="font-size:11px; font-weight:normal; float:right; color:#7f8c8d;">Scadenza: ${f.Data_Scadenza ? new Date(f.Data_Scadenza * 1000).toLocaleDateString() : 'Nessuna'}</span></h4>
-                                    <p style="margin:0; font-size:14px; color:#444;">${f.Messaggio}</p>
+                                    <h4 style="margin:0 0 5px 0; color:#2c3e50;">📌 ${escapeHtmlReport(f.Titolo)} <span style="font-size:11px; font-weight:normal; float:right; color:#7f8c8d;">Scadenza: ${escapeHtmlReport(f.Data_Scadenza ? new Date(f.Data_Scadenza * 1000).toLocaleDateString() : 'Nessuna')}</span></h4>
+                                    <p style="margin:0; font-size:14px; color:#444;">${escapeHtmlReport(f.Messaggio)}</p>
                                 </div>
                             `;
                         }).join('');
