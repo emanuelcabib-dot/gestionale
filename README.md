@@ -12,6 +12,6 @@ La pagina deve essere pubblicata su HTTPS. Le credenziali biometriche sono assoc
 
 ## Gestione documenti PDF
 
-I PDF sono salvati come Base64 nella tabella Grist `Documenti_PDF`. Al primo uso, il Worker crea la tabella e le colonne mancanti `ID`, `Nome`, `Contenuto_Base64`, `MimeType`, `Data_Caricamento` e `Dimensione`; le colonne esistenti con tipo incompatibile causano un errore esplicito. Il Worker usa i secrets Grist già configurati (`GRIST_DOC_ID` e `GRIST_API_KEY`); non servono binding R2 o credenziali Google.
+I PDF sono caricati come allegati Grist e associati alla colonna di tipo `Attachments` `Allegato` nella tabella `Documenti_PDF`. La tabella deve essere predisposta con le colonne `ID`, `Nome`, `Allegato`, `MimeType`, `Data_Caricamento` e `Dimensione`. Il Worker usa i secrets Grist già configurati (`GRIST_DOC_ID` e `GRIST_API_KEY`); non servono binding R2 o credenziali Google.
 
-Il Worker accetta solo PDF fino a 10 MB e protegge upload, elenco e download con il sessionToken dell'app. La lista esclude il contenuto Base64 e recupera il contenuto solo per il documento richiesto. La sessione frontend viene chiusa dopo cinque minuti senza interazione.
+Il Worker accetta solo PDF fino a 10 MB, inoltra gli upload multipart all'API allegati di Grist e associa l'ID dell'allegato al record. Upload, elenco e download sono protetti dal sessionToken dell'app. La sessione frontend viene chiusa dopo cinque minuti senza interazione.

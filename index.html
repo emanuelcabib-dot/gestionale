@@ -1183,16 +1183,6 @@
             return `${(bytes / divisore).toLocaleString('it-IT', { maximumFractionDigits: 1 })} ${unita}`;
         }
 
-        async function convertiPDFBase64(file) {
-            const bytes = new Uint8Array(await file.arrayBuffer());
-            const chunkSize = 0x8000;
-            let binary = '';
-            for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-                binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-            }
-            return btoa(binary);
-        }
-
         function renderizzaDocumentiPDF(files) {
             const tbody = document.getElementById('tabellaDocumentiPDF');
             tbody.replaceChildren();
@@ -1285,20 +1275,14 @@
             button.disabled = true;
             impostaStatoDocumentiPDF('Caricamento PDF in corso...');
             try {
-                const contenutoBase64 = await convertiPDFBase64(file);
+                const formData = new FormData();
+                formData.append('file', file, file.name);
                 const url = new URL(WORKER_URL);
                 url.searchParams.set('tipo', 'upload_documento_pdf');
                 const response = await apiFetch(url, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${sessionToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        nome: file.name,
-                        mimeType: 'application/pdf',
-                        contenutoBase64
-                    })
+                    headers: { Authorization: `Bearer ${sessionToken}` },
+                    body: formData
                 });
                 if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
                 const risultato = await response.json();
