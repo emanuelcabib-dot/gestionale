@@ -429,9 +429,6 @@ async function uploadGristPdf(request, env, corsHeaders) {
   if (!isSessionAuthorized(request, env)) {
     return privateJsonResponse({ success: false, error: "Sessione non autorizzata o scaduta" }, corsHeaders, 403);
   }
-  if (!/^multipart\/form-data(?:;|$)/i.test(request.headers.get("Content-Type") || "")) {
-    return privateJsonResponse({ success: false, error: "Caricamento PDF non valido" }, corsHeaders, 400);
-  }
   const parsed = await readBoundedRequestBody(request, MAX_PDF_REQUEST_SIZE);
   if (parsed.error) {
     return privateJsonResponse({ success: false, error: parsed.error }, corsHeaders, parsed.status);
@@ -443,7 +440,7 @@ async function uploadGristPdf(request, env, corsHeaders) {
   if (file.size > MAX_PDF_SIZE) {
     return privateJsonResponse({ success: false, error: "Il PDF supera la dimensione massima di 10 MB" }, corsHeaders, 413);
   }
-  if (file.type && file.type !== "application/pdf") {
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
     return privateJsonResponse({ success: false, error: "Il file selezionato non è un PDF" }, corsHeaders, 400);
   }
   const signature = new Uint8Array(await file.slice(0, 5).arrayBuffer());
@@ -452,8 +449,9 @@ async function uploadGristPdf(request, env, corsHeaders) {
   }
 
   const name = safePdfName(file.name);
+  const pdfFile = new File([file], name, { type: "application/pdf" });
   const gristUpload = new FormData();
-  gristUpload.append("upload", file, name);
+  gristUpload.append("upload", pdfFile, name);
   const { documentUrl, headers } = await ensureGristPdfTable(env);
   const attachmentResponse = await fetch(`${documentUrl}/attachments`, {
     method: "POST",

@@ -1267,7 +1267,7 @@
                 impostaStatoDocumentiPDF('Il PDF supera la dimensione massima di 10 MB.', true);
                 return;
             }
-            if (file.type && file.type !== 'application/pdf') {
+            if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
                 impostaStatoDocumentiPDF('Il file selezionato non è un PDF.', true);
                 return;
             }
