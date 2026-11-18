@@ -15,6 +15,19 @@
                 .then(() => console.log('PWA configurata con successo!'))
                 .catch(err => console.error('Errore PWA:', err));
         }
+
+        function aggiornaDataGiornataOdierna() {
+            const elementoData = document.getElementById('dataGiornataOdierna');
+            if (!elementoData) return;
+            const oggi = new Date();
+            elementoData.dateTime = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')}`;
+            elementoData.textContent = new Intl.DateTimeFormat('it-IT', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            }).format(oggi);
+        }
     </script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; height: 100vh; overflow: hidden; }
@@ -149,6 +162,7 @@
             .dashboard-refresh { width:100%; }
             .dashboard-chart-wrap { height:250px; }
         }
+
     </style>
 </head>
 <body>
@@ -276,7 +290,7 @@
                 <button class="tab-btn" onclick="navigaASezione('calendario'); toggleMobileMenu();">📅 Vista Calendario</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel'); toggleMobileMenu();">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard'); toggleMobileMenu();">📊 Dashboard grafica</button>
-                <button class="tab-btn" onclick="navigaASezione('documenti_pdf'); toggleMobileMenu();">📁 Documenti PDF</button>
+                <button class="tab-btn" onclick="navigaASezione('documenti_pdf'); toggleMobileMenu();">📁 Google Drive</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico(); toggleMobileMenu();">📜 Storico e Modifiche</button>
                 <button class="tab-btn mobile-dropdown-logout" onclick="logout()">🚪 Esci</button>
             </div>
@@ -292,7 +306,7 @@
                 <button class="tab-btn" onclick="navigaASezione('calendario')">📅 Vista Calendario</button>
                 <button class="tab-btn" onclick="navigaASezione('report_panel')">📄 Report</button>
                 <button class="tab-btn" onclick="navigaASezione('dashboard')">📊 Dashboard grafica</button>
-                <button class="tab-btn" onclick="navigaASezione('documenti_pdf')">📁 Documenti PDF</button>
+                <button class="tab-btn" onclick="navigaASezione('documenti_pdf')">📁 Google Drive</button>
                 <button class="tab-btn" onclick="navigaASezione('impostazioni')">⚙️ Impostazioni parametri</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico();">📜 Storico e Modifiche</button>
                 <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
@@ -312,6 +326,7 @@
                 <div class="home-grid">
                     <div id="cardGiornata" class="home-card">
                         <h4>📅 Giornata Odierna</h4>
+                        <p><b>Data:</b> <time id="dataGiornataOdierna"></time></p>
                         <p id="txtGiornata">Caricamento controlli in corso...</p>
                     </div>
                     <div id="cardTimbrature" class="home-card">
@@ -333,6 +348,19 @@
                 <div id="bachecaContainer">
                     <p style="color: #7f8c8d;">Nessun avviso attivo in bacheca.</p>
                 </div>
+
+                <section class="home-card" aria-labelledby="titoloInfoGestionale">
+                    <h3 id="titoloInfoGestionale">ℹ️ Info sul gestionale</h3>
+                    <p>Questo programma aiuta a gestire le attività lavorative e a consultare i relativi registri.</p>
+                    <ul>
+                        <li><b>Timbrature:</b> registra ingressi, uscite e pause della giornata.</li>
+                        <li><b>Assenze:</b> inserisce e consulta ferie, permessi e malattia.</li>
+                        <li><b>Riepiloghi e avvisi:</b> mostra le attività del giorno, le verifiche e le comunicazioni in bacheca.</li>
+                        <li><b>Report, calendario e dashboard:</b> consente di consultare lo storico e i riepiloghi dei dati registrati.</li>
+                        <li><b>Documenti PDF:</b> apre la cartella condivisa su Google Drive.</li>
+                    </ul>
+                    <p>Le informazioni vengono caricate dai registri aziendali tramite il servizio sicuro del gestionale.</p>
+                </section>
             </div>
 
             <!-- TIMBRATURA -->
@@ -615,31 +643,8 @@
 
             <div id="documenti_pdf" class="section">
                 <h2>Documenti PDF</h2>
-                <p>Carica e consulta i documenti PDF archiviati in Grist.</p>
-                <form id="formUploadDocumentoPDF" class="form-actions" style="margin-bottom:20px;">
-                    <div class="form-group" style="flex:1; min-width:220px; margin:0;">
-                        <label for="fileDocumentoPDF">Seleziona un file PDF (max 10 MB)</label>
-                        <input id="fileDocumentoPDF" type="file" accept="application/pdf,.pdf" required>
-                    </div>
-                    <button id="btnUploadDocumentoPDF" type="submit" class="btn-submit">Carica PDF</button>
-                    <button type="button" onclick="caricaDocumentiPDF()">↻ Aggiorna elenco</button>
-                </form>
-                <p id="statoDocumentiPDF" role="status" aria-live="polite" style="color:#566573;">Caricamento documenti...</p>
-                <div style="overflow-x:auto;">
-                    <table style="width:100%; min-width:560px; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                        <thead>
-                            <tr style="background:#2c3e50; color:white;">
-                                <th style="padding:10px;">Nome documento</th>
-                                <th style="padding:10px;">Dimensione</th>
-                                <th style="padding:10px;">Ultima modifica</th>
-                                <th style="padding:10px;">Azioni</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabellaDocumentiPDF">
-                            <tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento documenti...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <p>Apri la cartella condivisa dei documenti su Google Drive.</p>
+                <button type="button" class="btn-submit" onclick="apriCartellaDrivePDF()">📂 Apri documenti su Google Drive</button>
             </div>
 
             <!-- IMPOSTAZIONI PARAMETRI -->
@@ -781,6 +786,8 @@
         let inactivityTimeoutId = null;
         let cacheDatiGlobali = null;
         let timestampCacheDatiGlobali = 0;
+        let caricamentoCacheGlobalePromise = null;
+        let caricamentoHomePromise = null;
         let istanzaCalendario = null;
         let dataCalendarioSelezionata = null;
         let chartsDashboard = {};
@@ -1131,6 +1138,7 @@
             }
 
             if (sectionId === 'home') {
+                aggiornaDataGiornataOdierna();
                 caricaDatiHome();
             } else if (sectionId === 'timbratura') {
                 if (!idRigaInModificaPresenze && !(modalitaInserimentoPassato && tipoInserimentoPassato === 'presenze')) {
@@ -1154,18 +1162,10 @@
                 inizializzaCalendario();
             } else if (sectionId === 'dashboard') {
                 caricaDashboard();
-            } else if (sectionId === 'documenti_pdf') {
-                caricaDocumentiPDF();
             }
         }
 
-        function impostaStatoDocumentiPDF(messaggio, errore = false) {
-            const stato = document.getElementById('statoDocumentiPDF');
-            stato.innerText = messaggio;
-            stato.style.color = errore ? '#c0392b' : '#566573';
-        }
-
-        async function leggiErroreDocumentiPDF(response) {
+        async function leggiErroreDrivePDF(response) {
             try {
                 const risultato = await response.json();
                 return risultato.error || `Operazione non riuscita (HTTP ${response.status}).`;
@@ -1174,173 +1174,46 @@
             }
         }
 
-        function formattaDimensionePDF(size) {
-            const bytes = Number(size);
-            if (!Number.isFinite(bytes) || bytes < 0) return '—';
-            if (bytes < 1024) return `${bytes} B`;
-            const unita = bytes < 1024 * 1024 ? 'KB' : 'MB';
-            const divisore = unita === 'KB' ? 1024 : 1024 * 1024;
-            return `${(bytes / divisore).toLocaleString('it-IT', { maximumFractionDigits: 1 })} ${unita}`;
-        }
-
-        function renderizzaDocumentiPDF(files) {
-            const tbody = document.getElementById('tabellaDocumentiPDF');
-            tbody.replaceChildren();
-            if (!files.length) {
-                const row = tbody.insertRow();
-                const cell = row.insertCell();
-                cell.colSpan = 4;
-                cell.style.cssText = 'padding:15px; text-align:center; color:#7f8c8d;';
-                cell.textContent = 'Nessun documento PDF presente.';
-                return;
-            }
-            files.forEach(file => {
-                const row = tbody.insertRow();
-                const nameCell = row.insertCell();
-                nameCell.style.padding = '10px';
-                nameCell.textContent = String(file.name || 'Documento PDF');
-
-                const sizeCell = row.insertCell();
-                sizeCell.style.padding = '10px';
-                sizeCell.textContent = formattaDimensionePDF(file.size);
-
-                const modifiedCell = row.insertCell();
-                modifiedCell.style.padding = '10px';
-                const modifiedDate = new Date(file.modifiedTime);
-                modifiedCell.textContent = Number.isNaN(modifiedDate.getTime())
-                    ? '—'
-                    : modifiedDate.toLocaleString('it-IT');
-
-                const actionsCell = row.insertCell();
-                actionsCell.style.cssText = 'padding:10px; white-space:nowrap;';
-                const viewButton = document.createElement('button');
-                viewButton.type = 'button';
-                viewButton.textContent = '👁️ Visualizza';
-                viewButton.style.cssText = 'padding:8px 10px; margin-right:6px; font-size:13px;';
-                viewButton.addEventListener('click', () => apriDocumentoPDF(file, true));
-                const downloadButton = document.createElement('button');
-                downloadButton.type = 'button';
-                downloadButton.textContent = '📥 Scarica';
-                downloadButton.style.cssText = 'padding:8px 10px; font-size:13px;';
-                downloadButton.addEventListener('click', () => apriDocumentoPDF(file, false));
-                actionsCell.append(viewButton, downloadButton);
-            });
-        }
-
-        async function caricaDocumentiPDF() {
-            if (!sessionToken) {
-                impostaStatoDocumentiPDF('Sessione non autorizzata. Accedi di nuovo.', true);
-                return;
-            }
-            impostaStatoDocumentiPDF('Caricamento documenti...');
-            try {
-                const response = await apiFetch(WORKER_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: 'elenco_documenti_pdf', token: sessionToken })
-                });
-                if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
-                const risultato = await response.json();
-                if (!risultato.success || !Array.isArray(risultato.files)) {
-                    throw new Error(risultato.error || 'Elenco documenti non valido.');
-                }
-                renderizzaDocumentiPDF(risultato.files);
-                impostaStatoDocumentiPDF(`${risultato.files.length} documenti PDF.`);
-            } catch (error) {
-                impostaStatoDocumentiPDF(error.message || 'Impossibile caricare i documenti PDF.', true);
-            }
-        }
-
-        async function caricaDocumentoPDF(event) {
-            event.preventDefault();
-            if (!sessionToken) {
-                impostaStatoDocumentiPDF('Sessione non autorizzata. Accedi di nuovo.', true);
-                return;
-            }
-            const input = document.getElementById('fileDocumentoPDF');
-            const file = input.files[0];
-            if (!file) {
-                impostaStatoDocumentiPDF('Seleziona un file PDF.', true);
-                return;
-            }
-            if (file.size > 10 * 1024 * 1024) {
-                impostaStatoDocumentiPDF('Il PDF supera la dimensione massima di 10 MB.', true);
-                return;
-            }
-            if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-                impostaStatoDocumentiPDF('Il file selezionato non è un PDF.', true);
-                return;
-            }
-            const button = document.getElementById('btnUploadDocumentoPDF');
-            button.disabled = true;
-            impostaStatoDocumentiPDF('Caricamento PDF in corso...');
-            try {
-                const formData = new FormData();
-                formData.append('file', file, file.name);
-                const url = new URL(WORKER_URL);
-                url.searchParams.set('tipo', 'upload_documento_pdf');
-                const response = await apiFetch(url, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${sessionToken}` },
-                    body: formData
-                });
-                if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
-                const risultato = await response.json();
-                if (!risultato.success) throw new Error(risultato.error || 'Caricamento PDF non riuscito.');
-                input.value = '';
-                impostaStatoDocumentiPDF('PDF caricato correttamente.');
-                await caricaDocumentiPDF();
-            } catch (error) {
-                impostaStatoDocumentiPDF(error.message || 'Impossibile caricare il PDF.', true);
-            } finally {
-                button.disabled = false;
-            }
-        }
-
-        async function apriDocumentoPDF(file, visualizza) {
+        async function apriCartellaDrivePDF() {
             if (!sessionToken) {
                 mostraAlert('Sessione non autorizzata. Accedi di nuovo.');
                 return;
             }
-            const viewer = visualizza ? window.open('about:blank', '_blank') : null;
-            if (visualizza && !viewer) {
-                mostraAlert('Consenti l’apertura di nuove schede per visualizzare il PDF.');
+            const nuovaScheda = window.open('about:blank', '_blank');
+            if (!nuovaScheda) {
+                mostraAlert('Consenti l’apertura di nuove schede per accedere a Google Drive.');
                 return;
             }
-            if (viewer) {
-                viewer.opener = null;
-                viewer.document.title = 'Caricamento documento PDF';
-                viewer.document.body.textContent = 'Caricamento documento...';
-            }
+            nuovaScheda.opener = null;
+            nuovaScheda.document.title = 'Apertura Google Drive';
+            nuovaScheda.document.body.textContent = 'Caricamento documenti...';
             try {
-                const url = new URL(WORKER_URL);
-                url.searchParams.set('tipo', 'download_documento_pdf');
-                url.searchParams.set('fileId', file.id);
-                const response = await apiFetch(url, {
-                    method: 'GET',
-                    headers: { Authorization: `Bearer ${sessionToken}` }
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'get_drive_pdf_url', token: sessionToken })
                 });
-                if (!response.ok) throw new Error(await leggiErroreDocumentiPDF(response));
-                const blobUrl = URL.createObjectURL(new Blob([await response.blob()], { type: 'application/pdf' }));
-                if (viewer) {
-                    viewer.location.replace(blobUrl);
-                    window.addEventListener('pagehide', () => URL.revokeObjectURL(blobUrl), { once: true });
-                } else {
-                    const link = document.createElement('a');
-                    link.href = blobUrl;
-                    link.download = String(file.name || 'documento.pdf').replace(/[\/\\]/g, '_');
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                if (!response.ok) throw new Error(await leggiErroreDrivePDF(response));
+                const risultato = await response.json();
+                if (!risultato.success) {
+                    throw new Error(risultato.error || 'Impossibile recuperare l’indirizzo Google Drive.');
                 }
+                let driveUrl;
+                try {
+                    driveUrl = new URL(risultato.url);
+                } catch {
+                    throw new Error('Il Worker non ha restituito un indirizzo Google Drive valido.');
+                }
+                if (driveUrl.protocol !== 'https:' ||
+                    !['drive.google.com', 'docs.google.com'].includes(driveUrl.hostname)) {
+                    throw new Error(risultato.error || 'Indirizzo Google Drive non valido.');
+                }
+                nuovaScheda.location.replace(driveUrl.href);
             } catch (error) {
-                if (viewer) viewer.close();
-                mostraAlert(error.message || 'Impossibile recuperare il documento PDF.');
+                nuovaScheda.close();
+                mostraAlert(error.message || 'Impossibile aprire i documenti su Google Drive.');
             }
         }
-
-        document.getElementById('formUploadDocumentoPDF').addEventListener('submit', caricaDocumentoPDF);
 
         function dataPartiDashboard(valore) {
             if (typeof valore === 'string') {
@@ -1959,7 +1832,14 @@
             });
         }
 
-        async function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
+        function inizializzaDatiGlobaliCache(forzaAggiornamento = false) {
+            if (caricamentoCacheGlobalePromise) return caricamentoCacheGlobalePromise;
+            caricamentoCacheGlobalePromise = caricaDatiGlobaliCache(forzaAggiornamento)
+                .finally(() => { caricamentoCacheGlobalePromise = null; });
+            return caricamentoCacheGlobalePromise;
+        }
+
+        async function caricaDatiGlobaliCache(forzaAggiornamento = false) {
             let cacheSalvata = null;
             let timestampCacheSalvata = 0;
             try {
@@ -2118,39 +1998,20 @@
             }
         }
 
-        async function caricaDatiHome() {
+        function caricaDatiHome() {
+            if (caricamentoHomePromise) return caricamentoHomePromise;
+            caricamentoHomePromise = caricaDatiHomeInterno()
+                .finally(() => { caricamentoHomePromise = null; });
+            return caricamentoHomePromise;
+        }
+
+        async function caricaDatiHomeInterno() {
             if (!sessionToken) return;
             
             const txtGiornata = document.getElementById('txtGiornata');
             const cardGiornata = document.getElementById('cardGiornata');
             const oggiStr = getOggiInLocale();
             const [aa, mm, gg] = oggiStr.split('-');
-            
-            try {
-                const resP = await apiFetch(WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "get_presenze", token: sessionToken, data: `${gg}/${mm}/${aa}` })
-                });
-                if (resP.ok) {
-                    const dP = await resP.json();
-                    const eventi = dP.eventi || [];
-                    if (eventi.length > 0) {
-                        const riepOggi = calcolaRiepilogoGiornata(dP.records || []);
-                        cardGiornata.className = eventi.includes("Uscita") ? "home-card success" : "home-card warning";
-                        let dettagliOre = riepOggi.completata 
-                            ? `• <b>Ore lavorate:</b> ${riepOggi.lavorate}<br>• <b>Straordinari:</b> ${riepOggi.straordinari}<br>• <b>Permessi:</b> ${riepOggi.permessi}`
-                            : `• <i>Giornata in corso (in attesa di timbratura Uscita per il calcolo definitivo)</i>`;
-                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${eventi.join(', ')}<br><br>📊 <b>Riepilogo ore odierne:</b><br>${dettagliOre}`;
-                    } else {
-                        cardGiornata.className = "home-card";
-                        txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
-                    }
-                } else {
-                    txtGiornata.innerHTML = `⚠️ Impossibile caricare presenze (limite API o server occupato).`;
-                }
-            } catch (e) {
-                txtGiornata.innerText = "Errore di connessione nel recupero presenze odierne.";
-            }
 
             const txtTimbraturePassate = document.getElementById('txtTimbraturePassate');
             const txtAssenzeProgrammate = document.getElementById('txtAssenzeProgrammate');
@@ -2164,6 +2025,27 @@
                     const dS = await resStorico.json();
                     const presenze = dS.presenze || [];
                     txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia nei registri passati (${presenze.length} eventi quest'anno).`;
+
+                    const recordsOggi = presenze.filter(record => {
+                        const partiData = estraiPartiData(record.fields.Data);
+                        return `${partiData.aa}-${partiData.mm}-${partiData.gg}` === oggiStr;
+                    }).sort((a, b) => {
+                        const minutiA = Number(a.fields.Ora || 0) * 60 + Number(a.fields.Minuti || 0);
+                        const minutiB = Number(b.fields.Ora || 0) * 60 + Number(b.fields.Minuti || 0);
+                        return minutiA - minutiB;
+                    });
+                    const eventiOggi = recordsOggi.map(record => record.fields.Evento);
+                    if (eventiOggi.length > 0) {
+                        const riepilogoOggi = calcolaRiepilogoGiornata(recordsOggi);
+                        cardGiornata.className = eventiOggi.includes("Uscita") ? "home-card success" : "home-card warning";
+                        const dettagliOre = riepilogoOggi.completata
+                            ? `• <b>Ore lavorate:</b> ${riepilogoOggi.lavorate}<br>• <b>Straordinari:</b> ${riepilogoOggi.straordinari}<br>• <b>Permessi:</b> ${riepilogoOggi.permessi}`
+                            : `• <i>Giornata in corso (in attesa di timbratura Uscita per il calcolo definitivo)</i>`;
+                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${eventiOggi.join(', ')}<br><br>📊 <b>Riepilogo ore odierne:</b><br>${dettagliOre}`;
+                    } else {
+                        cardGiornata.className = "home-card";
+                        txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
+                    }
 
                     const assenze = dS.assenze || [];
                     const oggiEpoch = Date.now() / 1000;
@@ -2185,10 +2067,12 @@
                         txtAssenzeProgrammate.innerHTML = `👍 Nessuna assenza pianificata nei prossimi ${giorniAnticipoAssenze} giorni.`;
                     }
                 } else {
+                    txtGiornata.innerText = "⚠️ Impossibile caricare presenze (limite API o server occupato).";
                     txtTimbraturePassate.innerText = "Stato verifiche non disponibile (limite API).";
                     txtAssenzeProgrammate.innerText = "Pianificazione non disponibile.";
                 }
             } catch (err) {
+                txtGiornata.innerText = "Errore di connessione nel recupero presenze odierne.";
                 txtTimbraturePassate.innerText = "Verifica non disponibile offline.";
                 txtAssenzeProgrammate.innerText = "Controllo pianificazione non disponibile.";
             }

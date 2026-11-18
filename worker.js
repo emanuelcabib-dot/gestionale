@@ -293,275 +293,7 @@ function issueSession(env, corsHeaders) {
   }, corsHeaders);
 }
 
-const MAX_PDF_SIZE = 10 * 1024 * 1024;
-const MAX_PDF_REQUEST_SIZE = MAX_PDF_SIZE + 128 * 1024;
-const GRIST_API_BASE = "https://gestionale-lavoro-emanuel-00.getgrist.com/api";
-const PDF_TABLE_ID = "Documenti_PDF";
-const PDF_ATTACHMENT_COLUMN = "Allegato";
-
-function isSessionAuthorized(request, env, bodyToken) {
-  if (!env.GRIST_API_KEY) return false;
-  const expectedToken = btoa(env.GRIST_API_KEY).substring(0, 30);
-  const authorization = request.headers.get("Authorization") || "";
-  const headerToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  return equalSecret(bodyToken || headerToken, expectedToken);
-}
-
-function getGristPdfContext(env) {
-  if (!env.GRIST_DOC_ID || !env.GRIST_API_KEY) {
-    throw new Error("Configurazione Grist incompleta sul Worker");
-  }
-  const documentUrl = `${GRIST_API_BASE}/docs/${encodeURIComponent(env.GRIST_DOC_ID)}`;
-  return {
-    documentUrl,
-    headers: { Authorization: `Bearer ${env.GRIST_API_KEY}` }
-  };
-}
-
-async function ensureGristPdfTable(env) {
-  const { documentUrl, headers } = getGristPdfContext(env);
-  const response = await fetch(`${documentUrl}/tables`, { headers });
-  if (!response.ok) throw new Error("Impossibile verificare le tabelle Grist");
-  const data = await response.json();
-  const tables = Array.isArray(data.tables) ? data.tables : [];
-  if (!tables.some(table => table.id === PDF_TABLE_ID)) {
-    throw new Error("Tabella Documenti_PDF non trovata in Grist");
-  }
-  return { documentUrl, headers };
-}
-
-function getGristSqlRows(data) {
-  if (Array.isArray(data.records)) {
-    return data.records.map(record => record.fields || record);
-  }
-  if (Array.isArray(data.rows) && Array.isArray(data.columns)) {
-    const columnNames = data.columns.map(column => typeof column === "string" ? column : column.id || column.name);
-    if (columnNames.some(name => typeof name !== "string")) {
-      throw new Error("Formato risultati SQL Grist non valido");
-    }
-    return data.rows.map(row => {
-      if (!Array.isArray(row)) return row;
-      return Object.fromEntries(columnNames.map((name, index) => [name, row[index]]));
-    });
-  }
-  throw new Error("Formato risultati SQL Grist non riconosciuto");
-}
-
-async function listGristPdfs(env) {
-  const { documentUrl, headers } = await ensureGristPdfTable(env);
-  const files = [];
-  const limit = 1000;
-  for (let offset = 0; ; offset += limit) {
-    const response = await fetch(`${documentUrl}/sql`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sql: `SELECT "ID", "Nome", "MimeType", "Data_Caricamento", "Dimensione" FROM "${PDF_TABLE_ID}" LIMIT ${limit} OFFSET ${offset}`
-      })
-    });
-    if (!response.ok) throw new Error("Errore durante il recupero dei documenti da Grist");
-    const rows = getGristSqlRows(await response.json());
-    for (const fields of rows) {
-      if (typeof fields.ID !== "string" ||
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fields.ID)) continue;
-      files.push({
-        id: fields.ID,
-        name: safePdfName(fields.Nome),
-        size: Number(fields.Dimensione) || 0,
-        modifiedTime: String(fields.Data_Caricamento || "")
-      });
-    }
-    if (rows.length < limit) break;
-  }
-  return files;
-}
-
-function safePdfName(value) {
-  let name = String(value || "documento.pdf")
-    .replace(/[\/\\\u0000-\u001f\u007f]/g, "_")
-    .trim();
-  if (!name || !/\.pdf$/i.test(name)) name = `${name || "documento"}.pdf`;
-  if (name.length > 180) name = `${name.slice(0, 176)}.pdf`;
-  return name;
-}
-
-async function readBoundedRequestBody(request, maxSize) {
-  const contentLengthHeader = request.headers.get("Content-Length");
-  const contentLength = Number(contentLengthHeader);
-  if (contentLengthHeader && Number.isFinite(contentLength) && contentLength > maxSize) {
-    return { error: "Il PDF supera la dimensione massima di 10 MB", status: 413 };
-  }
-  if (!request.body) return { error: "Body della richiesta mancante", status: 400 };
-  const reader = request.body.getReader();
-  const chunks = [];
-  let totalSize = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalSize += value.byteLength;
-    if (totalSize > maxSize) {
-      await reader.cancel();
-      return { error: "Il PDF supera la dimensione massima di 10 MB", status: 413 };
-    }
-    chunks.push(value);
-  }
-  const body = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    const boundedHeaders = new Headers(request.headers);
-    boundedHeaders.delete("Content-Length");
-    const boundedRequest = new Request(request.url, {
-      method: request.method,
-      headers: boundedHeaders,
-      body
-    });
-    return { formData: await boundedRequest.formData() };
-  } catch {
-    return { error: "FormData non valido nel body", status: 400 };
-  }
-}
-
-async function uploadGristPdf(request, env, corsHeaders) {
-  if (!isSessionAuthorized(request, env)) {
-    return privateJsonResponse({ success: false, error: "Sessione non autorizzata o scaduta" }, corsHeaders, 403);
-  }
-  const parsed = await readBoundedRequestBody(request, MAX_PDF_REQUEST_SIZE);
-  if (parsed.error) {
-    return privateJsonResponse({ success: false, error: parsed.error }, corsHeaders, parsed.status);
-  }
-  const file = parsed.formData.get("file");
-  if (!file || typeof file === "string" || file.size === 0) {
-    return privateJsonResponse({ success: false, error: "Seleziona un PDF valido entro 10 MB" }, corsHeaders, 400);
-  }
-  if (file.size > MAX_PDF_SIZE) {
-    return privateJsonResponse({ success: false, error: "Il PDF supera la dimensione massima di 10 MB" }, corsHeaders, 413);
-  }
-  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-    return privateJsonResponse({ success: false, error: "Il file selezionato non è un PDF" }, corsHeaders, 400);
-  }
-  const signature = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-  if (new TextDecoder().decode(signature) !== "%PDF-") {
-    return privateJsonResponse({ success: false, error: "Il contenuto del file non è un PDF valido" }, corsHeaders, 400);
-  }
-
-  const name = safePdfName(file.name);
-  const pdfFile = new File([file], name, { type: "application/pdf" });
-  const gristUpload = new FormData();
-  gristUpload.append("upload", pdfFile, name);
-  const { documentUrl, headers } = await ensureGristPdfTable(env);
-  const attachmentResponse = await fetch(`${documentUrl}/attachments`, {
-    method: "POST",
-    headers,
-    body: gristUpload
-  });
-  if (!attachmentResponse.ok) {
-    throw new Error("Errore durante il caricamento dell'allegato PDF su Grist");
-  }
-  const attachmentIds = await attachmentResponse.json();
-  const attachmentId = Array.isArray(attachmentIds) ? attachmentIds[0] : null;
-  if (!Number.isSafeInteger(attachmentId) || attachmentId <= 0) {
-    throw new Error("Grist non ha restituito un ID allegato valido");
-  }
-
-  const id = crypto.randomUUID();
-  const recordsUrl = `${documentUrl}/tables/${encodeURIComponent(PDF_TABLE_ID)}/records`;
-  const recordResponse = await fetch(recordsUrl, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      records: [{
-        fields: {
-          ID: id,
-          Nome: name,
-          MimeType: "application/pdf",
-          Data_Caricamento: new Date().toISOString(),
-          Dimensione: file.size
-        }
-      }]
-    })
-  });
-  if (!recordResponse.ok) {
-    throw new Error("Errore durante il salvataggio del PDF in Grist");
-  }
-  const recordData = await recordResponse.json();
-  const recordId = recordData.records?.[0]?.id;
-  if (!Number.isSafeInteger(recordId) || recordId <= 0) {
-    throw new Error("Grist non ha restituito l'ID del record del documento");
-  }
-  const patchResponse = await fetch(recordsUrl, {
-    method: "PATCH",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      records: [{
-        id: recordId,
-        fields: { [PDF_ATTACHMENT_COLUMN]: [attachmentId] }
-      }]
-    })
-  });
-  if (!patchResponse.ok) {
-    throw new Error("Errore durante l'associazione dell'allegato al documento in Grist");
-  }
-  return privateJsonResponse({
-    success: true,
-    file: {
-      id,
-      name,
-      size: file.size,
-      modifiedTime: new Date().toISOString()
-    },
-  }, corsHeaders, 201);
-}
-
-async function downloadGristPdf(request, env, corsHeaders, fileId) {
-  if (!isSessionAuthorized(request, env)) {
-    return privateJsonResponse({ success: false, error: "Sessione non autorizzata o scaduta" }, corsHeaders, 403);
-  }
-  if (typeof fileId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(fileId)) {
-    return privateJsonResponse({ success: false, error: "Documento non valido" }, corsHeaders, 400);
-  }
-  const { documentUrl, headers: gristHeaders } = await ensureGristPdfTable(env);
-  const filter = encodeURIComponent(JSON.stringify({ ID: [fileId] }));
-  const response = await fetch(
-    `${documentUrl}/tables/${encodeURIComponent(PDF_TABLE_ID)}/records?filter=${filter}`,
-    { headers: gristHeaders }
-  );
-  if (!response.ok) {
-    throw new Error("Errore durante il recupero del PDF da Grist");
-  }
-  const data = await response.json();
-  const record = (data.records || []).find(item => item.fields?.ID === fileId);
-  const attachmentId = record?.fields?.[PDF_ATTACHMENT_COLUMN]?.[0];
-  if (!record ||
-      record.fields.MimeType !== "application/pdf" ||
-      !Number.isSafeInteger(attachmentId) ||
-      attachmentId <= 0) {
-    return privateJsonResponse({ success: false, error: "Documento non trovato" }, corsHeaders, 404);
-  }
-  const attachmentResponse = await fetch(
-    `${documentUrl}/attachments/${attachmentId}/download`,
-    { headers: gristHeaders }
-  );
-  if (!attachmentResponse.ok || !attachmentResponse.body) {
-    throw new Error("Errore durante il recupero dell'allegato PDF da Grist");
-  }
-  const name = safePdfName(record.fields.Nome);
-  const encodedName = encodeURIComponent(name)
-    .replace(/['()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-  const headers = new Headers(corsHeaders);
-  headers.set("Content-Type", "application/pdf");
-  headers.set("Content-Disposition", `inline; filename="documento.pdf"; filename*=UTF-8''${encodedName}`);
-  headers.set("Cache-Control", "private, no-store");
-  headers.set("X-Content-Type-Options", "nosniff");
-  const contentLength = attachmentResponse.headers.get("Content-Length");
-  if (contentLength) headers.set("Content-Length", contentLength);
-  return new Response(attachmentResponse.body, { status: 200, headers });
-}
-
+const GRIST_API_BASE = "https://gestionale-lavoro-emanuel-01.getgrist.com/api";
 export default {
   async fetch(request, env, ctx) {
     const corsHeaders = {
@@ -575,19 +307,8 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (request.method === "GET" && url.searchParams.get("tipo") === "download_documento_pdf") {
-      try {
-        return await downloadGristPdf(request, env, corsHeaders, url.searchParams.get("fileId"));
-      } catch (error) {
-        return privateJsonResponse({ success: false, error: error.message }, corsHeaders, 500);
-      }
-    }
-
     if (request.method === "POST") {
       try {
-        if (url.searchParams.get("tipo") === "upload_documento_pdf") {
-          return await uploadGristPdf(request, env, corsHeaders);
-        }
         let body;
         try {
           body = await request.json();
@@ -707,9 +428,22 @@ export default {
           return new Response(JSON.stringify({ success: false, error: "Sessione non autorizzata o scaduta" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        if (body.tipo === "elenco_documenti_pdf") {
-          const files = await listGristPdfs(env);
-          return privateJsonResponse({ success: true, files }, corsHeaders);
+        if (body.tipo === "get_drive_pdf_url") {
+          if (!env.DRIVE_PDF_URL) {
+            return privateJsonResponse({ success: false, error: "Indirizzo Google Drive non configurato sul Worker" }, corsHeaders, 503);
+          }
+          let driveUrl;
+          try {
+            driveUrl = new URL(env.DRIVE_PDF_URL);
+          } catch {
+            return privateJsonResponse({ success: false, error: "Indirizzo Google Drive non valido sul Worker" }, corsHeaders, 500);
+          }
+          if (driveUrl.protocol !== "https:" ||
+              !["drive.google.com", "docs.google.com"].includes(driveUrl.hostname) ||
+              driveUrl.username || driveUrl.password) {
+            return privateJsonResponse({ success: false, error: "Indirizzo Google Drive non valido sul Worker" }, corsHeaders, 500);
+          }
+          return privateJsonResponse({ success: true, url: driveUrl.href }, corsHeaders);
         }
 
         if (body.tipo === "webauthn_register_options" || body.tipo === "webauthn_register_verify") {
@@ -811,7 +545,7 @@ export default {
         }
 
         const DOC_ID = env.GRIST_DOC_ID;
-        const BASE_GRIST = `https://gestionale-lavoro-emanuel-00.getgrist.com/api/docs/${DOC_ID}/tables`;
+        const BASE_GRIST = `${env.GRIST_API_BASE || GRIST_API_BASE}/docs/${DOC_ID}/tables`;
         const headersGrist = { "Authorization": `Bearer ${env.GRIST_API_KEY}` };
 
         // ==========================================
