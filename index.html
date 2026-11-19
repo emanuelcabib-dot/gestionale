@@ -2888,7 +2888,7 @@
         }
 
         function pulisciValorePDF(etichetta, valore) {
-            let testo = String(valore || '-')
+            let testo = String(valore ?? '-')
                 .replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*|\+|-)\s*/i, '')
                 .replace(/[|]/g, '')
                 .replace(/\bgg\b/gi, 'giorni')
@@ -2899,7 +2899,8 @@
             const puro = testo.match(/^(-?\d+(?:[.,]\d+)?)\s*(giorni|ore|h)?$/i);
             if (puro) {
                 const eta = String(etichetta).toLowerCase();
-                const unita = puro[2] ? (puro[2].toLowerCase() === 'h' ? 'ore' : puro[2].toLower())
+                const unita = typeof puro[2] === 'string'
+                    ? (puro[2].toLowerCase() === 'h' ? 'ore' : puro[2].toLowerCase())
                     : /(ore|timbratur)/.test(eta) ? 'ore'
                     : /(giorni|ferie|malattia|assenza)/.test(eta) ? 'giorni'
                     : '';
@@ -3157,40 +3158,61 @@
         }
 
         async function generaPDFAnnuale() {
-            const annoSel = document.getElementById('rep_anno_annual').value;
-            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
-            const resJson = await response.json();
-            if (response.ok && resJson.success) {
-                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
-                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT ANNUALE ASSENZE: ${resJson.anno}`, '', `Report_Annuale_${resJson.anno}.pdf`, {
-                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
-                });
-            } else { mostraAlert("Errore generazione report annuale."); }
+            try {
+                if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
+                if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const annoSel = document.getElementById('rep_anno_annual').value;
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
+                const resJson = await response.json();
+                if (response.ok && resJson.success) {
+                    const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
+                    await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT ANNUALE ASSENZE: ${resJson.anno}`, '', `Report_Annuale_${resJson.anno}.pdf`, {
+                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    });
+                } else { mostraAlert("Errore generazione report annuale."); }
+            } catch (error) {
+                console.error("Errore generazione PDF assenze annuale:", error);
+                mostraAlert(`Impossibile generare il PDF. ${error.message || ''}`.trim());
+            }
         }
 
         async function generaPDFTimbratureMensile() {
-            const annoSel = document.getElementById('rep_timb_anno').value;
-            const meseSel = document.getElementById('rep_timb_mese').value;
-            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
-            const resJson = await response.json();
-            if (response.ok && resJson.success) {
-                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
-                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE MENSILI: ${resJson.mese} ${resJson.anno}`, '', `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, {
-                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
-                });
-            } else { mostraAlert("Errore generazione report timbrature mensile."); }
+            try {
+                if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
+                if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const annoSel = document.getElementById('rep_timb_anno').value;
+                const meseSel = document.getElementById('rep_timb_mese').value;
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
+                const resJson = await response.json();
+                if (response.ok && resJson.success) {
+                    const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
+                    await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE MENSILI: ${resJson.mese} ${resJson.anno}`, '', `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, {
+                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    });
+                } else { mostraAlert("Errore generazione report timbrature mensile."); }
+            } catch (error) {
+                console.error("Errore generazione PDF timbrature mensile:", error);
+                mostraAlert(`Impossibile generare il PDF. ${error.message || ''}`.trim());
+            }
         }
 
         async function generaPDFTimbratureAnnuale() {
-            const annoSel = document.getElementById('rep_timb_anno_annual').value;
-            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
-            const resJson = await response.json();
-            if (response.ok && resJson.success) {
-                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
-                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALI: ${resJson.anno}`, '', `Timbrature_Annuale_${resJson.anno}.pdf`, {
-                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
-                });
-            } else { mostraAlert("Errore generazione report timbrature annuale."); }
+            try {
+                if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
+                if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const annoSel = document.getElementById('rep_timb_anno_annual').value;
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
+                const resJson = await response.json();
+                if (response.ok && resJson.success) {
+                    const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
+                    await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALI: ${resJson.anno}`, '', `Timbrature_Annuale_${resJson.anno}.pdf`, {
+                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    });
+                } else { mostraAlert("Errore generazione report timbrature annuale."); }
+            } catch (error) {
+                console.error("Errore generazione PDF timbrature annuale:", error);
+                mostraAlert(`Impossibile generare il PDF. ${error.message || ''}`.trim());
+            }
         }
 
         function formattaNumeroVerificaBustaPaga(valore) {
