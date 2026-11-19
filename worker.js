@@ -795,18 +795,18 @@ export default {
               } else if (tipo.includes("malattia")) malattia_tot += qta;
             }
 
-            let testoReport = `========================================\n RIEPILOGO STORICO ANNUALE (TUTTI GLI ANNI: ${Array.from(anniTrovati).sort().join(', ')})\n========================================\n\n`;
+            let testoReport = `REPORT ANNUALE ASSENZE: TUTTI GLI ANNI (${Array.from(anniTrovati).sort().join(', ')})\n\n`;
             testoReport += `MOVIMENTI FERIE CUMULATI\n----------------------------------------\n`;
-            testoReport += ` [+] Ferie maturate (somma anni) : +${Math.round(tot_f_mat * 100) / 100} giorni\n`;
-            testoReport += ` [-] Ferie godute (vacanze reali) : -${Math.round(f_god * 100) / 100} giorni\n`;
-            if (f_liq > 0.01) testoReport += ` [-] Ferie liquidate/pagate     : -${Math.round(f_liq * 100) / 100} giorni\n`;
-            if (f_ret > 0.01) testoReport += ` [+/-] Rettifiche ferie (storni): +${Math.round(f_ret * 100) / 100} giorni\n\n\n`;
+            testoReport += ` Ferie maturate (somma anni) : ${Math.round(tot_f_mat * 100) / 100} giorni\n`;
+            testoReport += ` Ferie godute (vacanze reali) : ${Math.round(f_god * 100) / 100} giorni\n`;
+            if (f_liq > 0.01) testoReport += ` Ferie liquidate/pagate     : ${Math.round(f_liq * 100) / 100} giorni\n`;
+            if (f_ret > 0.01) testoReport += ` Rettifiche ferie (storni): ${Math.round(f_ret * 100) / 100} giorni\n\n\n`;
             testoReport += `MOVIMENTI PERMESSI CUMULATI\n----------------------------------------\n`;
-            testoReport += ` [+] Permessi maturati (somma anni) : +${Math.round(tot_p_mat * 100) / 100} ore\n`;
-            testoReport += ` [-] Permessi fruiti (ore assenza) : -${Math.round(p_god * 100) / 100} ore\n`;
-            if (p_liq > 0.01) testoReport += ` [-] Permessi liquidati/pagate  : -${Math.round(p_liq * 100) / 100} ore\n`;
-            if (p_ret > 0.01) testoReport += ` [+/-] Rettifiche permessi (storni): +${Math.round(p_ret * 100) / 100} ore\n\n\n`;
-            testoReport += `MALATTIE CUMULATE\n----------------------------------------\n * Giorni di malattia totali    : ${Math.round(malattia_tot * 100) / 100} giorni\n========================================`;
+            testoReport += ` Permessi maturati (somma anni) : ${Math.round(tot_p_mat * 100) / 100} ore\n`;
+            testoReport += ` Permessi fruiti (ore assenza) : ${Math.round(p_god * 100) / 100} ore\n`;
+            if (p_liq > 0.01) testoReport += ` Permessi liquidati/pagate  : ${Math.round(p_liq * 100) / 100} ore\n`;
+            if (p_ret > 0.01) testoReport += ` Rettifiche permessi (storni): ${Math.round(p_ret * 100) / 100} ore\n\n\n`;
+            testoReport += `MALATTIE CUMULATE\n----------------------------------------\n Giorni di malattia totali    : ${Math.round(malattia_tot * 100) / 100} giorni`;
 
             return new Response(JSON.stringify({ success: true, testoReport, anno: "Tutti_gli_Anni" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
@@ -842,22 +842,22 @@ export default {
           const saldo_ferie = Math.round((partenza_ferie + ferie_contratto_anno - f_god - f_liq + f_ret) * 100) / 100;
           const saldo_permessi = Math.round((partenza_permessi + permessi_contratto_anno - p_god - p_liq + p_ret) * 100) / 100;
 
-          let testoReport = `========================================\n RIEPILOGO ANNUALE COMPLESSIVO: ANNO ${anno_rif}\n========================================\n\n`;
+          let testoReport = `REPORT ANNUALE ASSENZE: ANNO ${anno_rif}\n\n`;
           testoReport += `MOVIMENTI FERIE DELL'ANNO\n----------------------------------------\n`;
-          testoReport += ` <<< Residuo anno precedente    : ${partenza_ferie} giorni\n`;
-          testoReport += ` [+] Ferie maturate nell'anno   : +${ferie_contratto_anno} giorni\n`;
-          testoReport += ` [-] Ferie godute (vacanze reali) : -${Math.round(f_god * 100) / 100} giorni\n`;
-          if (f_liq > 0.01) testoReport += ` [-] Ferie liquidate/pagate     : -${Math.round(f_liq * 100) / 100} giorni\n`;
-          if (f_ret > 0.01) testoReport += ` [+/-] Rettifiche ferie (storni): +${Math.round(f_ret * 100) / 100} giorni\n`;
-          testoReport += `\n >>> SALDO FERIE A FINE ANNO    : ${saldo_ferie} giorni\n\n\n`;
+          testoReport += ` Residuo anno precedente    : ${partenza_ferie} giorni\n`;
+          testoReport += ` Ferie maturate nell'anno   : ${ferie_contratto_anno} giorni\n`;
+          testoReport += ` Ferie godute (vacanze reali) : ${Math.round(f_god * 100) / 100} giorni\n`;
+          if (f_liq > 0.01) testoReport += ` Ferie liquidate/pagate     : ${Math.round(f_liq * 100) / 100} giorni\n`;
+          if (f_ret > 0.01) testoReport += ` Rettifiche ferie (storni): ${Math.round(f_ret * 100) / 100} giorni\n`;
+          testoReport += `\n Saldo ferie a fine anno    : ${saldo_ferie} giorni\n\n\n`;
           testoReport += `MOVIMENTI PERMESSI DELL'ANNO\n----------------------------------------\n`;
-          testoReport += ` <<< Residuo anno precedente    : ${partenza_permessi} ore\n`;
-          testoReport += ` [+] Permessi maturati nell'anno: +${permessi_contratto_anno} ore\n`;
-          testoReport += ` [-] Permessi fruiti (ore assenza) : -${Math.round(p_god * 100) / 100} ore\n`;
-          if (p_liq > 0.01) testoReport += ` [-] Permessi liquidati/pagati  : -${Math.round(p_liq * 100) / 100} ore\n`;
-          if (p_ret > 0.01) testoReport += ` [+/-] Rettifiche permessi (storni): +${Math.round(p_ret * 100) / 100} ore\n`;
-          testoReport += `\n >>> SALDO PERMESSI A FINE ANNO : ${saldo_permessi} ore\n\n\n`;
-          testoReport += `MALATTIE DELL'ANNO\n----------------------------------------\n * Giorni di malattia nell'anno : ${Math.round(malattia_anno * 100) / 100} giorni\n========================================`;
+          testoReport += ` Residuo anno precedente    : ${partenza_permessi} ore\n`;
+          testoReport += ` Permessi maturati nell'anno: ${permessi_contratto_anno} ore\n`;
+          testoReport += ` Permessi fruiti (ore assenza) : ${Math.round(p_god * 100) / 100} ore\n`;
+          if (p_liq > 0.01) testoReport += ` Permessi liquidati/pagati  : ${Math.round(p_liq * 100) / 100} ore\n`;
+          if (p_ret > 0.01) testoReport += ` Rettifiche permessi (storni): ${Math.round(p_ret * 100) / 100} ore\n`;
+          testoReport += `\n Saldo permessi a fine anno : ${saldo_permessi} ore\n\n\n`;
+          testoReport += `MALATTIE DELL'ANNO\n----------------------------------------\n Giorni di malattia nell'anno : ${Math.round(malattia_anno * 100) / 100} giorni`;
 
           return new Response(JSON.stringify({ success: true, testoReport, anno: anno_rif }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -919,18 +919,18 @@ export default {
               }
             }
 
-            let testoReport = `========================================\n RIEPILOGO STORICO MESE DI ${mese.toUpperCase()} (TUTTI GLI ANNI: ${Array.from(anniTrovati).sort().join(', ')})\n========================================\n\n`;
+            let testoReport = `REPORT MENSILE ASSENZE: ${mese.toUpperCase()} (TUTTI GLI ANNI: ${Array.from(anniTrovati).sort().join(', ')})\n\n`;
             testoReport += `MOVIMENTI FERIE DI QUESTO MESE\n----------------------------------------\n`;
-            testoReport += ` [+] Ferie maturate (somma anni) : +${Math.round(tot_mat_ferie * 100) / 100} giorni\n`;
-            testoReport += ` [-] Ferie godute (vacanze reali) : -${Math.round(f_god * 100) / 100} giorni\n`;
-            if (f_liq > 0.01) testoReport += ` [-] Ferie liquidate/pagate     : -${Math.round(f_liq * 100) / 100} giorni\n`;
-            if (f_ret > 0.01) testoReport += ` [+/-] Rettifiche ferie (storni): +${Math.round(f_ret * 100) / 100} giorni\n\n\n`;
+            testoReport += ` Ferie maturate (somma anni) : ${Math.round(tot_mat_ferie * 100) / 100} giorni\n`;
+            testoReport += ` Ferie godute (vacanze reali) : ${Math.round(f_god * 100) / 100} giorni\n`;
+            if (f_liq > 0.01) testoReport += ` Ferie liquidate/pagate     : ${Math.round(f_liq * 100) / 100} giorni\n`;
+            if (f_ret > 0.01) testoReport += ` Rettifiche ferie (storni): ${Math.round(f_ret * 100) / 100} giorni\n\n\n`;
             testoReport += `MOVIMENTI PERMESSI DI QUESTO MESE\n----------------------------------------\n`;
-            testoReport += ` [+] Permessi maturati (somma anni) : +${Math.round(tot_mat_permessi * 100) / 100} ore\n`;
-            testoReport += ` [-] Permessi fatti (ore assenza) : -${Math.round(p_god * 100) / 100} ore\n`;
-            if (p_liq > 0.01) testoReport += ` [-] Permessi liquidati/pagati  : -${Math.round(p_liq * 100) / 100} ore\n`;
-            if (p_ret > 0.01) testoReport += ` [+/-] Rettifiche permessi (storni): +${Math.round(p_ret * 100) / 100} ore\n\n\n`;
-            testoReport += `MALATTIE DEL MESE\n----------------------------------------\n * Giorni di malattia nel mese  : ${Math.round(mal_tot * 100) / 100} giorni\n========================================`;
+            testoReport += ` Permessi maturati (somma anni) : ${Math.round(tot_mat_permessi * 100) / 100} ore\n`;
+            testoReport += ` Permessi fatti (ore assenza) : ${Math.round(p_god * 100) / 100} ore\n`;
+            if (p_liq > 0.01) testoReport += ` Permessi liquidati/pagati  : ${Math.round(p_liq * 100) / 100} ore\n`;
+            if (p_ret > 0.01) testoReport += ` Rettifiche permessi (storni): ${Math.round(p_ret * 100) / 100} ore\n\n\n`;
+            testoReport += `MALATTIE DEL MESE\n----------------------------------------\n Giorni di malattia nel mese  : ${Math.round(mal_tot * 100) / 100} giorni`;
 
             return new Response(JSON.stringify({ success: true, testoReport, mese, anno: "Tutti_gli_Anni" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
@@ -988,22 +988,22 @@ export default {
           const saldo_reale_ferie_mese = Math.round((partenza_ferie + (coeff_ferie_mese * mese_rif) - ferie_cumulate_fino_a_mese) * 100) / 100;
           const saldo_reale_permessi_mese = Math.round((partenza_permessi + (coeff_permessi_mese * mese_rif) - permessi_cumulati_fino_a_mese) * 100) / 100;
 
-          let testoReport = `========================================\n RIEPILOGO MENSILE: ${mese.toUpperCase()} ${anno_rif}\n========================================\n\n`;
+          let testoReport = `REPORT MENSILE ASSENZE: ${mese.toUpperCase()} ${anno_rif}\n\n`;
           testoReport += `MOVIMENTI FERIE DI QUESTO MESE\n----------------------------------------\n`;
-          testoReport += ` <<< SALDO MESE PRECEDENTE      : ${saldo_precedente_ferie} giorni\n`;
-          testoReport += ` [+] Ferie maturate nel mese    : +${coeff_ferie_mese} giorni\n`;
-          testoReport += ` [-] Ferie godute (vacanze reali) : -${Math.round(ferie_godute_mese * 100) / 100} giorni\n`;
-          if (ferie_liquidate_mese > 0.01) testoReport += ` [-] Ferie liquidate/pagate     : -${Math.round(ferie_liquidate_mese * 100) / 100} giorni\n`;
-          if (ferie_rettificate_mese > 0.01) testoReport += ` [+/-] Rettifiche ferie del mese: (Stornati ${Math.round(ferie_rettificate_mese * 100) / 100} gg)\n`;
-          testoReport += `\n >>> SALDO FERIE A FINE MESE    : ${saldo_reale_ferie_mese} giorni\n\n\n`;
+          testoReport += ` Saldo mese precedente      : ${saldo_precedente_ferie} giorni\n`;
+          testoReport += ` Ferie maturate nel mese    : ${coeff_ferie_mese} giorni\n`;
+          testoReport += ` Ferie godute (vacanze reali) : ${Math.round(ferie_godute_mese * 100) / 100} giorni\n`;
+          if (ferie_liquidate_mese > 0.01) testoReport += ` Ferie liquidate/pagate     : ${Math.round(ferie_liquidate_mese * 100) / 100} giorni\n`;
+          if (ferie_rettificate_mese > 0.01) testoReport += ` Rettifiche ferie del mese: ${Math.round(ferie_rettificate_mese * 100) / 100} giorni\n`;
+          testoReport += `\n Saldo ferie a fine mese    : ${saldo_reale_ferie_mese} giorni\n\n\n`;
           testoReport += `MOVIMENTI PERMESSI DI QUESTO MESE\n----------------------------------------\n`;
-          testoReport += ` <<< SALDO MESE PRECEDENTE      : ${saldo_precedente_permessi} ore\n`;
-          testoReport += ` [+] Permessi maturati nel mese : +${coeff_permessi_mese} ore\n`;
-          testoReport += ` [-] Permessi fatti (ore assenza) : -${Math.round(permessi_fatti_mese * 100) / 100} ore\n`;
-          if (permessi_liquidati_mese > 0.01) testoReport += ` [-] Permessi liquidati/pagati  : -${Math.round(permessi_liquidati_mese * 100) / 100} ore\n`;
-          if (permessi_rettificati_mese > 0.01) testoReport += ` [+/-] Rettifiche permessi mese : (Stornate ${Math.round(permessi_rettificati_mese * 100) / 100} ore)\n`;
-          testoReport += `\n >>> SALDO PERMESSI A FINE MESE : ${saldo_reale_permessi_mese} ore\n\n\n`;
-          testoReport += `MALATTIE DEL MESE\n----------------------------------------\n * Giorni di malattia nel mese  : ${Math.round(malattia_mese * 100) / 100} giorni\n========================================`;
+          testoReport += ` Saldo mese precedente      : ${saldo_precedente_permessi} ore\n`;
+          testoReport += ` Permessi maturati nel mese : ${coeff_permessi_mese} ore\n`;
+          testoReport += ` Permessi fatti (ore assenza) : ${Math.round(permessi_fatti_mese * 100) / 100} ore\n`;
+          if (permessi_liquidati_mese > 0.01) testoReport += ` Permessi liquidati/pagati  : ${Math.round(permessi_liquidati_mese * 100) / 100} ore\n`;
+          if (permessi_rettificati_mese > 0.01) testoReport += ` Rettifiche permessi mese : ${Math.round(permessi_rettificati_mese * 100) / 100} ore\n`;
+          testoReport += `\n Saldo permessi a fine mese : ${saldo_reale_permessi_mese} ore\n\n\n`;
+          testoReport += `MALATTIE DEL MESE\n----------------------------------------\n Giorni di malattia nel mese  : ${Math.round(malattia_mese * 100) / 100} giorni`;
 
           return new Response(JSON.stringify({ success: true, message: "Report calcolato", testoReport, mese, anno: anno_rif }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
@@ -1094,18 +1094,18 @@ export default {
             ? (isTutti ? `${mese.toUpperCase()} (TUTTI GLI ANNI: ${Array.from(anniTrovati).sort().join(', ')})` : `${mese.toUpperCase()} ${anno_rif}`)
             : (isTutti ? `TUTTI GLI ANNI (${Array.from(anniTrovati).sort().join(', ')})` : `ANNO ${anno_rif}`);
 
-          let testoReport = `========================================\n RIEPILOGO TIMBRATURE: ${titoloPeriodo}\n========================================\n\n`;
+          let testoReport = `REPORT TIMBRATURE: ${titoloPeriodo}\nPERIODO: ${titoloPeriodo}\n\n`;
           testoReport += `PRESENZE E GIORNATE\n----------------------------------------\n`;
-          testoReport += ` [+] Giorni lavorati completi   : ${giorniLavorati} giorni\n`;
-          if (giorniCantiere > 0) testoReport += ` [+] Giornate solo Cantiere     : ${giorniCantiere} giorni\n`;
-          if (giorniIncompleti > 0) testoReport += ` [+/-] Giornate incomplete      : ${giorniIncompleti} giorni\n`;
-          testoReport += `\n >>> TOTALE GIORNI REGISTRATI   : ${giorniLavorati + giorniCantiere} giorni\n\n\n`;
+          testoReport += ` Giorni lavorati completi   : ${giorniLavorati} giorni\n`;
+          if (giorniCantiere > 0) testoReport += ` Giornate solo Cantiere     : ${giorniCantiere} giorni\n`;
+          if (giorniIncompleti > 0) testoReport += ` Giornate incomplete      : ${giorniIncompleti} giorni\n`;
+          testoReport += `\n Totale giorni registrati   : ${giorniLavorati + giorniCantiere} giorni\n\n\n`;
 
           testoReport += `CONTEGGIO ORE LAVORATE\n----------------------------------------\n`;
-          testoReport += ` [+] Ore nette lavorate totali  : ${formatOre(minutiLavoratiTotali)}\n`;
-          testoReport += ` [-] Ore pausa pranzo detratte  : ${formatOre(minutiPausaTotali)}\n`;
-          testoReport += ` [+] Ore straordinario (>8h/gg) : ${formatOre(minutiStraordinarioTotali)}\n`;
-          testoReport += `\n >>> TOTALE ORE NETTE PERIODO   : ${(minutiLavoratiTotali / 60).toFixed(2)} ore\n========================================`;
+          testoReport += ` Ore nette lavorate totali  : ${formatOre(minutiLavoratiTotali)}\n`;
+          testoReport += ` Ore pausa pranzo detratte  : ${formatOre(minutiPausaTotali)}\n`;
+          testoReport += ` Ore straordinario (>8h/gg) : ${formatOre(minutiStraordinarioTotali)}\n`;
+          testoReport += `\n Totale ore nette periodo   : ${(minutiLavoratiTotali / 60).toFixed(2).replace('.', ',')} ore`;
 
           return new Response(JSON.stringify({
             success: true,
