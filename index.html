@@ -2923,7 +2923,9 @@
                 if (!linea || /^(-{3,}|={3,}|_{3,})$/.test(linea)) return;
                 linea = linea.replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*)\s*/i, '').trim();
 
-                const heading = headingAmmessi.find(regex => regex.test(linea));
+                const heading = (!assenze || linea === linea.toUpperCase())
+                    ? headingAmmessi.find(regex => regex.test(linea))
+                    : null;
                 if (heading) {
                     if (righeCorrenti) tabelle.push({ subtitle: titoloCorrente, rows: righeCorrenti });
                     titoloCorrente = assenze
