@@ -450,6 +450,7 @@
                         <div class="form-group">
                             <label for="rep_mese">Mese:</label>
                             <select id="rep_mese" onchange="aggiornaAnteprimaReport()" required>
+                                <option value="TUTTI">Tutti</option>
                                 <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
                             </select>
                         </div>
@@ -500,6 +501,7 @@
                         <div class="form-group">
                             <label for="rep_timb_mese">Mese:</label>
                             <select id="rep_timb_mese" onchange="aggiornaAnteprimaReport()" required>
+                                <option value="TUTTI">Tutti</option>
                                 <option value="Gennaio">Gennaio</option><option value="Febbraio">Febbraio</option><option value="Marzo">Marzo</option><option value="Aprile">Aprile</option><option value="Maggio">Maggio</option><option value="Giugno">Giugno</option><option value="Luglio">Luglio</option><option value="Agosto">Agosto</option><option value="Settembre">Settembre</option><option value="Ottobre">Ottobre</option><option value="Novembre">Novembre</option><option value="Dicembre">Dicembre</option>
                             </select>
                         </div>
@@ -3132,10 +3134,74 @@
             });
 
             const pdfBytes = await pdfDoc.save();
+            if (opzioni.restituisciBytes === true) return pdfBytes;
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = nomeFile;
             document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();
+        }
+
+        async function generaPDFTuttiIMesi(anno, tipoReport) {
+            const annoNumero = Number(anno);
+            const dataCorrente = new Date();
+            const annoCorrente = dataCorrente.getFullYear();
+            const numeroMesi = annoNumero === annoCorrente ? dataCorrente.getMonth() + 1 : (annoNumero < annoCorrente ? 12 : 0);
+            if (!numeroMesi) throw new Error("Non ci sono mesi da includere per l'anno selezionato.");
+
+            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+            const pdfUnito = await PDFDocument.create();
+            const tipo = tipoReport === 'assenze' ? 'assenze' : 'timbrature';
+            const tipoRichiesta = tipo === 'assenze' ? 'genera_report_mensile' : 'genera_report_timbrature_mensile';
+            const titoloAlto = tipo === 'assenze' ? 'PROSPETTO RIEPILOGATIVO' : 'PROSPETTO TIMBRATURE';
+            const titoloPrincipale = tipo === 'assenze' ? 'Assenze mensili' : 'Timbrature mensili';
+            const mesi = nomiMesi.slice(1, numeroMesi + 1);
+
+            for (const mese of mesi) {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: tipoRichiesta, token: sessionToken, anno, mese })
+                });
+                const resJson = await response.json();
+                if (!response.ok || !resJson.success) {
+                    throw new Error(`Impossibile generare il report di ${mese}${response.status ? ` (HTTP ${response.status})` : ''}.`);
+                }
+
+                const tables = creaTabelleReportDaTesto(resJson.testoReport, tipo);
+                const pdfMensile = await buildPdfFromText(titoloAlto, titoloPrincipale, '', '', {
+                    filtroTesto: `Anno: ${resJson.anno} | Mese: ${resJson.mese}`,
+                    tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] })),
+                    restituisciBytes: true
+                });
+                const documentoMensile = await PDFDocument.load(pdfMensile);
+                const pagine = await pdfUnito.copyPages(documentoMensile, documentoMensile.getPageIndices());
+                pagine.forEach(pagina => pdfUnito.addPage(pagina));
+            }
+
+            const fontNormale = await pdfUnito.embedFont(StandardFonts.Helvetica);
+            const coloreTestoGrigio = rgb(0.35, 0.38, 0.42);
+            const dataEmissione = `Emesso il ${new Date().toLocaleDateString('it-IT')}`;
+            const pagineFinali = pdfUnito.getPages();
+            pagineFinali.forEach((pagina, index) => {
+                const { width, height } = pagina.getSize();
+                pagina.drawRectangle({ x: 0, y: 0, width, height: 50, color: rgb(1, 1, 1) });
+                pagina.drawLine({ start: { x: 35, y: 35 }, end: { x: width - 35, y: 35 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+                pagina.drawText(dataEmissione, { x: 35, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
+                const footer = `Pagina ${index + 1} di ${pagineFinali.length}`;
+                const footerWidth = fontNormale.widthOfTextAtSize(footer, 7);
+                pagina.drawText(footer, { x: width - 35 - footerWidth, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
+            });
+
+            const pdfBytes = await pdfUnito.save();
+            const blob = new Blob([pdfBytes], { type: "application/pdf" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${tipo === 'assenze' ? 'Report' : 'Timbrature'}_Tutti_Mesi_${anno}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
         }
 
         async function salvaEGeneraPDF() {
@@ -3144,6 +3210,10 @@
                 if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
                 const annoSel = document.getElementById('rep_anno').value;
                 const meseSel = document.getElementById('rep_mese').value;
+                if (meseSel === 'TUTTI') {
+                    await generaPDFTuttiIMesi(annoSel, 'assenze');
+                    return;
+                }
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
@@ -3185,6 +3255,10 @@
                 if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
                 const annoSel = document.getElementById('rep_timb_anno').value;
                 const meseSel = document.getElementById('rep_timb_mese').value;
+                if (meseSel === 'TUTTI') {
+                    await generaPDFTuttiIMesi(annoSel, 'timbrature');
+                    return;
+                }
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
@@ -3640,12 +3714,20 @@
                 caricaAnteprimaReport();
                 return;
             }
-            const mese = configurazione.meseId
-                ? String(nomiMesi.indexOf(document.getElementById(configurazione.meseId).value)).padStart(2, '0')
+            const meseSelezionato = configurazione.meseId
+                ? document.getElementById(configurazione.meseId).value
+                : null;
+            const limiteMeseTutti = meseSelezionato === 'TUTTI'
+                ? (Number(anno) === new Date().getFullYear() ? new Date().getMonth() + 1 : 12)
+                : null;
+            const mese = meseSelezionato && meseSelezionato !== 'TUTTI'
+                ? String(nomiMesi.indexOf(meseSelezionato)).padStart(2, '0')
                 : null;
             const recordFiltrati = ordinaRecordCronologicamente(datiAnteprimaReport[configurazione.tipo].filter(record => {
                 const parti = estraiPartiData(record.fields.Data);
-                return parti.aa === anno && (!mese || parti.mm === mese);
+                return parti.aa === anno
+                    && (!mese || parti.mm === mese)
+                    && (limiteMeseTutti === null || Number(parti.mm) <= limiteMeseTutti);
             }), configurazione.tipo);
             const eAssenza = configurazione.tipo === 'assenze';
             document.getElementById(configurazione.tabellaId).innerHTML = recordFiltrati.length ? recordFiltrati.map(record => {
