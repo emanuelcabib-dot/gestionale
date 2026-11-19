@@ -714,6 +714,9 @@
                     <button type="button" onclick="apriInserimentoPassato('assenze')" style="background-color:#d35400; color:white; padding:10px 15px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">➕ Aggiungi Assenza Passata</button>
                 </div>
                 <div class="filtri-bar">
+                    <div id="storico_periodo_riferimento" style="flex-basis:100%; font-size:15px; font-weight:bold; color:#2c3e50; background:#edf3f7; border-left:4px solid #3498db; padding:8px 12px;">
+                        Periodo: anno non selezionato
+                    </div>
                     <div class="form-group">
                         <label for="storico_anno">1. Anno:</label>
                         <select id="storico_anno" class="select-anno" onchange="caricaTabellaStorico()"></select>
@@ -2875,6 +2878,71 @@
             return testo;
         }
 
+        function pulisciEtichettaPDF(etichetta) {
+            return String(etichetta || '')
+                .replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*|\+|-)\s*/i, '')
+                .replace(/\b(SALDO|Residuo)\b/gi, match => match)
+                .replace(/\s{2,}/g, ' ')
+                .replace(/\s+:/g, ':')
+                .trim();
+        }
+
+        function pulisciValorePDF(etichetta, valore) {
+            let testo = String(valore || '-')
+                .replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*|\+|-)\s*/i, '')
+                .replace(/[|]/g, '')
+                .replace(/\bgg\b/gi, 'giorni')
+                .replace(/\bore e\b/gi, 'ore e')
+                .replace(/(\d+)\.(\d+)/g, '$1,$2')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            const puro = testo.match(/^(-?\d+(?:[.,]\d+)?)\s*(giorni|ore|h)?$/i);
+            if (puro) {
+                const eta = String(etichetta).toLowerCase();
+                const unita = puro[2] ? (puro[2].toLowerCase() === 'h' ? 'ore' : puro[2].toLower())
+                    : /(ore|timbratur)/.test(eta) ? 'ore'
+                    : /(giorni|ferie|malattia|assenza)/.test(eta) ? 'giorni'
+                    : '';
+                return `${formattaNumeroItalianoPDF(puro[1])}${unita ? ` ${unita}` : ''}`;
+            }
+            return testo;
+        }
+
+        function creaTabelleReportDaTesto(testo, tipoReport) {
+            const assenze = /assen|ferie/i.test(tipoReport);
+            const headingAmmessi = assenze
+                ? [/FERIE/i, /PERMESSI/i, /MALATT/i]
+                : [/PRESENZE/i, /CONTEGGIO ORE/i];
+            const tabelle = [];
+            let titoloCorrente = null;
+            let righeCorrenti = null;
+
+            String(testo || '').split('\n').forEach(lineaOriginale => {
+                let linea = lineaOriginale.replace(/[|]/g, '').trim();
+                if (!linea || /^(-{3,}|={3,}|_{3,})$/.test(linea)) return;
+                linea = linea.replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*)\s*/i, '').trim();
+
+                const heading = headingAmmessi.find(regex => regex.test(linea));
+                if (heading) {
+                    if (righeCorrenti) tabelle.push({ subtitle: titoloCorrente, rows: righeCorrenti });
+                    titoloCorrente = assenze
+                        ? (/FERIE/i.test(linea) ? 'Ferie' : /PERMESSI/i.test(linea) ? 'Permessi' : 'Malattie')
+                        : (/PRESENZE/i.test(linea) ? 'Presenze e giornate' : 'Conteggio ore lavorate');
+                    righeCorrenti = [];
+                    return;
+                }
+                if (!righeCorrenti || linea.includes('RIEPILOGO') || linea.includes('================================')) return;
+                if (linea.includes(':')) {
+                    const parti = linea.split(':');
+                    const etichetta = pulisciEtichettaPDF(parti[0].trim());
+                    const valore = pulisciValorePDF(etichetta, parti.slice(1).join(':').trim());
+                    if (etichetta) righeCorrenti.push([etichetta, valore]);
+                }
+            });
+            if (righeCorrenti) tabelle.push({ subtitle: titoloCorrente, rows: righeCorrenti });
+            return tabelle;
+        }
+
         async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile, opzioni = {}) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
@@ -2920,8 +2988,6 @@
                 }
             }
 
-            const widths = opzioni.widths || [260, 265];
-            const numericColumns = opzioni.numericColumns || [1];
             let y = 735;
             const headerHeight = 24;
             const rowMinHeight = 22;
@@ -2933,70 +2999,91 @@
             }
 
             const tableStartX = 35;
-            const tableWidth = widths.reduce((a, b) => a + b, 0);
             const headerColor = rgb(0.18, 0.36, 0.52);
 
-            page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
-            let x = tableStartX;
-            headers.forEach((header, index) => {
-                const allineamentoDx = numericColumns.includes(index);
-                const textWidth = fontBold.widthOfTextAtSize(header, 8);
-                page.drawText(header, { x: allineamentoDx ? x + widths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-                x += widths[index];
-            });
-            y -= headerHeight;
+            function disegnaTabella(tableOptions) {
+                const tableHeaders = tableOptions.headers || headers;
+                const tableWidths = tableOptions.widths || widths;
+                const tableNumericColumns = tableOptions.numericColumns || numericColumns;
+                const tableRows = tableOptions.rows || [];
+                const tableWidth = tableWidths.reduce((a, b) => a + b, 0);
 
-            tableRows.forEach((riga, indice) => {
-                const celle = riga.slice(0, headers.length).map(cella => String(cella ?? '').replace(/AZIENDALE/gi, '').replace(/[|]/g, '').trim());
-                const rowHeight = opzioni.rowHeights?.[indice] || rowMinHeight;
-                if (y - rowHeight < 55) {
-                    nuovaPagina();
-                    page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
-                    x = tableStartX;
-                    headers.forEach((header, index) => {
-                        const allineamentoDx = numericColumns.includes(index);
-                        const textWidth = fontBold.widthOfTextAtSize(header, 8);
-                        page.drawText(header, { x: allineamentoDx ? x + widths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-                        x += widths[index];
-                    });
-                    y -= headerHeight;
+                if (tableOptions.subtitle) {
+                    if (y < 100) nuovaPagina();
+                    page.drawText(tableOptions.subtitle, { x: tableStartX, y: y - 4, size: 10, font: fontBold, color: colorePrimario });
+                    y -= 20;
                 }
 
-                const stato = opzioni.rowColors?.[indice];
-                let fillColor = indice % 2 === 0 ? rgb(1, 1, 1) : rgb(0.95, 0.96, 0.97);
-                if (stato === 'green') fillColor = rgb(0.82, 0.93, 0.84);
-                if (stato === 'red') fillColor = rgb(0.98, 0.84, 0.82);
-                if (stato === 'orange') fillColor = rgb(1, 0.91, 0.72);
-                page.drawRectangle({ x: tableStartX, y: y - rowHeight, width: tableWidth, height: rowHeight, color: fillColor });
-
-                x = tableStartX;
-                celle.forEach((cella, index) => {
-                    const allineamentoDx = numericColumns.includes(index);
-                    const textSize = 8.5;
-                    const maxWidth = widths[index] - 16;
-                    let testo = cella;
-                    const righe = [];
-                    let corrente = '';
-                    for (const parola of testo.split(/\s+/)) {
-                        const tentativo = corrente ? `${corrente} ${parola}` : parola;
-                        if (fontNormale.widthOfTextAtSize(tentativo, textSize) > maxWidth && corrente) {
-                            righe.push(corrente);
-                            corrente = parola;
-                        } else corrente = tentativo;
-                    }
-                    if (corrente) righe.push(corrente);
-                    const lineHeight = 11;
-                    let startY = y - 14 - Math.max(0, righe.length - 1) * 4;
-                    righe.forEach((rigaTesto, rigaIndice) => {
-                        const textWidth = fontNormale.widthOfTextAtSize(rigaTesto, textSize);
-                        page.drawText(rigaTesto, { x: allineamentoDx ? x + widths[index] - textWidth - 8 : x + 8, y: startY - rigaIndice * lineHeight, size: textSize, font: fontNormale, color: rgb(0.12, 0.15, 0.18) });
-                    });
-                    page.drawLine({ start: { x, y: y - rowHeight }, end: { x, y }, thickness: 0.35, color: rgb(0.75, 0.78, 0.82) });
-                    x += widths[index];
+                page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
+                let x = tableStartX;
+                tableHeaders.forEach((header, index) => {
+                    const allineamentoDx = tableNumericColumns.includes(index);
+                    const textWidth = fontBold.widthOfTextAtSize(header, 8);
+                    page.drawText(header, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+                    x += tableWidths[index];
                 });
-                page.drawLine({ start: { x: tableStartX, y: y - rowHeight }, end: { x: tableStartX + tableWidth, y: y - rowHeight }, thickness: 0.35, color: rgb(0.75, 0.78, 0.82) });
-                y -= rowHeight;
-            });
+                y -= headerHeight;
+
+                tableRows.forEach((riga, indice) => {
+                    const celle = riga.slice(0, tableHeaders.length).map(cella => String(cella ?? '').replace(/AZIENDALE/gi, '').replace(/[|]/g, '').replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*)\s*/i, '').trim());
+                    const rowHeight = tableOptions.rowHeights?.[indice] || rowMinHeight;
+                    if (y - rowHeight < 55) {
+                        nuovaPagina();
+                        page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
+                        x = tableStartX;
+                        tableHeaders.forEach((header, index) => {
+                            const allineamentoDx = tableNumericColumns.includes(index);
+                            const textWidth = fontBold.widthOfTextAtSize(header, 8);
+                            page.drawText(header, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+                            x += tableWidths[index];
+                        });
+                        y -= headerHeight;
+                    }
+
+                    const stato = tableOptions.rowColors?.[indice];
+                    let fillColor = indice % 2 === 0 ? rgb(1, 1, 1) : rgb(0.95, 0.96, 0.97);
+                    if (stato === 'green') fillColor = rgb(0.82, 0.93, 0.84);
+                    if (stato === 'red') fillColor = rgb(0.98, 0.84, 0.82);
+                    if (stato === 'orange') fillColor = rgb(1, 0.91, 0.72);
+                    page.drawRectangle({ x: tableStartX, y: y - rowHeight, width: tableWidth, height: rowHeight, color: fillColor });
+
+                    x = tableStartX;
+                    celle.forEach((cella, index) => {
+                        const allineamentoDx = tableNumericColumns.includes(index);
+                        const textSize = 8.5;
+                        const maxWidth = tableWidths[index] - 16;
+                        const righe = [];
+                        let corrente = '';
+                        for (const parola of cella.split(/\s+/)) {
+                            const tentativo = corrente ? `${corrente} ${parola}` : parola;
+                            if (fontNormale.widthOfTextAtSize(tentativo, textSize) > maxWidth && corrente) {
+                                righe.push(corrente);
+                                corrente = parola;
+                            } else corrente = tentativo;
+                        }
+                        if (corrente) righe.push(corrente);
+                        const lineHeight = 11;
+                        let startY = y - 14 - Math.max(0, righe.length - 1) * 4;
+                        righe.forEach((rigaTesto, rigaIndice) => {
+                            const textWidth = fontNormale.widthOfTextAtSize(rigaTesto, textSize);
+                            page.drawText(rigaTesto, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: startY - rigaIndice * lineHeight, size: textSize, font: fontNormale, color: rgb(0.12, 0.15, 0.18) });
+                        });
+                        page.drawLine({ start: { x, y: y - rowHeight }, end: { x, y }, thickness: 0.35, color: rgb(0.75, 0.78, 0.82) });
+                        x += tableWidths[index];
+                    });
+                    page.drawLine({ start: { x: tableStartX, y: y - rowHeight }, end: { x: tableStartX + tableWidth, y: y - rowHeight }, thickness: 0.35, color: rgb(0.75, 0.78, 0.82) });
+                    y -= rowHeight;
+                });
+                y -= 18;
+            }
+
+            const widths = opzioni.widths || [260, 265];
+            const numericColumns = opzioni.numericColumns || [1];
+            if (opzioni.tables && opzioni.tables.length) {
+                opzioni.tables.forEach(tableOptions => disegnaTabella(tableOptions));
+            } else {
+                disegnaTabella({ headers, widths, numericColumns, rows: tableRows, rowColors: opzioni.rowColors, rowHeights: opzioni.rowHeights });
+            }
 
             const pages = pdfDoc.getPages();
             pages.forEach((pagina, index) => {
@@ -3021,7 +3108,10 @@
             const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT MENSILE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Report_${resJson.mese}_${resJson.anno}.pdf`);
+                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
+                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT MENSILE ASSENZE: ${resJson.mese} ${resJson.anno}`, '', `Report_${resJson.mese}_${resJson.anno}.pdf`, {
+                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                });
             } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
         }
 
@@ -3030,7 +3120,10 @@
             const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
+                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
+                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT ANNUALE ASSENZE: ${resJson.anno}`, '', `Report_Annuale_${resJson.anno}.pdf`, {
+                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                });
             } else { mostraAlert("Errore generazione report annuale."); }
         }
 
@@ -3040,7 +3133,10 @@
             const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Timbrature_${resJson.mese}_${resJson.anno}.pdf`);
+                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
+                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE MENSILI: ${resJson.mese} ${resJson.anno}`, '', `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, {
+                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                });
             } else { mostraAlert("Errore generazione report timbrature mensile."); }
         }
 
@@ -3049,7 +3145,10 @@
             const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALE ${resJson.anno}`, resJson.testoReport, `Timbrature_Annuale_${resJson.anno}.pdf`);
+                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
+                await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALI: ${resJson.anno}`, '', `Timbrature_Annuale_${resJson.anno}.pdf`, {
+                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                });
             } else { mostraAlert("Errore generazione report timbrature annuale."); }
         }
 
@@ -3242,24 +3341,61 @@
                     testo,
                     `Verifica_Busta_Paga_${anno}_${String(mese).padStart(2, '0')}.pdf`,
                     {
-                        headers: ['Voce', 'Valore'],
-                        widths: [260, 265],
-                        numericColumns: [1],
-                        rows: [
-                            ['Anno', `${anno}`],
-                            ['Mese', nomiMesi[mese]],
-                            ['Ferie residue', `${formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga)} giorni`],
-                            ['Permessi residui', `${formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga)} ore`],
-                            ['Ferie reali', `${formattaNumeroVerificaBustaPaga(campi.Ferie_Reali)} giorni`],
-                            ['Discrepanza ferie', `${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie)} giorni`],
-                            ['Permessi reali', `${formattaNumeroVerificaBustaPaga(campi.Permessi_Reali)} ore`],
-                            ['Discrepanza permessi', `${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)} ore`]
-                        ],
-                        rowColors: [
-                            null, null, null, null, null,
-                            Number.isFinite(discrepanzaFerie) && Math.abs(discrepanzaFerie) < 0.005 ? 'green' : 'red',
-                            null,
-                            Number.isFinite(discrepanzaPermessi) && Math.abs(discrepanzaPermessi) < 0.005 ? 'green' : 'red'
+                        tables: [
+                            {
+                                subtitle: 'Parametri busta paga',
+                                headers: ['Parametro', 'Valore'],
+                                widths: [260, 265],
+                                numericColumns: [1],
+                                rows: [
+                                    ['Anno di riferimento', `${anno}`],
+                                    ['Mese di riferimento', nomiMesi[mese]],
+                                    ['Ferie residue in busta paga', `${formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga)} giorni`],
+                                    ['Permessi residui in busta paga', `${formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga)} ore`]
+                                ]
+                            },
+                            {
+                                subtitle: 'Parametri database',
+                                headers: ['Parametro', 'Valore calcolato'],
+                                widths: [260, 265],
+                                numericColumns: [1],
+                                rows: [
+                                    ['Ferie residue calcolate', `${formattaNumeroVerificaBustaPaga(campi.Ferie_Reali)} giorni`],
+                                    ['Permessi residui calcolati', `${formattaNumeroVerificaBustaPaga(campi.Permessi_Reali)} ore`]
+                                ]
+                            },
+                            {
+                                subtitle: 'Discrepanze',
+                                headers: ['Parametro', 'Discrepanza'],
+                                widths: [260, 265],
+                                numericColumns: [1],
+                                rows: [
+                                    ['Ferie', `${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie)} giorni`],
+                                    ['Permessi', `${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)} ore`]
+                                ],
+                                rowColors: [
+                                    Number.isFinite(discrepanzaFerie) && Math.abs(discrepanzaFerie) < 0.005 ? 'green' : 'red',
+                                    Number.isFinite(discrepanzaPermessi) && Math.abs(discrepanzaPermessi) < 0.005 ? 'green' : 'red'
+                                ]
+                            },
+                            {
+                                subtitle: 'Spiegazione discrepanze',
+                                headers: ['Voce', 'Esito'],
+                                widths: [260, 265],
+                                numericColumns: [1],
+                                rows: [
+                                    ['Ferie', Number.isFinite(discrepanzaFerie) && Math.abs(discrepanzaFerie) < 0.005
+                                        ? 'I valori ferie coincidono (0,00)'
+                                        : discrepanzaFerie > 0
+                                            ? 'Valore ferie in busta paga minore rispetto al database'
+                                            : 'Valore ferie in busta paga maggiore rispetto al database'],
+                                    ['Permessi', Number.isFinite(discrepanzaPermessi) && Math.abs(discrepanzaPermessi) < 0.005
+                                        ? 'I valori permessi coincidono (0,00)'
+                                        : discrepanzaPermessi > 0
+                                            ? 'Valore permessi in busta paga minore rispetto al database'
+                                            : 'Valore permessi in busta paga maggiore rispetto al database']
+                                ]
+                            }
                         ]
                     }
                 );
@@ -3278,6 +3414,12 @@
             const meseSel = document.getElementById('storico_mese').options[document.getElementById('storico_mese').selectedIndex].text;
             const giornoSel = document.getElementById('storico_giorno').options[document.getElementById('storico_giorno').selectedIndex].text;
             const categoria = vistaStoricoAttiva === 'presenze' ? 'TIMBRATURE GIORNATA' : 'FERIE, PERMESSI E MALATTIA';
+            const meseRiferimento = document.getElementById('storico_mese').value === 'TUTTI'
+                ? 'Tutti i mesi'
+                : meseSel;
+            const giornoRiferimento = document.getElementById('storico_giorno').value === 'TUTTI'
+                ? 'Tutti i giorni'
+                : giornoSel;
             const righe = [];
             const altezze = [];
             datiAttualmenteFiltrati.forEach((r) => {
@@ -3298,7 +3440,7 @@
             const isPresenze = vistaStoricoAttiva === 'presenze';
             await buildPdfFromText(
                 "ARCHIVIO STORICO",
-                `REPORT FILTRATO - ${categoria}`,
+                `REPORT FILTRATO - ${categoria} - ANNO ${annoSel} - ${meseRiferimento.toUpperCase()} - ${giornoRiferimento.toUpperCase()}`,
                 '',
                 `Storico_${vistaStoricoAttiva}_${annoSel}.pdf`,
                 {
@@ -3505,6 +3647,15 @@
         function renderizzaTabellaAttiva() {
             const meseScelto = document.getElementById('storico_mese').value;
             const giornoScelto = document.getElementById('storico_giorno').value;
+            const annoScelto = document.getElementById('storico_anno').value;
+            const meseTesto = meseScelto === 'TUTTI'
+                ? 'Tutti i mesi'
+                : document.getElementById('storico_mese').options[document.getElementById('storico_mese').selectedIndex].text;
+            const giornoTesto = giornoScelto === 'TUTTI'
+                ? 'Tutti i giorni'
+                : document.getElementById('storico_giorno').options[document.getElementById('storico_giorno').selectedIndex].text;
+            const periodo = document.getElementById('storico_periodo_riferimento');
+            if (periodo) periodo.textContent = `Periodo di riferimento: anno ${annoScelto} - ${meseTesto} - ${giornoTesto}`;
             const filtraRiga = (r) => {
                 const p = estraiPartiData(r.fields.Data);
                 if (meseScelto !== "TUTTI" && p.mm !== meseScelto) return false;
