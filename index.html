@@ -3147,8 +3147,9 @@
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
-                    await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT MENSILE ASSENZE: ${resJson.mese} ${resJson.anno}`, '', `Report_${resJson.mese}_${resJson.anno}.pdf`, {
-                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    await buildPdfFromText("PROSPETTO RIEPILOGATIVO", "Assenze mensili", '', `Report_${resJson.mese}_${resJson.anno}.pdf`, {
+                        filtroTesto: `Anno: ${resJson.anno} | Mese: ${resJson.mese}`,
+                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
                     });
                 } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
             } catch (error) {
@@ -3166,8 +3167,9 @@
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
-                    await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT ANNUALE ASSENZE: ${resJson.anno}`, '', `Report_Annuale_${resJson.anno}.pdf`, {
-                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    await buildPdfFromText("PROSPETTO RIEPILOGATIVO", "Assenze annuali", '', `Report_Annuale_${resJson.anno}.pdf`, {
+                        filtroTesto: `Anno: ${resJson.anno}`,
+                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
                     });
                 } else { mostraAlert("Errore generazione report annuale."); }
             } catch (error) {
@@ -3186,8 +3188,9 @@
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
-                    await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE MENSILI: ${resJson.mese} ${resJson.anno}`, '', `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, {
-                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    await buildPdfFromText("PROSPETTO TIMBRATURE", "Timbrature mensili", '', `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, {
+                        filtroTesto: `Anno: ${resJson.anno} | Mese: ${resJson.mese}`,
+                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
                     });
                 } else { mostraAlert("Errore generazione report timbrature mensile."); }
             } catch (error) {
@@ -3205,8 +3208,9 @@
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
-                    await buildPdfFromText("PROSPETTO TIMBRATURE", `TIMBRATURE ANNUALI: ${resJson.anno}`, '', `Timbrature_Annuale_${resJson.anno}.pdf`, {
-                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    await buildPdfFromText("PROSPETTO TIMBRATURE", "Timbrature annuali", '', `Timbrature_Annuale_${resJson.anno}.pdf`, {
+                        filtroTesto: `Anno: ${resJson.anno}`,
+                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
                     });
                 } else { mostraAlert("Errore generazione report timbrature annuale."); }
             } catch (error) {
