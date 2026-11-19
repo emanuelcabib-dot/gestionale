@@ -2854,7 +2854,28 @@
             finally { submitBtn.disabled = false; submitBtn.innerText = 'Invia assenza'; }
         });
 
-        async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile) {
+        function formattaNumeroItalianoPDF(valore) {
+            if (valore === null || valore === undefined || valore === '') return '-';
+            const numero = Number(String(valore).replace(',', '.'));
+            if (!Number.isFinite(numero)) return String(valore).replace(/[|]/g, '').trim();
+            return numero.toFixed(2).replace('.', ',');
+        }
+
+        function formattaValoreConUnitaPDF(etichetta, valore) {
+            let testo = String(valore ?? '-').replace(/[|]/g, '').replace(/<|>|\[|\]|\+/g, '').trim();
+            const eta = String(etichetta).toLowerCase();
+            const unita = /(ore|timbratur)/.test(eta) ? 'ore'
+                : /(giorni|ferie|malattia|assenza|permessi)/.test(eta) ? 'giorni'
+                : '';
+            const numero = testo.match(/^-?\d+(?:[.,]\d+)?$/);
+            if (numero) {
+                testo = formattaNumeroItalianoPDF(numero[0]);
+                return unita ? `${testo} ${unita}` : testo;
+            }
+            return testo;
+        }
+
+        async function buildPdfFromText(titoloAlto, titoloPrincipale, testoMappato, nomeFile, opzioni = {}) {
             const { PDFDocument, StandardFonts, rgb } = PDFLib;
             const pdfDoc = await PDFDocument.create();
             let page = pdfDoc.addPage([595.28, 841.89]);
@@ -2863,57 +2884,128 @@
             
             const colorePrimario = rgb(0.12, 0.22, 0.33);
             const coloreAccento = rgb(0.18, 0.5, 0.72);
-            const coloreSfondoBox = rgb(0.96, 0.97, 0.98);
             const coloreTestoGrigio = rgb(0.35, 0.38, 0.42);
+            const titoloPulito = testo => String(testo).replace(/AZIENDALE/gi, '').replace(/\s{2,}/g, ' ').trim();
 
-            page.drawRectangle({ x: 35, y: 720, width: 525, height: 80, color: coloreSfondoBox });
-            page.drawRectangle({ x: 35, y: 720, width: 6, height: 80, color: coloreAccento });
-
-            page.drawText(titoloAlto.toUpperCase(), { x: 55, y: 775, size: 8, font: fontBold, color: coloreTestoGrigio });
-            page.drawText(titoloPrincipale.toUpperCase(), { x: 55, y: 745, size: 13, font: fontBold, color: colorePrimario });
-            
-            const dataEmissioneStr = `Emesso il: ${new Date().toLocaleDateString('it-IT')}`;
-            page.drawText(dataEmissioneStr, { x: 440, y: 775, size: 8, font: fontNormale, color: coloreTestoGrigio });
-
-            let y = 680;
-            const linee = testoMappato.split('\n');
-            for (const linea of linee) {
-                if (y < 60) {
-                    page = pdfDoc.addPage([595.28, 841.89]);
-                    y = 780;
-                }
-                if (linea.startsWith('===')) { y -= 10; continue; }
-                if (linea.startsWith('---') || linea.startsWith('___')) {
-                    page.drawLine({ start: { x: 35, y: y }, end: { x: 560, y: y }, thickness: 0.75, color: rgb(0.82, 0.86, 0.9) });
-                    y -= 15;
-                    continue;
-                }
-                if (linea === linea.toUpperCase() && linea.trim().length > 0 && !linea.includes(':')) {
-                    y -= 10;
-                    page.drawRectangle({ x: 35, y: y - 3, width: 525, height: 18, color: rgb(0.90, 0.93, 0.96) });
-                    page.drawText(linea, { x: 42, y: y + 2, size: 9, font: fontBold, color: colorePrimario });
-                    y -= 22;
-                    continue;
-                }
-
-                if (linea.includes(':') && !linea.startsWith(' [+]') && !linea.startsWith(' [-]') && !linea.startsWith(' [+/-]')) {
-                    const parti = linea.split(':');
-                    const etichetta = parti[0].trim();
-                    const valore = parti.slice(1).join(':').trim();
-                    page.drawText(etichetta, { x: 45, y: y, size: 9, font: fontNormale, color: coloreTestoGrigio });
-                    page.drawText(valore, { x: 280, y: y, size: 9, font: fontBold, color: rgb(0.1, 0.1, 0.1) });
-                } else if (linea.startsWith(' [+]') || linea.startsWith(' [-]') || linea.startsWith(' [+/-]')) {
-                    page.drawText(linea, { x: 45, y: y, size: 9, font: fontNormale, color: rgb(0.2, 0.2, 0.2) });
-                } else if (linea.startsWith(' >>>') || linea.startsWith(' <<<') || linea.startsWith(' *')) {
-                    page.drawText(linea, { x: 40, y: y, size: 9, font: fontBold, color: colorePrimario });
-                } else {
-                    page.drawText(linea, { x: 40, y: y, size: 9, font: fontNormale, color: coloreTestoGrigio });
-                }
-                y -= 18;
+            function aggiungiIntestazione(pagina) {
+                pagina.drawRectangle({ x: 35, y: 792, width: 525, height: 34, color: colorePrimario });
+                pagina.drawRectangle({ x: 35, y: 792, width: 6, height: 34, color: coloreAccento });
+                pagina.drawText(titoloPulito(titoloAlto).toUpperCase(), { x: 55, y: 805, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+                const dataEmissione = `Emesso il ${new Date().toLocaleDateString('it-IT')}`;
+                pagina.drawText(dataEmissione, { x: 470, y: 805, size: 7, font: fontNormale, color: rgb(0.9, 0.94, 0.97) });
             }
 
-            page.drawLine({ start: { x: 35, y: 35 }, end: { x: 560, y: 35 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
-            page.drawText("Pannello Controllo Lavoro — Documento ufficiale generato digitalmente", { x: 35, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
+            aggiungiIntestazione(page);
+            page.drawText(titoloPulito(titoloPrincipale).toUpperCase(), { x: 35, y: 765, size: 13, font: fontBold, color: colorePrimario });
+
+            const headers = opzioni.headers || ['Voce', 'Valore'];
+            const rowData = opzioni.rows || [];
+            let tableRows = rowData;
+            if (!opzioni.rows) {
+                tableRows = [];
+                let sezione = '';
+                for (const lineaOriginale of String(testoMappato || '').split('\n')) {
+                    let linea = lineaOriginale.replace(/[|]/g, '').replace(/^(<<<|>>>|\[\+\]|\[-\])/,'').trim();
+                    if (!linea || /^(-{3,}|_{3,}|={3,})$/.test(linea)) continue;
+                    if (linea.includes(':')) {
+                        const parti = linea.split(':');
+                        const etichetta = parti[0].trim();
+                        const valore = formattaValoreConUnitaPDF(etichetta, parti.slice(1).join(':').trim());
+                        tableRows.push([sezione ? `${sezione} — ${etichetta}` : etichetta, valore]);
+                    } else if (linea === linea.toUpperCase()) {
+                        sezione = titoloPulito(linea);
+                    } else {
+                        tableRows.push([linea, '']);
+                    }
+                }
+            }
+
+            const widths = opzioni.widths || [260, 265];
+            const numericColumns = opzioni.numericColumns || [1];
+            let y = 735;
+            const headerHeight = 24;
+            const rowMinHeight = 22;
+
+            function nuovaPagina() {
+                page = pdfDoc.addPage([595.28, 841.89]);
+                aggiungiIntestazione(page);
+                y = 755;
+            }
+
+            const tableStartX = 35;
+            const tableWidth = widths.reduce((a, b) => a + b, 0);
+            const headerColor = rgb(0.18, 0.36, 0.52);
+
+            page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
+            let x = tableStartX;
+            headers.forEach((header, index) => {
+                const allineamentoDx = numericColumns.includes(index);
+                const textWidth = fontBold.widthOfTextAtSize(header, 8);
+                page.drawText(header, { x: allineamentoDx ? x + widths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+                x += widths[index];
+            });
+            y -= headerHeight;
+
+            tableRows.forEach((riga, indice) => {
+                const celle = riga.slice(0, headers.length).map(cella => String(cella ?? '').replace(/AZIENDALE/gi, '').replace(/[|]/g, '').trim());
+                const rowHeight = opzioni.rowHeights?.[indice] || rowMinHeight;
+                if (y - rowHeight < 55) {
+                    nuovaPagina();
+                    page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
+                    x = tableStartX;
+                    headers.forEach((header, index) => {
+                        const allineamentoDx = numericColumns.includes(index);
+                        const textWidth = fontBold.widthOfTextAtSize(header, 8);
+                        page.drawText(header, { x: allineamentoDx ? x + widths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+                        x += widths[index];
+                    });
+                    y -= headerHeight;
+                }
+
+                const stato = opzioni.rowColors?.[indice];
+                let fillColor = indice % 2 === 0 ? rgb(1, 1, 1) : rgb(0.95, 0.96, 0.97);
+                if (stato === 'green') fillColor = rgb(0.82, 0.93, 0.84);
+                if (stato === 'red') fillColor = rgb(0.98, 0.84, 0.82);
+                if (stato === 'orange') fillColor = rgb(1, 0.91, 0.72);
+                page.drawRectangle({ x: tableStartX, y: y - rowHeight, width: tableWidth, height: rowHeight, color: fillColor });
+
+                x = tableStartX;
+                celle.forEach((cella, index) => {
+                    const allineamentoDx = numericColumns.includes(index);
+                    const textSize = 8.5;
+                    const maxWidth = widths[index] - 16;
+                    let testo = cella;
+                    const righe = [];
+                    let corrente = '';
+                    for (const parola of testo.split(/\s+/)) {
+                        const tentativo = corrente ? `${corrente} ${parola}` : parola;
+                        if (fontNormale.widthOfTextAtSize(tentativo, textSize) > maxWidth && corrente) {
+                            righe.push(corrente);
+                            corrente = parola;
+                        } else corrente = tentativo;
+                    }
+                    if (corrente) righe.push(corrente);
+                    const lineHeight = 11;
+                    let startY = y - 14 - Math.max(0, righe.length - 1) * 4;
+                    righe.forEach((rigaTesto, rigaIndice) => {
+                        const textWidth = fontNormale.widthOfTextAtSize(rigaTesto, textSize);
+                        page.drawText(rigaTesto, { x: allineamentoDx ? x + widths[index] - textWidth - 8 : x + 8, y: startY - rigaIndice * lineHeight, size: textSize, font: fontNormale, color: rgb(0.12, 0.15, 0.18) });
+                    });
+                    page.drawLine({ start: { x, y: y - rowHeight }, end: { x, y }, thickness: 0.35, color: rgb(0.75, 0.78, 0.82) });
+                    x += widths[index];
+                });
+                page.drawLine({ start: { x: tableStartX, y: y - rowHeight }, end: { x: tableStartX + tableWidth, y: y - rowHeight }, thickness: 0.35, color: rgb(0.75, 0.78, 0.82) });
+                y -= rowHeight;
+            });
+
+            const pages = pdfDoc.getPages();
+            pages.forEach((pagina, index) => {
+                pagina.drawLine({ start: { x: 35, y: 35 }, end: { x: 560, y: 35 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
+                pagina.drawText("Pannello Controllo Lavoro — Documento ufficiale generato digitalmente", { x: 35, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
+                const footer = `Pagina ${index + 1} di ${pages.length}`;
+                const footerWidth = fontNormale.widthOfTextAtSize(footer, 7);
+                pagina.drawText(footer, { x: 560 - footerWidth, y: 22, size: 7, font: fontNormale, color: coloreTestoGrigio });
+            });
 
             const pdfBytes = await pdfDoc.save();
             const blob = new Blob([pdfBytes], { type: "application/pdf" });
@@ -2929,7 +3021,7 @@
             const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO RIEPILOGATIVO AZIENDALE", `REPORT MENSILE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Report_${resJson.mese}_${resJson.anno}.pdf`);
+                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT MENSILE: ${resJson.mese} ${resJson.anno}`, resJson.testoReport, `Report_${resJson.mese}_${resJson.anno}.pdf`);
             } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
         }
 
@@ -2938,7 +3030,7 @@
             const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
             const resJson = await response.json();
             if (response.ok && resJson.success) {
-                await buildPdfFromText("PROSPETTO RIEPILOGATIVO AZIENDALE", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
+                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT ANNUALE ${resJson.anno}`, resJson.testoReport, `Report_Annuale_${resJson.anno}.pdf`);
             } else { mostraAlert("Errore generazione report annuale."); }
         }
 
@@ -2964,7 +3056,7 @@
         function formattaNumeroVerificaBustaPaga(valore) {
             if (valore === null || valore === undefined || valore === '') return '-';
             const numero = Number(valore);
-            return Number.isFinite(numero) ? new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(numero) : '-';
+            return Number.isFinite(numero) ? new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numero) : '-';
         }
 
         function inizializzaFormVerificaBustePaga() {
@@ -3133,20 +3225,43 @@
                     `Mese: ${nomiMesi[mese]}`,
                     '---',
                     'RESIDUI RIPORTATI IN BUSTA PAGA',
-                    `Ferie residue: ${formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga)}`,
-                    `Permessi residui: ${formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga)}`,
+                    `Ferie residue: ${formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga)} giorni`,
+                    `Permessi residui: ${formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga)} ore`,
                     '---',
                     'VALORI CALCOLATI DA GRIST',
-                    `Ferie reali: ${formattaNumeroVerificaBustaPaga(campi.Ferie_Reali)}`,
-                    `Discrepanza ferie: ${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie)}`,
-                    `Permessi reali: ${formattaNumeroVerificaBustaPaga(campi.Permessi_Reali)}`,
-                    `Discrepanza permessi: ${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)}`
+                    `Ferie reali: ${formattaNumeroVerificaBustaPaga(campi.Ferie_Reali)} giorni`,
+                    `Discrepanza ferie: ${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie)} giorni`,
+                    `Permessi reali: ${formattaNumeroVerificaBustaPaga(campi.Permessi_Reali)} ore`,
+                    `Discrepanza permessi: ${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)} ore`
                 ].join('\n');
+                const discrepanzaFerie = Number(campi.Discrepanza_Ferie);
+                const discrepanzaPermessi = Number(campi.Discrepanza_Permessi);
                 await buildPdfFromText(
                     'CONTROLLO RESIDUI BUSTA PAGA',
                     `VERIFICA BUSTA PAGA - ${nomiMesi[mese]} ${anno}`,
                     testo,
-                    `Verifica_Busta_Paga_${anno}_${String(mese).padStart(2, '0')}.pdf`
+                    `Verifica_Busta_Paga_${anno}_${String(mese).padStart(2, '0')}.pdf`,
+                    {
+                        headers: ['Voce', 'Valore'],
+                        widths: [260, 265],
+                        numericColumns: [1],
+                        rows: [
+                            ['Anno', `${anno}`],
+                            ['Mese', nomiMesi[mese]],
+                            ['Ferie residue', `${formattaNumeroVerificaBustaPaga(campi.Ferie_Residuo_BustaPaga)} giorni`],
+                            ['Permessi residui', `${formattaNumeroVerificaBustaPaga(campi.Permessi_Residuo_BustaPaga)} ore`],
+                            ['Ferie reali', `${formattaNumeroVerificaBustaPaga(campi.Ferie_Reali)} giorni`],
+                            ['Discrepanza ferie', `${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Ferie)} giorni`],
+                            ['Permessi reali', `${formattaNumeroVerificaBustaPaga(campi.Permessi_Reali)} ore`],
+                            ['Discrepanza permessi', `${formattaNumeroVerificaBustaPaga(campi.Discrepanza_Permessi)} ore`]
+                        ],
+                        rowColors: [
+                            null, null, null, null, null,
+                            Number.isFinite(discrepanzaFerie) && Math.abs(discrepanzaFerie) < 0.005 ? 'green' : 'red',
+                            null,
+                            Number.isFinite(discrepanzaPermessi) && Math.abs(discrepanzaPermessi) < 0.005 ? 'green' : 'red'
+                        ]
+                    }
                 );
             } catch (error) {
                 console.error('Errore generazione PDF verifica busta paga:', error);
@@ -3163,24 +3278,37 @@
             const meseSel = document.getElementById('storico_mese').options[document.getElementById('storico_mese').selectedIndex].text;
             const giornoSel = document.getElementById('storico_giorno').options[document.getElementById('storico_giorno').selectedIndex].text;
             const categoria = vistaStoricoAttiva === 'presenze' ? 'TIMBRATURE GIORNATA' : 'FERIE, PERMESSI E MALATTIA';
-
-            let testo = `DETTAGLIO ESTRAZIONE\n----------------------------------------\n`;
-            testo += `Categoria Stampata: ${categoria}\n`;
-            testo += `Filtri Applicati: Anno ${annoSel} | Mese: ${meseSel} | Giorno: ${giornoSel}\n`;
-            testo += `Totale Record Estratti: ${datiAttualmenteFiltrati.length}\n\n`;
-            testo += `ELENCO REGISTRAZIONI\n----------------------------------------\n`;
-
+            const righe = [];
+            const altezze = [];
             datiAttualmenteFiltrati.forEach((r) => {
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    testo += `${dataStr}  |  ${f.Evento.padEnd(15, ' ')}  |  Ore ${String(f.Ora).padStart(2,'0')}:${String(f.Minuti).padStart(2,'0')}  |  Note: ${f.Note || '-'}\n`;
+                    const totaleOre = ((Number(f.Ora) || 0) * 60 + (Number(f.Minuti) || 0)) / 60;
+                    righe.push([dataStr, f.Evento || '-', `${formattaNumeroItalianoPDF(totaleOre)} ore`, f.Note || '-']);
                 } else {
-                    testo += `${dataStr}  |  ${f.Tipo_Assenza.padEnd(18, ' ')}  |  Q.tà: ${f.Quantita}  |  Note: ${f.Note || '-'}\n`;
+                    const tipo = String(f.Tipo_Assenza || 'Assenza');
+                    const unita = /permess/i.test(tipo) ? 'ore' : 'giorni';
+                    righe.push([dataStr, tipo, `${formattaNumeroItalianoPDF(f.Quantita)} ${unita}`, f.Note || '-']);
                 }
+                const lunghezzaNota = String(r.fields.Note || '-').length;
+                altezze.push(lunghezzaNota > 90 ? 44 : lunghezzaNota > 45 ? 33 : 22);
             });
 
-            await buildPdfFromText("ARCHIVIO STORICO AZIENDALE", `REPORT FILTRATO - ${categoria}`, testo, `Storico_${vistaStoricoAttiva}_${annoSel}.pdf`);
+            const isPresenze = vistaStoricoAttiva === 'presenze';
+            await buildPdfFromText(
+                "ARCHIVIO STORICO",
+                `REPORT FILTRATO - ${categoria}`,
+                '',
+                `Storico_${vistaStoricoAttiva}_${annoSel}.pdf`,
+                {
+                    headers: isPresenze ? ['Data', 'Evento', 'Quantità', 'Note'] : ['Data', 'Tipo assenza', 'Quantità', 'Note'],
+                    widths: [85, 145, 95, 200],
+                    numericColumns: [2],
+                    rows: righe,
+                    rowHeights: altezze
+                }
+            );
         }
 
         let idRigaInModificaPresenze = null;
