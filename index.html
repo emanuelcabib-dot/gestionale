@@ -2964,7 +2964,37 @@
             }
 
             aggiungiIntestazione(page);
-            page.drawText(titoloPulito(titoloPrincipale).toUpperCase(), { x: 35, y: 765, size: 13, font: fontBold, color: colorePrimario });
+            function spezzaTesto(testo, font, size, maxWidth) {
+                const parole = String(testo || '').trim().split(/\s+/).filter(Boolean);
+                const righe = [];
+                let corrente = '';
+                parole.forEach(parola => {
+                    const tentativo = corrente ? `${corrente} ${parola}` : parola;
+                    if (font.widthOfTextAtSize(tentativo, size) > maxWidth && corrente) {
+                        righe.push(corrente);
+                        corrente = parola;
+                    } else {
+                        corrente = tentativo;
+                    }
+                });
+                if (corrente) righe.push(corrente);
+                return righe.length ? righe : [''];
+            }
+
+            const righeTitolo = spezzaTesto(titoloPulito(titoloPrincipale), fontBold, 13, 525);
+            let yTitolo = 765;
+            righeTitolo.forEach(riga => {
+                page.drawText(riga, { x: 35, y: yTitolo, size: 13, font: fontBold, color: colorePrimario });
+                yTitolo -= 16;
+            });
+
+            if (opzioni.filtroTesto) {
+                const righeFiltro = spezzaTesto(opzioni.filtroTesto, fontNormale, 8.5, 525);
+                righeFiltro.forEach(riga => {
+                    page.drawText(riga, { x: 35, y: yTitolo - 2, size: 8.5, font: fontNormale, color: coloreTestoGrigio });
+                    yTitolo -= 11;
+                });
+            }
 
             const headers = opzioni.headers || ['Voce', 'Valore'];
             const rowData = opzioni.rows || [];
@@ -2988,7 +3018,7 @@
                 }
             }
 
-            let y = 735;
+            let y = Math.max(590, yTitolo - 20);
             const headerHeight = 24;
             const rowMinHeight = 22;
 
@@ -3007,6 +3037,7 @@
                 const tableNumericColumns = tableOptions.numericColumns || numericColumns;
                 const tableRows = tableOptions.rows || [];
                 const tableWidth = tableWidths.reduce((a, b) => a + b, 0);
+                const nascondiIntestazione = tableOptions.hideHeaders === true;
 
                 if (tableOptions.subtitle) {
                     if (y < 100) nuovaPagina();
@@ -3014,30 +3045,34 @@
                     y -= 20;
                 }
 
-                page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
-                let x = tableStartX;
-                tableHeaders.forEach((header, index) => {
-                    const allineamentoDx = tableNumericColumns.includes(index);
-                    const textWidth = fontBold.widthOfTextAtSize(header, 8);
-                    page.drawText(header, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-                    x += tableWidths[index];
-                });
-                y -= headerHeight;
+                if (!nascondiIntestazione) {
+                    page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
+                    let x = tableStartX;
+                    tableHeaders.forEach((header, index) => {
+                        const allineamentoDx = tableNumericColumns.includes(index);
+                        const textWidth = fontBold.widthOfTextAtSize(header, 8);
+                        page.drawText(header, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+                        x += tableWidths[index];
+                    });
+                    y -= headerHeight;
+                }
 
                 tableRows.forEach((riga, indice) => {
                     const celle = riga.slice(0, tableHeaders.length).map(cella => String(cella ?? '').replace(/AZIENDALE/gi, '').replace(/[|]/g, '').replace(/^(<<<|>>>|\[\+\]|\[-\]|\[\+\/-\]|\*)\s*/i, '').trim());
                     const rowHeight = tableOptions.rowHeights?.[indice] || rowMinHeight;
                     if (y - rowHeight < 55) {
                         nuovaPagina();
-                        page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
-                        x = tableStartX;
-                        tableHeaders.forEach((header, index) => {
-                            const allineamentoDx = tableNumericColumns.includes(index);
-                            const textWidth = fontBold.widthOfTextAtSize(header, 8);
-                            page.drawText(header, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-                            x += tableWidths[index];
-                        });
-                        y -= headerHeight;
+                        if (!nascondiIntestazione) {
+                            page.drawRectangle({ x: tableStartX, y: y - headerHeight, width: tableWidth, height: headerHeight, color: headerColor });
+                            x = tableStartX;
+                            tableHeaders.forEach((header, index) => {
+                                const allineamentoDx = tableNumericColumns.includes(index);
+                                const textWidth = fontBold.widthOfTextAtSize(header, 8);
+                                page.drawText(header, { x: allineamentoDx ? x + tableWidths[index] - textWidth - 8 : x + 8, y: y - 16, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+                                x += tableWidths[index];
+                            });
+                            y -= headerHeight;
+                        }
                     }
 
                     const stato = tableOptions.rowColors?.[indice];
@@ -3102,17 +3137,23 @@
         }
 
         async function salvaEGeneraPDF() {
-            if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
-            const annoSel = document.getElementById('rep_anno').value;
-            const meseSel = document.getElementById('rep_mese').value;
-            const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
-            const resJson = await response.json();
-            if (response.ok && resJson.success) {
-                const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
-                await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT MENSILE ASSENZE: ${resJson.mese} ${resJson.anno}`, '', `Report_${resJson.mese}_${resJson.anno}.pdf`, {
-                    tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
-                });
-            } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
+            try {
+                if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
+                if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const annoSel = document.getElementById('rep_anno').value;
+                const meseSel = document.getElementById('rep_mese').value;
+                const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
+                const resJson = await response.json();
+                if (response.ok && resJson.success) {
+                    const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
+                    await buildPdfFromText("PROSPETTO RIEPILOGATIVO", `REPORT MENSILE ASSENZE: ${resJson.mese} ${resJson.anno}`, '', `Report_${resJson.mese}_${resJson.anno}.pdf`, {
+                        tables: tables.map(table => ({ ...table, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                    });
+                } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
+            } catch (error) {
+                console.error("Errore generazione PDF assenze mensile:", error);
+                mostraAlert(`Impossibile generare il PDF. ${error.message || ''}`.trim());
+            }
         }
 
         async function generaPDFAnnuale() {
@@ -3344,6 +3385,7 @@
                         tables: [
                             {
                                 subtitle: 'Parametri busta paga',
+                                hideHeaders: true,
                                 headers: ['Parametro', 'Valore'],
                                 widths: [260, 265],
                                 numericColumns: [1],
@@ -3356,6 +3398,7 @@
                             },
                             {
                                 subtitle: 'Parametri database',
+                                hideHeaders: true,
                                 headers: ['Parametro', 'Valore calcolato'],
                                 widths: [260, 265],
                                 numericColumns: [1],
@@ -3366,6 +3409,7 @@
                             },
                             {
                                 subtitle: 'Discrepanze',
+                                hideHeaders: true,
                                 headers: ['Parametro', 'Discrepanza'],
                                 widths: [260, 265],
                                 numericColumns: [1],
@@ -3380,6 +3424,7 @@
                             },
                             {
                                 subtitle: 'Spiegazione discrepanze',
+                                hideHeaders: true,
                                 headers: ['Voce', 'Esito'],
                                 widths: [260, 265],
                                 numericColumns: [1],
@@ -3440,10 +3485,11 @@
             const isPresenze = vistaStoricoAttiva === 'presenze';
             await buildPdfFromText(
                 "ARCHIVIO STORICO",
-                `REPORT FILTRATO - ${categoria} - ANNO ${annoSel} - ${meseRiferimento.toUpperCase()} - ${giornoRiferimento.toUpperCase()}`,
+                categoria === 'TIMBRATURE GIORNATA' ? 'Timbratura giornata' : 'Ferie, permessi e malattia',
                 '',
                 `Storico_${vistaStoricoAttiva}_${annoSel}.pdf`,
                 {
+                    filtroTesto: `Anno: ${annoSel} | Mese: ${meseRiferimento} | Giorno: ${giornoRiferimento}`,
                     headers: isPresenze ? ['Data', 'Evento', 'Quantità', 'Note'] : ['Data', 'Tipo assenza', 'Quantità', 'Note'],
                     widths: [85, 145, 95, 200],
                     numericColumns: [2],
