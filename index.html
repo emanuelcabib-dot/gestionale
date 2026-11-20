@@ -2454,16 +2454,39 @@
             }
         }
 
+        async function renderizzaQRCode2FA(canvas, uri) {
+            let toCanvas = window.QRCode?.toCanvas;
+            if (typeof toCanvas !== 'function') {
+                let generatore;
+                let ultimoErrore;
+                for (const url of [
+                    'https://esm.sh/qrcode@1.5.4?bundle',
+                    'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm'
+                ]) {
+                    try {
+                        const modulo = await import(url);
+                        generatore = modulo.default || modulo;
+                        toCanvas = generatore.toCanvas || modulo.toCanvas;
+                        if (typeof toCanvas === 'function') break;
+                        ultimoErrore = new Error('Il modulo caricato non espone toCanvas.');
+                    } catch (error) {
+                        ultimoErrore = error;
+                    }
+                }
+                if (typeof toCanvas !== 'function') {
+                    throw new Error('Generatore QR locale non disponibile. Ricarica la pagina e riprova.', { cause: ultimoErrore });
+                }
+            }
+            await toCanvas(canvas, uri, { width: 220, margin: 2 });
+        }
+
         async function iniziaSetup2FA() {
             const message = document.getElementById('twofaManagementMessage');
             message.textContent = '';
             try {
                 const result = await richiestaSicurezza2FA('twofa_setup_start');
-                if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
-                    throw new Error('Generatore QR locale non disponibile. Ricarica la pagina e riprova.');
-                }
                 document.getElementById('twofaManualSecret').value = result.secret;
-                await window.QRCode.toCanvas(document.getElementById('twofaQrCanvas'), result.uri, { width: 220, margin: 2 });
+                await renderizzaQRCode2FA(document.getElementById('twofaQrCanvas'), result.uri);
                 document.getElementById('twofaSetupCode').value = '';
                 document.getElementById('twofaSetupPanel').style.display = 'block';
                 document.getElementById('twofaBackupCodesPanel').style.display = 'none';
