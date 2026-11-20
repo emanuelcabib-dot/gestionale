@@ -674,6 +674,7 @@
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneParametriContrattuali')">📋 Contrattuali</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneTipiTimbratura')">🕒 Tipi Timbratura</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneTipiAssenza')">🌴 Tipi Assenza</button>
+                    <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneFestivita')">🎉 Festività</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneAvvisi')">📌 Bacheca Avvisi</button>
                 </div>
 
@@ -706,6 +707,14 @@
                     <div style="margin-top: 15px; display: flex; gap: 10px;">
                         <button type="button" class="btn-submit" onclick="salvaModificheTipiAssenza()">💾 Salva Tipi Assenza</button>
                         <button type="button" class="btn-submit" style="background-color: #2980b9;" onclick="aggiungiRigaAssenza()">➕ Aggiungi Assenza</button>
+                    </div>
+                </div>
+                <div id="paneFestivita" class="settings-pane">
+                    <h3>Festività</h3>
+                    <div id="tableFestivitaContainer" style="overflow-x: auto;">Caricamento festività...</div>
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <button type="button" class="btn-submit" onclick="salvaModificheFestivita()">💾 Salva Festività</button>
+                        <button type="button" class="btn-submit" style="background-color: #2980b9;" onclick="aggiungiRigaFestivita()">➕ Aggiungi Festività</button>
                     </div>
                 </div>
                 <div id="paneAvvisi" class="settings-pane">
@@ -819,6 +828,7 @@
         let recordsContrattualiOriginali = [];
         let recordsTipiTimbraturaOriginali = [];
         let recordsTipiAssenzaOriginali = [];
+        let recordsFestivitaOriginali = [];
         let recordsAvvisiOriginali = [];
         let tipiAssenzaBloccantiCache = new Set();
         let listaTipiTimbraturaGrist = [];
@@ -1873,7 +1883,8 @@
                     datiCache &&
                     Array.isArray(datiCache.configApp) &&
                     Array.isArray(datiCache.tipiTimbratura) &&
-                    Array.isArray(datiCache.tipiAssenza);
+                    Array.isArray(datiCache.tipiAssenza) &&
+                    Array.isArray(datiCache.festivita);
                 if (cacheValida) {
                     cacheSalvata = datiCache;
                     timestampCacheSalvata = timestampCache;
@@ -1893,21 +1904,23 @@
             }
 
             try {
-                const [resConf, resTimbl, resAss] = await Promise.all([
+                const [resConf, resTimbl, resAss, resFest] = await Promise.all([
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_config_app", token: sessionToken}) }),
                     apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_timbratura", token: sessionToken}) }),
-                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) })
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_tipi_assenza", token: sessionToken}) }),
+                    apiFetch(WORKER_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tipo: "get_festivita", token: sessionToken}) })
                 ]);
 
-                if (!resConf.ok || !resTimbl.ok || !resAss.ok) {
-                    throw new Error(`Recupero configurazioni non riuscito (HTTP ${[resConf, resTimbl, resAss].find(res => !res.ok).status}).`);
+                if (!resConf.ok || !resTimbl.ok || !resAss.ok || !resFest.ok) {
+                    throw new Error(`Recupero configurazioni non riuscito (HTTP ${[resConf, resTimbl, resAss, resFest].find(res => !res.ok).status}).`);
                 }
 
-                const [dConf, dTimbl, dAss] = await Promise.all([resConf.json(), resTimbl.json(), resAss.json()]);
+                const [dConf, dTimbl, dAss, dFest] = await Promise.all([resConf.json(), resTimbl.json(), resAss.json(), resFest.json()]);
                 cacheDatiGlobali = {
                     configApp: dConf.records || [],
                     tipiTimbratura: dTimbl.records || [],
-                    tipiAssenza: dAss.records || []
+                    tipiAssenza: dAss.records || [],
+                    festivita: dFest.records || []
                 };
                 timestampCacheDatiGlobali = Date.now();
                 applicaDatiCacheLocali();
@@ -1942,6 +1955,7 @@
             if (!cacheDatiGlobali) return;
 
             recordsConfigAppOriginali = cacheDatiGlobali.configApp;
+            recordsFestivitaOriginali = cacheDatiGlobali.festivita || [];
             configAppCache = {};
             recordsConfigAppOriginali.forEach(r => { configAppCache[r.fields.Parametro] = r.fields.Valore; });
             popolaTendineAnniDinamiche();
@@ -2191,9 +2205,11 @@
                     recordsConfigAppOriginali = cacheDatiGlobali.configApp;
                     recordsTipiTimbraturaOriginali = cacheDatiGlobali.tipiTimbratura;
                     recordsTipiAssenzaOriginali = cacheDatiGlobali.tipiAssenza;
+                    recordsFestivitaOriginali = cacheDatiGlobali.festivita || [];
                     generaTabellaConfigAppModificabile(recordsConfigAppOriginali);
                     generaTabellaTipiTimbraturaModificabile(recordsTipiTimbraturaOriginali);
                     generaTabellaTipiAssenzaModificabile(recordsTipiAssenzaOriginali);
+                    generaTabellaFestivitaModificabile(recordsFestivitaOriginali);
                 }
 
                 const [resContr, resAvv] = await Promise.all([
@@ -2397,6 +2413,152 @@
             mostraAlert("Assenza rimossa.");
             invalidaCacheConfigurazioniStatiche();
             await inizializzaDatiGlobaliCache(true);
+            caricaImpostazioniNative();
+        }
+
+        function numeroGiorniFestivita(mese) {
+            const meseNumero = Number(mese);
+            if (meseNumero === 2) return 29;
+            return [4, 6, 9, 11].includes(meseNumero) ? 30 : 31;
+        }
+
+        function opzioniGiorniFestivita(mese, giornoSelezionato) {
+            const massimo = numeroGiorniFestivita(mese);
+            const giorno = Math.min(Math.max(Number(giornoSelezionato) || 1, 1), massimo);
+            return Array.from({ length: massimo }, (_, indice) => {
+                const valore = indice + 1;
+                return `<option value="${valore}" ${valore === giorno ? 'selected' : ''}>${valore}</option>`;
+            }).join('');
+        }
+
+        function aggiornaSelectGiornoFestivita(selectMese, selectGiorno) {
+            const giornoSelezionato = Number(selectGiorno.value) || 1;
+            selectGiorno.innerHTML = opzioniGiorniFestivita(selectMese.value, giornoSelezionato);
+            selectGiorno.value = String(Math.min(giornoSelezionato, numeroGiorniFestivita(selectMese.value)));
+        }
+
+        function generaTabellaFestivitaModificabile(records) {
+            let html = `<table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
+                <thead><tr style="background:#2c3e50; color:white;">
+                    <th style="padding:10px;">Descrizione</th><th style="padding:10px;">Giorno</th><th style="padding:10px;">Mese</th><th style="padding:10px;">Ricorrente</th><th style="padding:10px;">Attivo</th><th style="padding:10px; text-align:center;">Azione</th>
+                </tr></thead><tbody>`;
+            records.forEach(record => {
+                const fields = record.fields || {};
+                const mese = Number(fields.Mese) || 1;
+                const giorno = Math.min(Number(fields.Giorno) || 1, numeroGiorniFestivita(mese));
+                html += `<tr id="tr_festivita_${record.id}" style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="text" id="fest_descr_${record.id}" value="${escapeHtmlReport(fields.Descrizione || '')}" style="padding:6px; width:220px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><select id="fest_giorno_${record.id}" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${opzioniGiorniFestivita(mese, giorno)}</select></td>
+                    <td style="padding:10px;"><select id="fest_mese_${record.id}" onchange="aggiornaSelectGiornoFestivita(this, document.getElementById('fest_giorno_${record.id}'))" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${nomiMesi.slice(1).map((nome, indice) => `<option value="${indice + 1}" ${indice + 1 === mese ? 'selected' : ''}>${nome}</option>`).join('')}</select></td>
+                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="fest_ric_${record.id}" ${fields.Ricorrente === true ? 'checked' : ''}></td>
+                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="fest_att_${record.id}" ${fields.Attivo === true ? 'checked' : ''}></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaFestivitaEsistente(${Number(record.id)})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('tableFestivitaContainer').innerHTML = html;
+        }
+
+        function aggiungiRigaFestivita() {
+            const container = document.getElementById('tableFestivitaContainer');
+            const riga = document.createElement('tr');
+            riga.className = 'riga-nuova-festivita';
+            riga.style.borderBottom = '1px solid #e0e0e0';
+            riga.innerHTML = `
+                <td style="padding:10px;"><input type="text" class="new_fest_descr" placeholder="Es. Festa del Lavoro" style="padding:6px; width:220px; border:1px solid #ccc; border-radius:4px;"></td>
+                <td style="padding:10px;"><select class="new_fest_giorno" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${opzioniGiorniFestivita(1, 1)}</select></td>
+                <td style="padding:10px;"><select class="new_fest_mese" onchange="aggiornaSelectGiornoFestivita(this, this.closest('tr').querySelector('.new_fest_giorno'))" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${nomiMesi.slice(1).map((nome, indice) => `<option value="${indice + 1}" ${indice === 0 ? 'selected' : ''}>${nome}</option>`).join('')}</select></td>
+                <td style="padding:10px; text-align:center;"><input type="checkbox" class="new_fest_ric" checked></td>
+                <td style="padding:10px; text-align:center;"><input type="checkbox" class="new_fest_att" checked></td>
+                <td style="padding:10px; text-align:center;"><button type="button" onclick="this.closest('tr').remove()" style="background:#7f8c8d; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">Annulla</button></td>`;
+            container.querySelector('tbody').appendChild(riga);
+        }
+
+        function validaCampiFestivita(descrizione, giorno, mese) {
+            return Boolean(descrizione.trim())
+                && Number.isInteger(Number(giorno)) && Number(giorno) >= 1 && Number(giorno) <= numeroGiorniFestivita(mese)
+                && Number.isInteger(Number(mese)) && Number(mese) >= 1 && Number(mese) <= 12;
+        }
+
+        async function salvaModificheFestivita() {
+            if (!sessionToken || !await mostraConfirm("Salvare le modifiche alle festività?")) return;
+            const modifiche = recordsFestivitaOriginali.map(record => ({
+                id: record.id,
+                descrizione: document.getElementById(`fest_descr_${record.id}`).value.trim(),
+                giorno: document.getElementById(`fest_giorno_${record.id}`).value,
+                mese: document.getElementById(`fest_mese_${record.id}`).value,
+                ricorrente: document.getElementById(`fest_ric_${record.id}`).checked,
+                attivo: document.getElementById(`fest_att_${record.id}`).checked
+            }));
+            const nuove = Array.from(document.querySelectorAll('.riga-nuova-festivita')).map(riga => ({
+                descrizione: riga.querySelector('.new_fest_descr').value.trim(),
+                giorno: riga.querySelector('.new_fest_giorno').value,
+                mese: riga.querySelector('.new_fest_mese').value,
+                ricorrente: riga.querySelector('.new_fest_ric').checked,
+                attivo: riga.querySelector('.new_fest_att').checked
+            }));
+            if ([...modifiche, ...nuove].some(record => !validaCampiFestivita(record.descrizione, record.giorno, record.mese))) {
+                mostraAlert("Inserisci descrizione, giorno (1-31) e mese (1-12) validi per ogni festività.");
+                return;
+            }
+            const festivitaPerData = new Map();
+            for (const record of [...modifiche, ...nuove]) {
+                const chiave = `${Number(record.mese)}-${Number(record.giorno)}`;
+                if (festivitaPerData.has(chiave)) {
+                    mostraAlert(`Esiste già una festività per il giorno ${record.giorno}/${record.mese}. Modifica la data prima di salvare.`);
+                    return;
+                }
+                festivitaPerData.set(chiave, record);
+            }
+
+            for (const record of modifiche) {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tipo: "modifica_festivita",
+                        token: sessionToken,
+                        id_riga: record.id,
+                        descrizione: record.descrizione,
+                        giorno: record.giorno,
+                        mese: record.mese,
+                        ricorrente: record.ricorrente,
+                        attivo: record.attivo
+                    })
+                });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante il salvataggio della festività (HTTP ${response.status}).`);
+                    return;
+                }
+            }
+            for (const record of nuove) {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tipo: "aggiungi_festivita", token: sessionToken, ...record })
+                });
+                if (!response.ok) {
+                    mostraAlert(`Errore durante l'aggiunta della festività (HTTP ${response.status}).`);
+                    return;
+                }
+            }
+            invalidaCacheConfigurazioniStatiche();
+            await inizializzaDatiGlobaliCache(true);
+            mostraAlert("Festività aggiornate con successo!");
+            caricaImpostazioniNative();
+        }
+
+        async function rimuoviRigaFestivitaEsistente(id) {
+            if (!await mostraConfirm("Vuoi eliminare questa festività?")) return;
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tipo: "elimina_record", token: sessionToken, tabella: "festivita", id_riga: id })
+            });
+            if (!response.ok) {
+                mostraAlert(`Errore durante l'eliminazione della festività (HTTP ${response.status}).`);
+                return;
+            }
+            invalidaCacheConfigurazioniStatiche();
+            await inizializzaDatiGlobaliCache(true);
+            mostraAlert("Festività eliminata.");
             caricaImpostazioniNative();
         }
 

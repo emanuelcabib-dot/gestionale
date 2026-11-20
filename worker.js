@@ -659,6 +659,38 @@ export default {
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        if (body.tipo === "get_festivita") {
+          const res = await fetch(`${BASE_GRIST}/Festivita/records`, { headers: headersGrist });
+          if (!res.ok) return new Response(JSON.stringify({ success: false, error: "Errore recupero Festivita" }), { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const data = await res.json();
+          return new Response(JSON.stringify({ success: true, records: data.records || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (body.tipo === "aggiungi_festivita" || body.tipo === "modifica_festivita") {
+          const descrizione = String(body.descrizione || "").trim();
+          const giorno = Number(body.giorno);
+          const mese = Number(body.mese);
+          const ricorrente = Boolean(body.ricorrente);
+          const attivo = Boolean(body.attivo);
+          const idRecord = Number(body.id_riga);
+          if (!descrizione || !Number.isInteger(giorno) || giorno < 1 || giorno > 31 || !Number.isInteger(mese) || mese < 1 || mese > 12) {
+            return new Response(JSON.stringify({ success: false, error: "Descrizione, giorno o mese della festività non validi" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          if (body.tipo === "modifica_festivita" && (!Number.isSafeInteger(idRecord) || idRecord <= 0)) {
+            return new Response(JSON.stringify({ success: false, error: "ID festività non valido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          const fields = { "Descrizione": descrizione, "Giorno": giorno, "Mese": mese, "Ricorrente": ricorrente, "Attivo": attivo };
+          const modifica = body.tipo === "modifica_festivita";
+          const response = await fetch(`${BASE_GRIST}/Festivita/records`, {
+            method: modifica ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json", ...headersGrist },
+            body: JSON.stringify({ records: [modifica ? { id: idRecord, fields } : { fields }] })
+          });
+          if (!response.ok) return new Response(JSON.stringify({ success: false, error: modifica ? "Errore modifica Festivita" : "Errore aggiunta Festivita" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         if (body.tipo === "get_avvisi") {
           const res = await fetch(`${BASE_GRIST}/Avvisi/records`, { headers: headersGrist });
           if (!res.ok) return new Response(JSON.stringify({ success: false, error: "Errore recupero Avvisi" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -1223,6 +1255,7 @@ export default {
             parametri_contrattuali: "Parametri_contrattuali",
             tipi_timbratura: "Tipi_Timbratura",
             tipi_assenza: "Tipi_Assenza",
+            festivita: "Festivita",
             verifica_buste_paga: "Verifica_Buste_Paga"
           };
           const tabellaId = Object.hasOwn(tabelleEliminabili, body.tabella) ? tabelleEliminabili[body.tabella] : null;
