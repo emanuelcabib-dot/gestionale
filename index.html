@@ -477,7 +477,6 @@
                     <button type="button" id="btnDettaglioAssenzeMensile" aria-expanded="false" onclick="toggleDettaglioReport('paneReportAssenzeMensile')" style="margin:0 0 14px; background:#536b7a;">Visualizza assenze</button>
                     <div id="contenitoreDettaglioAssenzeMensile" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaAssenzeMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
                         </table>
                     </div>
@@ -501,7 +500,6 @@
                     <button type="button" id="btnDettaglioAssenzeAnnuale" aria-expanded="false" onclick="toggleDettaglioReport('paneReportAssenzeAnnuale')" style="margin:0 0 14px; background:#536b7a;">Visualizza assenze</button>
                     <div id="contenitoreDettaglioAssenzeAnnuale" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaAssenzeAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
                         </table>
                     </div>
@@ -532,7 +530,6 @@
                     <button type="button" id="btnDettaglioTimbratureMensile" aria-expanded="false" onclick="toggleDettaglioReport('paneReportTimbratureMensile')" style="margin:0 0 14px; background:#536b7a;">Visualizza timbrature</button>
                     <div id="contenitoreDettaglioTimbratureMensile" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaTimbratureMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
                         </table>
                     </div>
@@ -556,7 +553,6 @@
                     <button type="button" id="btnDettaglioTimbratureAnnuale" aria-expanded="false" onclick="toggleDettaglioReport('paneReportTimbratureAnnuale')" style="margin:0 0 14px; background:#536b7a;">Visualizza timbrature</button>
                     <div id="contenitoreDettaglioTimbratureAnnuale" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
-                            <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaTimbratureAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
                         </table>
                     </div>
@@ -3715,8 +3711,9 @@
                 const f = r.fields;
                 const dataStr = formattaDataTabella(f.Data);
                 if (vistaStoricoAttiva === 'presenze') {
-                    const totaleOre = ((Number(f.Ora) || 0) * 60 + (Number(f.Minuti) || 0)) / 60;
-                    righe.push([dataStr, f.Evento || '-', `${formattaNumeroItalianoPDF(totaleOre)} ore`, f.Note || '-']);
+                    const ora = String(Number.parseInt(f.Ora, 10) || 0).padStart(2, '0');
+                    const minuti = String(Number.parseInt(f.Minuti, 10) || 0).padStart(2, '0');
+                    righe.push([dataStr, f.Evento || '-', `${ora}:${minuti}`, f.Note || '-']);
                 } else {
                     const tipo = String(f.Tipo_Assenza || 'Assenza');
                     const unita = /permess/i.test(tipo) ? 'ore' : 'giorni';
@@ -3902,7 +3899,6 @@
                         <h4 style="margin:0; padding:10px 12px; color:#2c3e50; background:#f2f5f6; border-bottom:1px solid #dfe5e8;">${escapeHtmlReport(tabella.subtitle || 'Riepilogo')}</h4>
                         <div style="overflow-x:auto;">
                             <table style="width:100%; border-collapse:collapse; text-align:left; font-size:14px;">
-                                <thead><tr style="background:#2c3e50; color:#fff;"><th style="padding:9px 12px;">Voce</th><th style="padding:9px 12px;">Valore</th></tr></thead>
                                 <tbody>${tabella.rows.length ? tabella.rows.map((riga, indice) => `<tr style="border-bottom:1px solid #e0e0e0; background:${indice % 2 ? '#f8f9fa' : '#fff'};"><td style="padding:9px 12px;">${escapeHtmlReport(riga[0])}</td><td style="padding:9px 12px;">${escapeHtmlReport(riga[1])}</td></tr>`).join('') : '<tr><td colspan="2" style="padding:10px 12px; color:#7f8c8d;">Nessun dato riepilogativo.</td></tr>'}</tbody>
                             </table>
                         </div>
