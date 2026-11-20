@@ -163,6 +163,7 @@ const TWOFA_CHALLENGE_TTL_SECONDS = 5 * 60;
 const TRUSTED_DEVICE_TTL_SECONDS = 30 * 24 * 60 * 60;
 const TWOFA_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
 const TWOFA_RATE_LIMIT_MAX_ATTEMPTS = 5;
+const TWOFA_SETUP_START_MAX_ATTEMPTS = 10;
 const TWOFA_TOTP_STEP_SECONDS = 30;
 const TWOFA_TOTP_TOLERANCE_STEPS = 1;
 const TWOFA_BACKUP_CODE_COUNT = 10;
@@ -485,6 +486,24 @@ async function twofaConsumeOperation(env, scope) {
     }
   }
   if (count >= TWOFA_RATE_LIMIT_MAX_ATTEMPTS) return true;
+  await env.AUTH_KV.put(key, JSON.stringify({ count: count + 1 }), {
+    expirationTtl: TWOFA_RATE_LIMIT_WINDOW_SECONDS
+  });
+  return false;
+}
+
+async function twofaConsumeSetupStart(env, scope) {
+  const key = `twofa_setup_ops:${base64UrlEncode(textEncoder.encode(scope))}`;
+  const value = await env.AUTH_KV.get(key);
+  let count = 0;
+  if (value) {
+    try {
+      count = Number(JSON.parse(value).count) || 0;
+    } catch {
+      count = 0;
+    }
+  }
+  if (count >= TWOFA_SETUP_START_MAX_ATTEMPTS) return true;
   await env.AUTH_KV.put(key, JSON.stringify({ count: count + 1 }), {
     expirationTtl: TWOFA_RATE_LIMIT_WINDOW_SECONDS
   });
@@ -947,7 +966,7 @@ export default {
 
         if (body.tipo === "twofa_setup_start") {
           const rateScope = `sensitive:${twofaClientAddress(request)}:${session.session.username}`;
-          if (await twofaConsumeOperation(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          if (await twofaConsumeSetupStart(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
           if (await env.AUTH_KV.get(`twofa:${twofaUsernameKey(session.session.username)}`)) {
             return errorResponse("La verifica in due fattori è già attiva.", corsHeaders, 409);
           }
