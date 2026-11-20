@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.19/locales-all.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
@@ -267,6 +268,23 @@
                 </div>
                 <button class="login-submit" type="submit">Accedi</button>
             </form>
+            <div id="twoFactorLogin" style="display:none; margin-top:20px; text-align:left;">
+                <h2 style="font-size:20px; color:#172b4d;">Verifica in due fattori</h2>
+                <p id="twoFactorLoginHint">Inserisci il codice della tua app Authenticator.</p>
+                <form onsubmit="event.preventDefault(); verificaLogin2FA();">
+                    <div class="login-field">
+                        <label for="twoFactorLoginCode">Codice</label>
+                        <input id="twoFactorLoginCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="24" style="width:100%;height:48px;padding:0 12px;border:1px solid #d9e2ec;border-radius:10px;box-sizing:border-box;">
+                    </div>
+                    <label style="display:flex;align-items:flex-start;gap:8px;margin:12px 0;">
+                        <input id="rememberTrustedDevice" type="checkbox" style="margin-top:3px;">
+                        <span>Considera attendibile questo dispositivo per 30 giorni</span>
+                    </label>
+                    <button id="toggleBackupCodeButton" type="button" class="login-password-choice" onclick="toggleCodiceBackup()">Usa un codice di backup</button>
+                    <button class="login-submit" type="submit" style="margin-top:10px;">Verifica</button>
+                    <button type="button" class="login-password-choice" onclick="annullaLogin2FA()">Annulla</button>
+                </form>
+            </div>
             <p id="errorMessage" class="error-message" role="alert" aria-live="polite"></p>
             <p class="login-footnote">Accesso protetto e riservato</p>
         </div>
@@ -683,6 +701,7 @@
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneTipiAssenza')">🌴 Tipi Assenza</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneFestivita')">🎉 Festività</button>
                     <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneAvvisi')">📌 Bacheca Avvisi</button>
+                    <button class="settings-tab-btn" onclick="switchSettingsTab(event, 'paneSicurezza2FA')">🔐 Sicurezza &amp; 2FA</button>
                 </div>
 
                 <div id="paneConfigApp" class="settings-pane active">
@@ -730,6 +749,44 @@
                     <div style="margin-top: 15px;">
                         <button type="button" class="btn-submit" onclick="salvaModificheAvvisi()">💾 Salva Avvisi</button>
                     </div>
+                </div>
+                <div id="paneSicurezza2FA" class="settings-pane">
+                    <h3>Sicurezza &amp; verifica in due fattori</h3>
+                    <p id="twofaStatusText">Caricamento stato della verifica in due fattori...</p>
+                    <p id="twofaBackupCount"></p>
+                    <div id="twofaSetupPanel" style="display:none;">
+                        <p>Scansiona il codice QR con Google Authenticator, Microsoft Authenticator o un'app compatibile. Il codice viene generato in questa pagina.</p>
+                        <canvas id="twofaQrCanvas" aria-label="Codice QR per configurare l'app Authenticator"></canvas>
+                        <div style="margin:12px 0;">
+                            <label for="twofaManualSecret">Chiave manuale</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <input id="twofaManualSecret" type="text" readonly style="flex:1;min-width:220px;padding:10px;">
+                                <button type="button" onclick="copiaChiave2FA()">Copia chiave</button>
+                            </div>
+                        </div>
+                        <label for="twofaSetupCode">Codice di verifica</label>
+                        <input id="twofaSetupCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="display:block;width:100%;max-width:260px;padding:10px;margin:8px 0;">
+                        <button type="button" class="btn-submit" onclick="confermaSetup2FA()">Attiva 2FA</button>
+                    </div>
+                    <button id="twofaStartButton" type="button" class="btn-submit" onclick="iniziaSetup2FA()">Configura app Authenticator</button>
+                    <div id="twofaManagementPanel" style="display:none;">
+                        <div style="margin:16px 0;">
+                            <label for="twofaManageCode">Codice Authenticator o codice di backup per operazioni sensibili</label>
+                            <input id="twofaManageCode" type="text" autocomplete="off" maxlength="24" style="display:block;width:100%;max-width:320px;padding:10px;margin:8px 0;">
+                        </div>
+                        <button type="button" class="btn-submit" onclick="rigeneraCodiciBackup()">Rigenera codici di backup</button>
+                        <button type="button" class="btn-delete" onclick="disattiva2FA()">Disattiva 2FA</button>
+                    </div>
+                    <div id="twofaBackupCodesPanel" style="display:none;margin:16px 0;padding:14px;border:1px solid #e0b84c;border-radius:8px;background:#fff9e6;">
+                        <p><strong>Salva questi codici ora:</strong> verranno mostrati una sola volta.</p>
+                        <pre id="twofaBackupCodes" style="white-space:pre-wrap;"></pre>
+                        <button type="button" onclick="copiaCodiciBackup()">Copia codici</button>
+                        <button type="button" onclick="scaricaCodiciBackup()">Scarica .txt</button>
+                    </div>
+                    <h4>Dispositivi attendibili</h4>
+                    <div id="twofaDevicesList">Caricamento dispositivi...</div>
+                    <button type="button" class="btn-delete" onclick="revocaTuttiDispositivi()">Revoca tutti i dispositivi attendibili</button>
+                    <p id="twofaManagementMessage" role="status"></p>
                 </div>
             </div>
 
@@ -814,6 +871,7 @@
     <script>
         const WORKER_URL = 'https://gestionalelavoro.invio-dati-lavoro.workers.dev/';
         const LOGIN_USERNAME_KEY = 'gestionale_login_username';
+        const TRUSTED_DEVICE_ID_KEY = 'gestionale_trusted_device_id';
         const CACHE_CONFIGURAZIONI_KEY = 'gestionale_cache_globale';
         const CACHE_CONFIGURAZIONI_TIMESTAMP_KEY = 'gestionale_cache_ts';
         const CACHE_CONFIGURAZIONI_TTL_MS = 24 * 60 * 60 * 1000;
@@ -842,6 +900,9 @@
         let listaTipiAssenzaGrist = [];
         let modalitaInserimentoPassato = false;
         let tipoInserimentoPassato = null;
+        let pendingTwoFactorLogin = null;
+        let twoFactorBackupMode = false;
+        let twoFactorBackupCodesCurrent = '';
 
         async function apiFetch(url, options) {
             const banner = document.getElementById('globalApiBanner');
@@ -1648,6 +1709,141 @@
             return data;
         }
 
+        function getDeviceIdentity() {
+            try {
+                let deviceId = localStorage.getItem(TRUSTED_DEVICE_ID_KEY);
+                if (!deviceId) {
+                    deviceId = crypto.randomUUID();
+                    localStorage.setItem(TRUSTED_DEVICE_ID_KEY, deviceId);
+                }
+                return deviceId;
+            } catch (error) {
+                console.warn('Impossibile salvare localmente l’identificativo del dispositivo:', error);
+                return crypto.randomUUID();
+            }
+        }
+
+        function trustedDeviceStorageKey(username) {
+            return `gestionale_trusted_device_${encodeURIComponent(username)}`;
+        }
+
+        function getTrustedDeviceToken(username) {
+            try {
+                return localStorage.getItem(trustedDeviceStorageKey(username)) || '';
+            } catch (error) {
+                console.warn('Impossibile leggere il dispositivo attendibile locale:', error);
+                return '';
+            }
+        }
+
+        function saveTrustedDeviceToken(username, deviceId, token) {
+            try {
+                localStorage.setItem(TRUSTED_DEVICE_ID_KEY, deviceId);
+                localStorage.setItem(trustedDeviceStorageKey(username), token);
+            } catch (error) {
+                console.warn('Impossibile salvare localmente il dispositivo attendibile:', error);
+            }
+        }
+
+        function removeTrustedDeviceToken(username) {
+            try {
+                localStorage.removeItem(trustedDeviceStorageKey(username));
+            } catch (error) {
+                console.warn('Impossibile rimuovere il dispositivo attendibile locale:', error);
+            }
+        }
+
+        function authDeviceFields(username) {
+            return {
+                deviceId: getDeviceIdentity(),
+                trustedDeviceToken: getTrustedDeviceToken(username)
+            };
+        }
+
+        function showTwoFactorLogin(username, challengeId) {
+            pendingTwoFactorLogin = { username, challengeId };
+            removeTrustedDeviceToken(username);
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('savedUsernameDisplay').style.display = 'none';
+            document.getElementById('usernameField').style.display = 'none';
+            document.querySelector('#loginSection .login-divider').style.display = 'none';
+            document.getElementById('biometricLoginButton').style.display = 'none';
+            document.getElementById('showPasswordButton').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('twoFactorLogin').style.display = 'block';
+            document.getElementById('twoFactorLoginCode').value = '';
+            document.getElementById('twoFactorLoginCode').focus();
+            document.getElementById('rememberTrustedDevice').checked = false;
+            twoFactorBackupMode = false;
+            document.getElementById('twoFactorLoginHint').textContent = 'Inserisci il codice della tua app Authenticator.';
+            document.getElementById('toggleBackupCodeButton').textContent = 'Usa un codice di backup';
+            document.getElementById('twoFactorLoginCode').inputMode = 'numeric';
+            document.getElementById('twoFactorLoginCode').maxLength = 6;
+        }
+
+        function annullaLogin2FA() {
+            pendingTwoFactorLogin = null;
+            document.getElementById('twoFactorLogin').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'flex';
+            document.querySelector('#loginSection .login-divider').style.display = '';
+            document.getElementById('biometricLoginButton').style.display = '';
+            document.getElementById('showPasswordButton').style.display = '';
+            ripristinaNomeUtenteLocale();
+        }
+
+        function toggleCodiceBackup() {
+            twoFactorBackupMode = !twoFactorBackupMode;
+            const input = document.getElementById('twoFactorLoginCode');
+            input.value = '';
+            input.inputMode = twoFactorBackupMode ? 'text' : 'numeric';
+            input.maxLength = twoFactorBackupMode ? 24 : 6;
+            document.getElementById('twoFactorLoginHint').textContent = twoFactorBackupMode
+                ? 'Inserisci un codice di backup monouso.'
+                : 'Inserisci il codice della tua app Authenticator.';
+            document.getElementById('toggleBackupCodeButton').textContent = twoFactorBackupMode
+                ? 'Usa un codice Authenticator'
+                : 'Usa un codice di backup';
+            input.focus();
+        }
+
+        async function completeAuthentication(username, result, offerBiometricSetup) {
+            if (result.requires2FA) {
+                showTwoFactorLogin(username, result.challengeId);
+                return;
+            }
+            if (result.trustedDeviceToken && result.deviceId) {
+                saveTrustedDeviceToken(username, result.deviceId, result.trustedDeviceToken);
+            }
+            sessionToken = result.token;
+            await completeLogin(username, offerBiometricSetup);
+        }
+
+        async function verificaLogin2FA() {
+            if (!pendingTwoFactorLogin) return;
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.display = 'none';
+            try {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: 'verify_2fa',
+                        challengeId: pendingTwoFactorLogin.challengeId,
+                        code: document.getElementById('twoFactorLoginCode').value.trim(),
+                        rememberDevice: document.getElementById('rememberTrustedDevice').checked,
+                        deviceId: getDeviceIdentity()
+                    })
+                });
+                const result = await parseWorkerResponse(response, 'Verifica 2FA non riuscita.');
+                const username = pendingTwoFactorLogin.username;
+                pendingTwoFactorLogin = null;
+                await completeAuthentication(username, result, false);
+            } catch (error) {
+                errorMessage.textContent = error.message || 'Verifica 2FA non riuscita.';
+                errorMessage.style.display = 'block';
+            }
+        }
+
         function updateBiometricSupport() {
             const button = document.getElementById('biometricLoginButton');
             if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials) {
@@ -1733,11 +1929,10 @@
                 const response = await apiFetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tipo: "auth", username, password })
+                    body: JSON.stringify({ tipo: "auth", username, password, ...authDeviceFields(username) })
                 });
                 const result = await parseWorkerResponse(response, 'Nome utente o password non validi.');
-                sessionToken = result.token;
-                await completeLogin(username, true);
+                await completeAuthentication(username, result, true);
             } catch (error) {
                 console.error('Errore Auth:', error);
                 sessionToken = '';
@@ -1780,12 +1975,12 @@
                     body: JSON.stringify({
                         tipo: 'webauthn_auth_verify',
                         username,
+                        ...authDeviceFields(username),
                         credential: serializeCredential(credential)
                     })
                 });
                 const result = await parseWorkerResponse(verifyResponse, 'Verifica biometrica non riuscita.');
-                sessionToken = result.token;
-                await completeLogin(username, false);
+                await completeAuthentication(username, result, false);
             } catch (error) {
                 sessionToken = '';
                 document.getElementById('mainPanel').style.display = 'none';
@@ -2193,7 +2388,8 @@
             document.querySelectorAll('#impostazioni .settings-tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(paneId).classList.add('active');
             evt.currentTarget.classList.add('active');
-            if(paneId) caricaImpostazioniNative();
+            if (paneId === 'paneSicurezza2FA') caricaSicurezza2FA();
+            else if (paneId) caricaImpostazioniNative();
         }
 
         function switchReportTab(evt, paneId) {
@@ -2206,6 +2402,188 @@
                 resetTabellaVerificaBustePaga();
             } else {
                 caricaAnteprimaReport();
+            }
+        }
+
+        async function richiestaSicurezza2FA(tipo, dati = {}) {
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tipo, token: sessionToken, ...dati })
+            });
+            return parseWorkerResponse(response, 'Operazione 2FA non riuscita.');
+        }
+
+        function formattaDataDispositivo(timestamp) {
+            if (!Number.isInteger(timestamp)) return '—';
+            return new Date(timestamp * 1000).toLocaleString('it-IT');
+        }
+
+        async function caricaSicurezza2FA() {
+            if (!sessionToken) return;
+            const statusText = document.getElementById('twofaStatusText');
+            const devicesContainer = document.getElementById('twofaDevicesList');
+            try {
+                const status = await richiestaSicurezza2FA('twofa_status', { deviceId: getDeviceIdentity() });
+                statusText.textContent = `Verifica in due fattori: ${status.enabled ? 'Attiva' : 'Non attiva'}.`;
+                document.getElementById('twofaBackupCount').textContent =
+                    `Codici di backup residui: ${status.remainingBackupCodes}.`;
+                document.getElementById('twofaStartButton').style.display = status.enabled ? 'none' : '';
+                document.getElementById('twofaManagementPanel').style.display = status.enabled ? 'block' : 'none';
+                devicesContainer.replaceChildren();
+                if (!status.devices.length) {
+                    devicesContainer.textContent = 'Nessun dispositivo attendibile attivo.';
+                } else {
+                    const list = document.createElement('ul');
+                    status.devices.forEach(device => {
+                        const item = document.createElement('li');
+                        const details = document.createElement('span');
+                        details.textContent = `${device.label || 'Dispositivo'}${device.current ? ' (dispositivo corrente)' : ''} — creato: ${formattaDataDispositivo(device.createdAt)} — ultimo accesso: ${formattaDataDispositivo(device.lastUsedAt)} — scade: ${formattaDataDispositivo(device.expiresAt)} `;
+                        const revokeButton = document.createElement('button');
+                        revokeButton.type = 'button';
+                        revokeButton.textContent = 'Revoca';
+                        revokeButton.addEventListener('click', () => revocaDispositivo(device.deviceId));
+                        item.append(details, revokeButton);
+                        list.appendChild(item);
+                    });
+                    devicesContainer.appendChild(list);
+                }
+            } catch (error) {
+                statusText.textContent = error.message || 'Impossibile caricare lo stato 2FA.';
+                devicesContainer.textContent = 'Impossibile caricare i dispositivi attendibili.';
+            }
+        }
+
+        async function iniziaSetup2FA() {
+            const message = document.getElementById('twofaManagementMessage');
+            message.textContent = '';
+            try {
+                const result = await richiestaSicurezza2FA('twofa_setup_start');
+                if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+                    throw new Error('Generatore QR locale non disponibile. Ricarica la pagina e riprova.');
+                }
+                document.getElementById('twofaManualSecret').value = result.secret;
+                await window.QRCode.toCanvas(document.getElementById('twofaQrCanvas'), result.uri, { width: 220, margin: 2 });
+                document.getElementById('twofaSetupCode').value = '';
+                document.getElementById('twofaSetupPanel').style.display = 'block';
+                document.getElementById('twofaBackupCodesPanel').style.display = 'none';
+            } catch (error) {
+                message.textContent = error.message || 'Impossibile avviare la configurazione 2FA.';
+            }
+        }
+
+        async function copiaChiave2FA() {
+            try {
+                await navigator.clipboard.writeText(document.getElementById('twofaManualSecret').value);
+                document.getElementById('twofaManagementMessage').textContent = 'Chiave copiata.';
+            } catch (error) {
+                document.getElementById('twofaManagementMessage').textContent = 'Impossibile copiare la chiave. Selezionala e copiala manualmente.';
+            }
+        }
+
+        function mostraCodiciBackup(codes) {
+            twoFactorBackupCodesCurrent = codes.join('\n');
+            document.getElementById('twofaBackupCodes').textContent = twoFactorBackupCodesCurrent;
+            document.getElementById('twofaBackupCodesPanel').style.display = 'block';
+        }
+
+        async function confermaSetup2FA() {
+            const message = document.getElementById('twofaManagementMessage');
+            message.textContent = '';
+            try {
+                const result = await richiestaSicurezza2FA('twofa_setup_confirm', {
+                    code: document.getElementById('twofaSetupCode').value.trim()
+                });
+                document.getElementById('twofaSetupPanel').style.display = 'none';
+                mostraCodiciBackup(result.backupCodes);
+                await caricaSicurezza2FA();
+                message.textContent = '2FA attivata. Conserva ora i codici di backup.';
+            } catch (error) {
+                message.textContent = error.message || 'Impossibile attivare la 2FA.';
+            }
+        }
+
+        async function copiaCodiciBackup() {
+            try {
+                await navigator.clipboard.writeText(twoFactorBackupCodesCurrent);
+                document.getElementById('twofaManagementMessage').textContent = 'Codici di backup copiati.';
+            } catch (error) {
+                document.getElementById('twofaManagementMessage').textContent = 'Impossibile copiare i codici. Selezionali e copiali manualmente.';
+            }
+        }
+
+        function scaricaCodiciBackup() {
+            if (!twoFactorBackupCodesCurrent) return;
+            const file = new Blob([`${twoFactorBackupCodesCurrent}\n`], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(file);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'codici-backup-2fa.txt';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function rigeneraCodiciBackup() {
+            if (!await mostraConfirm('I codici di backup attuali verranno invalidati. Continuare?')) return;
+            const message = document.getElementById('twofaManagementMessage');
+            try {
+                const result = await richiestaSicurezza2FA('twofa_backup_regenerate', {
+                    code: document.getElementById('twofaManageCode').value.trim()
+                });
+                document.getElementById('twofaManageCode').value = '';
+                mostraCodiciBackup(result.backupCodes);
+                await caricaSicurezza2FA();
+                message.textContent = 'Codici rigenerati. Salvali ora: saranno mostrati una sola volta.';
+            } catch (error) {
+                message.textContent = error.message || 'Impossibile rigenerare i codici di backup.';
+            }
+        }
+
+        async function disattiva2FA() {
+            if (!await mostraConfirm('Disattivare la verifica in due fattori e revocare tutti i dispositivi attendibili?')) return;
+            const username = document.getElementById('companyUsername').value.trim();
+            const message = document.getElementById('twofaManagementMessage');
+            try {
+                await richiestaSicurezza2FA('twofa_disable', {
+                    code: document.getElementById('twofaManageCode').value.trim()
+                });
+                removeTrustedDeviceToken(username);
+                document.getElementById('twofaManageCode').value = '';
+                document.getElementById('twofaBackupCodesPanel').style.display = 'none';
+                twoFactorBackupCodesCurrent = '';
+                await caricaSicurezza2FA();
+                message.textContent = '2FA disattivata e dispositivi attendibili revocati.';
+            } catch (error) {
+                message.textContent = error.message || 'Impossibile disattivare la 2FA.';
+            }
+        }
+
+        async function revocaDispositivo(deviceId) {
+            if (!await mostraConfirm('Revocare questo dispositivo attendibile?')) return;
+            const username = document.getElementById('companyUsername').value.trim();
+            try {
+                const result = await richiestaSicurezza2FA('twofa_device_revoke', {
+                    deviceId,
+                    currentDeviceId: getDeviceIdentity()
+                });
+                if (result.currentRevoked) removeTrustedDeviceToken(username);
+                await caricaSicurezza2FA();
+            } catch (error) {
+                document.getElementById('twofaManagementMessage').textContent = error.message || 'Impossibile revocare il dispositivo.';
+            }
+        }
+
+        async function revocaTuttiDispositivi() {
+            if (!await mostraConfirm('Revocare tutti i dispositivi attendibili?')) return;
+            const username = document.getElementById('companyUsername').value.trim();
+            try {
+                const result = await richiestaSicurezza2FA('twofa_devices_revoke', {
+                    currentDeviceId: getDeviceIdentity()
+                });
+                if (result.currentRevoked) removeTrustedDeviceToken(username);
+                await caricaSicurezza2FA();
+            } catch (error) {
+                document.getElementById('twofaManagementMessage').textContent = error.message || 'Impossibile revocare i dispositivi attendibili.';
             }
         }
 
