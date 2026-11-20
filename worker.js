@@ -779,6 +779,10 @@ export default {
           return errorResponse("JSON non valido nel body", corsHeaders, 400);
         }
 
+        if (body.tipo === "get_readme_doc" && !originAllowed) {
+          return errorResponse("Origine non autorizzata", corsHeaders, 403);
+        }
+
         if (body.tipo === "auth") {
           if (!env.COMPANY_USERNAME || !env.COMPANY_PASSWORD || !env.GRIST_API_KEY || !env.AUTH_KV) {
             return jsonResponse({ success: false, error: "Configurazione credenziali incompleta sul Worker" }, corsHeaders, 500);
@@ -962,6 +966,10 @@ export default {
         if (body.tipo === "logout") {
           await env.AUTH_KV.delete(session.key);
           return privateJsonResponse({ success: true }, corsHeaders);
+        }
+
+        if (body.tipo === "get_readme_doc") {
+          return privateJsonResponse({ success: true, markdown: env.README_DOC ?? "" }, corsHeaders);
         }
 
         if (body.tipo === "twofa_setup_start") {
