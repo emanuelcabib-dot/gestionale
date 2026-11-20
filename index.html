@@ -333,6 +333,7 @@
                 <button class="tab-btn" onclick="navigaASezione('impostazioni')">⚙️ Impostazioni parametri</button>
                 <button class="tab-btn" onclick="navigaASezione('storico_panel'); caricaTabellaStorico();">📜 Storico e Modifiche</button>
                 <div style="margin-top: auto; padding: 15px 25px; border-top: 1px solid #34495e;">
+                    <button class="tab-btn" type="button" onclick="apriDocumentazione()" style="padding:10px 0; color:#ecf0f1; font-weight:bold; background:none; border:none; text-align:left; width:100%; margin-bottom:8px;">ℹ️ Info</button>
                     <button class="tab-btn" onclick="logout()" style="padding:10px 0; color:#e74c3c; font-weight:bold; background:none; border:none; text-align:left; width:100%;">🚪 Esci</button>
                 </div>
             </div>
@@ -916,6 +917,145 @@
             } catch (error) {
                 if (banner) banner.style.display = 'block';
                 throw error;
+            }
+        }
+
+        function escapeHtmlDoc(value) {
+            return String(value ?? '').replace(/[&<>"']/g, carattere => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[carattere]);
+        }
+
+        function formattaMarkdownDoc(markdown) {
+            const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
+            const renderInline = testo => {
+                const contenutiProtetti = [];
+                const proteggi = html => {
+                    const indice = contenutiProtetti.push(html) - 1;
+                    return `\uE000${indice}\uE001`;
+                };
+                let escaped = escapeHtmlDoc(testo).replace(/`([^`]+)`/g, (_, codice) =>
+                    proteggi(`<code>${codice}</code>`));
+                escaped = escaped.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/gi, (match, label, href) => {
+                    try {
+                        const url = new URL(href.replace(/&amp;/g, '&'));
+                        if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) return match;
+                        return proteggi(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+                    } catch {
+                        return match;
+                    }
+                });
+                escaped = escaped
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+                    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                    .replace(/_(.+?)_/g, '<em>$1</em>');
+                return escaped.replace(/\uE000(\d+)\uE001/g, (_, indice) => contenutiProtetti[Number(indice)]);
+            };
+            const blocchi = [];
+            for (let indice = 0; indice < lines.length;) {
+                const linea = lines[indice];
+                if (!linea.trim()) {
+                    indice++;
+                    continue;
+                }
+                if (/^\s*```/.test(linea)) {
+                    const codice = [];
+                    indice++;
+                    while (indice < lines.length && !/^\s*```/.test(lines[indice])) codice.push(lines[indice++]);
+                    if (indice < lines.length) indice++;
+                    blocchi.push(`<pre><code>${escapeHtmlDoc(codice.join('\n'))}</code></pre>`);
+                    continue;
+                }
+                const intestazione = /^(#{1,6})\s+(.+)$/.exec(linea);
+                if (intestazione) {
+                    const livello = intestazione[1].length;
+                    blocchi.push(`<h${livello}>${renderInline(intestazione[2])}</h${livello}>`);
+                    indice++;
+                    continue;
+                }
+                if (/^\s*(---+|___+|\*\*\*+)\s*$/.test(linea)) {
+                    blocchi.push('<hr>');
+                    indice++;
+                    continue;
+                }
+                if (/^\s*>\s?/.test(linea)) {
+                    const citazione = [];
+                    while (indice < lines.length && /^\s*>\s?/.test(lines[indice])) {
+                        citazione.push(renderInline(lines[indice++].replace(/^\s*>\s?/, '')));
+                    }
+                    blocchi.push(`<blockquote>${citazione.join('<br>')}</blockquote>`);
+                    continue;
+                }
+                const lista = /^\s*([-*+]|\d+\.)\s+(.+)$/.exec(linea);
+                if (lista) {
+                    const ordinata = /^\d/.test(lista[1]);
+                    const elementi = [];
+                    while (indice < lines.length) {
+                        const elemento = /^\s*([-*+]|\d+\.)\s+(.+)$/.exec(lines[indice]);
+                        if (!elemento || /^\d/.test(elemento[1]) !== ordinata) break;
+                        elementi.push(`<li>${renderInline(elemento[2])}</li>`);
+                        indice++;
+                    }
+                    const tag = ordinata ? 'ol' : 'ul';
+                    blocchi.push(`<${tag}>${elementi.join('')}</${tag}>`);
+                    continue;
+                }
+                const paragrafo = [];
+                while (indice < lines.length && lines[indice].trim() &&
+                    !/^\s*```|^#{1,6}\s+|^\s*>|^\s*([-*+]|\d+\.)\s+|^\s*(---+|___+|\*\*\*+)\s*$/.test(lines[indice])) {
+                    paragrafo.push(lines[indice++]);
+                }
+                blocchi.push(`<p>${renderInline(paragrafo.join(' '))}</p>`);
+            }
+            return blocchi.join('\n');
+        }
+
+        async function apriDocumentazione() {
+            const nuovaScheda = window.open('about:blank', '_blank');
+            if (!nuovaScheda) {
+                mostraAlert('Consenti l’apertura di nuove schede per visualizzare la documentazione.');
+                return;
+            }
+            nuovaScheda.opener = null;
+            try {
+                if (!sessionToken) throw new Error('Sessione non valida. Accedi di nuovo.');
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'get_readme_doc', token: sessionToken })
+                });
+                const risultato = await response.json();
+                if (!response.ok || !risultato.success) {
+                    throw new Error(risultato.error || `Recupero documentazione non riuscito (HTTP ${response.status}).`);
+                }
+                const contenuto = `<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentazione gestionale</title>
+<style>
+body{max-width:900px;margin:40px auto;padding:0 24px;color:#263445;font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3,h4,h5,h6{line-height:1.25;color:#172b4d;margin-top:1.6em}
+pre,code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+code{background:#f1f4f8;padding:.15em .35em;border-radius:4px}
+pre{overflow:auto;background:#f1f4f8;padding:16px;border-radius:8px}
+pre code{padding:0;background:none}
+blockquote{margin:1em 0;padding:.2em 1em;border-left:4px solid #8da7c0;color:#526579}
+a{color:#1769aa}
+@media(max-width:600px){body{margin:24px auto;padding:0 16px}}
+</style>
+</head>
+<body>${formattaMarkdownDoc(risultato.markdown)}</body>
+</html>`;
+                const blobUrl = URL.createObjectURL(new Blob([contenuto], { type: 'text/html;charset=utf-8' }));
+                nuovaScheda.location.href = blobUrl;
+                window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+            } catch (error) {
+                nuovaScheda.close();
+                console.error('Errore apertura documentazione:', error);
+                mostraAlert(error.message || 'Impossibile caricare la documentazione.');
             }
         }
 
