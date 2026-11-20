@@ -12,6 +12,12 @@ La pagina deve essere pubblicata su HTTPS. Le credenziali biometriche sono assoc
 
 Configura `ALLOWED_ORIGINS` con le origini web autorizzate separate da virgole (per esempio `https://emanuelcabib-dot.github.io`). Se la variabile manca o è vuota, è consentita solo l'origine GitHub Pages predefinita.
 
+## Verifica in due fattori
+
+La scheda **Impostazioni → Sicurezza & 2FA** consente di configurare un'app Authenticator compatibile con RFC 6238, consultare i codici di backup residui, rigenerare i codici e revocare i dispositivi attendibili. L'attivazione richiede la verifica di un codice TOTP. I codici di backup vengono mostrati una sola volta: conservali fuori dall'applicazione.
+
+Il Worker genera e verifica i codici TOTP e conserva in `AUTH_KV` il segreto, gli hash salati dei codici di backup, le sfide temporanee e gli hash dei token dei dispositivi. I parametri di sicurezza (durate, tolleranza TOTP e limiti dei tentativi) sono definiti nel Worker. I dispositivi attendibili scadono dopo 30 giorni. L'URI TOTP è usato esclusivamente nel browser per disegnare il QR; non viene inviato a un servizio QR.
+
 ## Gestione documenti PDF
 
 Per aprire la cartella condivisa su Google Drive, configura nel Worker la variabile `DRIVE_PDF_URL` con un URL HTTPS di `drive.google.com` o `docs.google.com`. L'indirizzo viene restituito solo alle sessioni autorizzate.

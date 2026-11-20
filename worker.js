@@ -158,6 +158,16 @@ async function validateCalendarWrite(base, headers, date, kind, body, recordId) 
 }
 
 const SESSION_TTL_SECONDS = 24 * 60 * 60;
+const TWOFA_SETUP_TTL_SECONDS = 10 * 60;
+const TWOFA_CHALLENGE_TTL_SECONDS = 5 * 60;
+const TRUSTED_DEVICE_TTL_SECONDS = 30 * 24 * 60 * 60;
+const TWOFA_RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
+const TWOFA_RATE_LIMIT_MAX_ATTEMPTS = 5;
+const TWOFA_TOTP_STEP_SECONDS = 30;
+const TWOFA_TOTP_TOLERANCE_STEPS = 1;
+const TWOFA_BACKUP_CODE_COUNT = 10;
+const TWOFA_ISSUER = "Gestionale";
+const TWOFA_BACKUP_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 async function getSession(env, token) {
   if (typeof token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)) {
@@ -435,7 +445,274 @@ async function syncPasswordVersion(env, username) {
   await env.AUTH_KV.put(versionKey, passwordVersion);
 }
 
-async function issueSession(env, corsHeaders, username) {
+function twofaUsernameKey(username) {
+  return encodeCredentialId(username);
+}
+
+function twofaDevicePrefix(username) {
+  return `trusted_device:${twofaUsernameKey(username)}:`;
+}
+
+async function twofaListDevices(env, username) {
+  const keys = [];
+  let cursor;
+  const prefix = twofaDevicePrefix(username);
+  do {
+    const page = await env.AUTH_KV.list({ prefix, cursor, limit: 1000 });
+    keys.push(...page.keys);
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return keys;
+}
+
+function twofaClientAddress(request) {
+  return request.headers.get("CF-Connecting-IP") || "unknown";
+}
+
+function twofaRateKey(scope) {
+  return `twofa_rate:${base64UrlEncode(textEncoder.encode(scope))}`;
+}
+
+async function twofaConsumeOperation(env, scope) {
+  const key = `twofa_ops:${base64UrlEncode(textEncoder.encode(scope))}`;
+  const value = await env.AUTH_KV.get(key);
+  let count = 0;
+  if (value) {
+    try {
+      count = Number(JSON.parse(value).count) || 0;
+    } catch {
+      count = 0;
+    }
+  }
+  if (count >= TWOFA_RATE_LIMIT_MAX_ATTEMPTS) return true;
+  await env.AUTH_KV.put(key, JSON.stringify({ count: count + 1 }), {
+    expirationTtl: TWOFA_RATE_LIMIT_WINDOW_SECONDS
+  });
+  return false;
+}
+
+async function twofaIsRateLimited(env, scope) {
+  const record = await env.AUTH_KV.get(twofaRateKey(scope));
+  if (!record) return false;
+  try {
+    return JSON.parse(record).count >= TWOFA_RATE_LIMIT_MAX_ATTEMPTS;
+  } catch {
+    return false;
+  }
+}
+
+async function twofaRecordFailure(env, scope) {
+  const key = twofaRateKey(scope);
+  const value = await env.AUTH_KV.get(key);
+  let count = 0;
+  if (value) {
+    try {
+      count = Number(JSON.parse(value).count) || 0;
+    } catch {
+      count = 0;
+    }
+  }
+  await env.AUTH_KV.put(key, JSON.stringify({ count: count + 1 }), {
+    expirationTtl: TWOFA_RATE_LIMIT_WINDOW_SECONDS
+  });
+}
+
+async function twofaClearFailures(env, scope) {
+  await env.AUTH_KV.delete(twofaRateKey(scope));
+}
+
+function twofaRateLimitResponse(corsHeaders) {
+  return privateJsonResponse({ success: false, error: "Troppi tentativi. Riprova tra qualche minuto." }, corsHeaders, 429);
+}
+
+async function twofaSha256(bytes) {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+}
+
+function twofaBase32Encode(bytes) {
+  let buffer = 0;
+  let bits = 0;
+  let result = "";
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      result += "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[(buffer >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits) result += "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[(buffer << (5 - bits)) & 31];
+  return result;
+}
+
+function twofaBase32Decode(value) {
+  if (typeof value !== "string" || !/^[A-Z2-7]+$/.test(value)) {
+    throw new Error("Segreto TOTP non valido");
+  }
+  let buffer = 0;
+  let bits = 0;
+  const result = [];
+  for (const character of value) {
+    buffer = (buffer << 5) | "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(character);
+    bits += 5;
+    if (bits >= 8) {
+      result.push((buffer >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return new Uint8Array(result);
+}
+
+async function twofaTotpAtStep(secret, timeStep) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    twofaBase32Decode(secret),
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"]
+  );
+  const counter = new Uint8Array(8);
+  new DataView(counter.buffer).setBigUint64(0, BigInt(timeStep), false);
+  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, counter));
+  const offset = digest[digest.length - 1] & 15;
+  const binary = ((digest[offset] & 127) << 24) |
+    (digest[offset + 1] << 16) |
+    (digest[offset + 2] << 8) |
+    digest[offset + 3];
+  return String(binary % 1000000).padStart(6, "0");
+}
+
+async function twofaVerifyTotp(secret, code, lastTimeStep = -1) {
+  if (typeof code !== "string" || !/^\d{6}$/.test(code)) return null;
+  const currentStep = Math.floor(Date.now() / 1000 / TWOFA_TOTP_STEP_SECONDS);
+  for (let offset = -TWOFA_TOTP_TOLERANCE_STEPS; offset <= TWOFA_TOTP_TOLERANCE_STEPS; offset++) {
+    const step = currentStep + offset;
+    if (step > lastTimeStep && equalSecret(await twofaTotpAtStep(secret, step), code)) return step;
+  }
+  return null;
+}
+
+async function twofaGenerateBackupCodes(env, username) {
+  const codes = [];
+  const records = [];
+  for (let index = 0; index < TWOFA_BACKUP_CODE_COUNT; index++) {
+    const random = new Uint8Array(16);
+    crypto.getRandomValues(random);
+    let raw = "";
+    for (const byte of random) raw += TWOFA_BACKUP_ALPHABET[byte % TWOFA_BACKUP_ALPHABET.length];
+    const code = `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
+    const salt = new Uint8Array(16);
+    crypto.getRandomValues(salt);
+    const normalized = code.replace(/-/g, "");
+    const hashInput = new Uint8Array(salt.length + textEncoder.encode(normalized).length);
+    hashInput.set(salt);
+    hashInput.set(textEncoder.encode(normalized), salt.length);
+    records.push({
+      salt: base64UrlEncode(salt),
+      hash: base64UrlEncode(await twofaSha256(hashInput))
+    });
+    codes.push(code);
+  }
+  await env.AUTH_KV.put(`twofa_backup:${twofaUsernameKey(username)}`, JSON.stringify(records));
+  return codes;
+}
+
+async function twofaConsumeBackupCode(env, username, code) {
+  if (typeof code !== "string" || !/^[A-Za-z2-9-]{12,24}$/.test(code)) return false;
+  const key = `twofa_backup:${twofaUsernameKey(username)}`;
+  const value = await env.AUTH_KV.get(key);
+  if (!value) return false;
+  let records;
+  try {
+    records = JSON.parse(value);
+  } catch {
+    await env.AUTH_KV.delete(key);
+    return false;
+  }
+  const normalized = code.replace(/-/g, "").toUpperCase();
+  const normalizedBytes = textEncoder.encode(normalized);
+  let matched = -1;
+  for (let index = 0; index < records.length; index++) {
+    const salt = base64UrlDecode(records[index].salt);
+    const bytes = new Uint8Array(salt.length + normalizedBytes.length);
+    bytes.set(salt);
+    bytes.set(normalizedBytes, salt.length);
+    const hash = base64UrlEncode(await twofaSha256(bytes));
+    if (equalSecret(hash, records[index].hash)) matched = index;
+  }
+  if (matched < 0) return false;
+  records.splice(matched, 1);
+  if (records.length) await env.AUTH_KV.put(key, JSON.stringify(records));
+  else await env.AUTH_KV.delete(key);
+  return true;
+}
+
+async function twofaVerifyProof(env, username, code) {
+  const key = `twofa:${twofaUsernameKey(username)}`;
+  const value = await env.AUTH_KV.get(key);
+  if (!value) return false;
+  const record = JSON.parse(value);
+  const step = await twofaVerifyTotp(record.secret, code, record.lastTimeStep ?? -1);
+  if (step !== null) {
+    record.lastTimeStep = step;
+    await env.AUTH_KV.put(key, JSON.stringify(record));
+    return true;
+  }
+  return twofaConsumeBackupCode(env, username, code);
+}
+
+function twofaDeviceLabel(request) {
+  const userAgent = request.headers.get("User-Agent") || "";
+  if (/iphone|ipad/i.test(userAgent)) return "Dispositivo Apple";
+  if (/android/i.test(userAgent)) return "Dispositivo Android";
+  if (/windows/i.test(userAgent)) return "Dispositivo Windows";
+  if (/macintosh|mac os/i.test(userAgent)) return "Dispositivo Mac";
+  if (/linux/i.test(userAgent)) return "Dispositivo Linux";
+  return "Browser";
+}
+
+async function twofaCheckTrustedDevice(env, username, deviceId, token) {
+  if (typeof deviceId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId) ||
+      typeof token !== "string" || !/^[A-Za-z0-9_-]{40,50}$/.test(token)) return false;
+  const key = `${twofaDevicePrefix(username)}${deviceId}`;
+  const value = await env.AUTH_KV.get(key);
+  if (!value) return false;
+  let record;
+  try {
+    record = JSON.parse(value);
+  } catch {
+    await env.AUTH_KV.delete(key);
+    return false;
+  }
+  if (!Number.isInteger(record.expiresAt) || record.expiresAt <= Math.floor(Date.now() / 1000)) {
+    await env.AUTH_KV.delete(key);
+    return false;
+  }
+  const hash = base64UrlEncode(await twofaSha256(textEncoder.encode(token)));
+  if (!equalSecret(hash, record.tokenHash)) return false;
+  record.lastUsedAt = Math.floor(Date.now() / 1000);
+  const remaining = Math.max(1, record.expiresAt - record.lastUsedAt);
+  await env.AUTH_KV.put(key, JSON.stringify(record), { expirationTtl: remaining });
+  return true;
+}
+
+async function twofaStartLogin(env, corsHeaders, username, body) {
+  const enabled = await env.AUTH_KV.get(`twofa:${twofaUsernameKey(username)}`);
+  if (!enabled) return await issueSession(env, corsHeaders, username);
+  if (await twofaCheckTrustedDevice(env, username, body.deviceId, body.trustedDeviceToken)) {
+    return await issueSession(env, corsHeaders, username);
+  }
+  const challengeId = crypto.randomUUID();
+  await env.AUTH_KV.put(`twofa_pending:${challengeId}`, JSON.stringify({
+    username,
+    attempts: 0,
+    deviceId: typeof body.deviceId === "string" ? body.deviceId : ""
+  }), { expirationTtl: TWOFA_CHALLENGE_TTL_SECONDS });
+  return privateJsonResponse({ success: true, requires2FA: true, challengeId }, corsHeaders);
+}
+
+async function issueSession(env, corsHeaders, username, extra = {}) {
   const sessionToken = crypto.randomUUID();
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
   await env.AUTH_KV.put(`session:${sessionToken}`, JSON.stringify({ username, expiresAt }), {
@@ -444,7 +721,8 @@ async function issueSession(env, corsHeaders, username) {
   return privateJsonResponse({
     success: true,
     token: sessionToken,
-    urls: { dashboard: env.URL_DASHBOARD, impostazioni: env.URL_IMPOSTAZIONI }
+    urls: { dashboard: env.URL_DASHBOARD, impostazioni: env.URL_IMPOSTAZIONI },
+    ...extra
   }, corsHeaders);
 }
 
@@ -487,13 +765,17 @@ export default {
             return jsonResponse({ success: false, error: "Configurazione credenziali incompleta sul Worker" }, corsHeaders, 500);
           }
           const username = typeof body.username === "string" ? body.username.trim() : "";
+          const rateScope = `login:${twofaClientAddress(request)}`;
+          if (await twofaIsRateLimited(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
           const validUsername = equalSecret(username, env.COMPANY_USERNAME.trim());
           const validPassword = equalSecret(body.password, env.COMPANY_PASSWORD);
           if (!username || !validUsername || !validPassword) {
+            await twofaRecordFailure(env, rateScope);
             return jsonResponse({ success: false, error: "Nome utente o password non validi" }, corsHeaders, 401);
           }
+          await twofaClearFailures(env, rateScope);
           await syncPasswordVersion(env, username);
-          return await issueSession(env, corsHeaders, username);
+          return await twofaStartLogin(env, corsHeaders, username, body);
         }
 
         if (body.tipo === "webauthn_auth_options") {
@@ -532,9 +814,16 @@ export default {
             return jsonResponse({ success: false, error: "Configurazione WebAuthn incompleta sul Worker" }, corsHeaders, 500);
           }
           const username = typeof body.username === "string" ? body.username.trim() : "";
+          const rateScope = `login:${twofaClientAddress(request)}`;
+          if (await twofaIsRateLimited(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
           if (!username || !equalSecret(username, env.COMPANY_USERNAME.trim())) {
+            await twofaRecordFailure(env, rateScope);
             return jsonResponse({ success: false, error: "Nome utente non valido" }, corsHeaders, 401);
           }
+          const authFailure = async message => {
+            await twofaRecordFailure(env, rateScope);
+            return jsonResponse({ success: false, error: message }, corsHeaders, 401);
+          };
           await syncPasswordVersion(env, username);
           const response = body.credential?.response;
           let clientDataJSON;
@@ -543,11 +832,11 @@ export default {
             clientDataJSON = base64UrlDecode(response?.clientDataJSON);
             clientData = JSON.parse(new TextDecoder().decode(clientDataJSON));
           } catch (error) {
-            return jsonResponse({ success: false, error: "Dati client WebAuthn non validi" }, corsHeaders, 401);
+            return await authFailure("Dati client WebAuthn non validi");
           }
           const challengeRecord = await consumeWebAuthnChallenge(env, clientData.challenge, username, "assertion");
           if (!challengeRecord) {
-            return jsonResponse({ success: false, error: "Sfida WebAuthn scaduta o non valida" }, corsHeaders, 401);
+            return await authFailure("Sfida WebAuthn scaduta o non valida");
           }
           const context = { origin: challengeRecord.origin, rpId: challengeRecord.rpId };
           let credentialId;
@@ -555,15 +844,15 @@ export default {
             await verifyClientData(clientDataJSON, "webauthn.get", clientData.challenge, context);
             credentialId = base64UrlEncode(base64UrlDecode(body.credential?.rawId));
             if (body.credential?.type !== "public-key" || credentialId !== body.credential?.id) {
-              return jsonResponse({ success: false, error: "Credenziale WebAuthn non valida" }, corsHeaders, 401);
+              return await authFailure("Credenziale WebAuthn non valida");
             }
           } catch (error) {
-            return jsonResponse({ success: false, error: "Risposta WebAuthn non valida" }, corsHeaders, 401);
+            return await authFailure("Risposta WebAuthn non valida");
           }
           const credentialKey = `credential:${encodeCredentialId(username)}:${credentialId}`;
           const storedCredential = await env.AUTH_KV.get(credentialKey);
           if (!storedCredential) {
-            return jsonResponse({ success: false, error: "Credenziale WebAuthn non riconosciuta" }, corsHeaders, 401);
+            return await authFailure("Credenziale WebAuthn non riconosciuta");
           }
           const credential = JSON.parse(storedCredential);
           let parsedData;
@@ -573,17 +862,74 @@ export default {
             parsedData = parseAuthenticatorData(authenticatorData);
             if (!await assertRpIdHash(authenticatorData, context.rpId) ||
                 !await verifyAssertionSignature(credential, authenticatorData, clientDataJSON, signature)) {
-              return jsonResponse({ success: false, error: "Verifica biometrica non riuscita" }, corsHeaders, 401);
+              return await authFailure("Verifica biometrica non riuscita");
             }
           } catch (error) {
-            return jsonResponse({ success: false, error: "Firma WebAuthn non valida" }, corsHeaders, 401);
+            return await authFailure("Firma WebAuthn non valida");
           }
           if (credential.signCount > 0 && parsedData.signCount <= credential.signCount) {
-            return jsonResponse({ success: false, error: "Contatore WebAuthn non valido" }, corsHeaders, 401);
+            return await authFailure("Contatore WebAuthn non valido");
           }
           credential.signCount = parsedData.signCount;
           await env.AUTH_KV.put(credentialKey, JSON.stringify(credential));
-          return await issueSession(env, corsHeaders, username);
+          await twofaClearFailures(env, rateScope);
+          return await twofaStartLogin(env, corsHeaders, username, body);
+        }
+
+        if (body.tipo === "verify_2fa") {
+          const challengeId = body.challengeId;
+          if (typeof challengeId !== "string" ||
+              !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challengeId)) {
+            return errorResponse("Sfida 2FA non valida o scaduta.", corsHeaders, 401);
+          }
+          const challengeKey = `twofa_pending:${challengeId}`;
+          const challengeValue = await env.AUTH_KV.get(challengeKey);
+          if (!challengeValue) return errorResponse("Sfida 2FA non valida o scaduta.", corsHeaders, 401);
+          const challenge = JSON.parse(challengeValue);
+          const rateScope = `verify_2fa:${twofaClientAddress(request)}:${challenge.username}`;
+          const challengeRateScope = `verify_2fa_challenge:${challengeId}`;
+          if (await twofaIsRateLimited(env, rateScope) || await twofaIsRateLimited(env, challengeRateScope)) {
+            return twofaRateLimitResponse(corsHeaders);
+          }
+          const validProof = await twofaVerifyProof(env, challenge.username, body.code);
+          if (!validProof) {
+            challenge.attempts = (Number(challenge.attempts) || 0) + 1;
+            if (challenge.attempts >= TWOFA_RATE_LIMIT_MAX_ATTEMPTS) {
+              await env.AUTH_KV.delete(challengeKey);
+            } else {
+              await env.AUTH_KV.put(challengeKey, JSON.stringify(challenge), {
+                expirationTtl: TWOFA_CHALLENGE_TTL_SECONDS
+              });
+            }
+            await twofaRecordFailure(env, rateScope);
+            await twofaRecordFailure(env, challengeRateScope);
+            return errorResponse("Codice 2FA non valido o già utilizzato.", corsHeaders, 401);
+          }
+          await env.AUTH_KV.delete(challengeKey);
+          await twofaClearFailures(env, rateScope);
+          await twofaClearFailures(env, challengeRateScope);
+          const extra = {};
+          if (body.rememberDevice === true) {
+            const deviceId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challenge.deviceId)
+              ? challenge.deviceId
+              : crypto.randomUUID();
+            const trustedDeviceTokenBytes = new Uint8Array(32);
+            crypto.getRandomValues(trustedDeviceTokenBytes);
+            const trustedDeviceToken = base64UrlEncode(trustedDeviceTokenBytes);
+            const createdAt = Math.floor(Date.now() / 1000);
+            const expiresAt = createdAt + TRUSTED_DEVICE_TTL_SECONDS;
+            await env.AUTH_KV.put(`${twofaDevicePrefix(challenge.username)}${deviceId}`, JSON.stringify({
+              tokenHash: base64UrlEncode(await twofaSha256(textEncoder.encode(trustedDeviceToken))),
+              deviceId,
+              label: twofaDeviceLabel(request),
+              createdAt,
+              lastUsedAt: createdAt,
+              expiresAt
+            }), { expirationTtl: TRUSTED_DEVICE_TTL_SECONDS });
+            extra.trustedDeviceToken = trustedDeviceToken;
+            extra.deviceId = deviceId;
+          }
+          return await issueSession(env, corsHeaders, challenge.username, extra);
         }
 
         const session = await getSession(env, body.token);
@@ -597,6 +943,132 @@ export default {
         if (body.tipo === "logout") {
           await env.AUTH_KV.delete(session.key);
           return privateJsonResponse({ success: true }, corsHeaders);
+        }
+
+        if (body.tipo === "twofa_setup_start") {
+          const rateScope = `sensitive:${twofaClientAddress(request)}:${session.session.username}`;
+          if (await twofaConsumeOperation(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          if (await env.AUTH_KV.get(`twofa:${twofaUsernameKey(session.session.username)}`)) {
+            return errorResponse("La verifica in due fattori è già attiva.", corsHeaders, 409);
+          }
+          const secretBytes = new Uint8Array(20);
+          crypto.getRandomValues(secretBytes);
+          const secret = twofaBase32Encode(secretBytes);
+          await env.AUTH_KV.put(`twofa_setup:${twofaUsernameKey(session.session.username)}`, JSON.stringify({
+            secret,
+            createdAt: Math.floor(Date.now() / 1000)
+          }), { expirationTtl: TWOFA_SETUP_TTL_SECONDS });
+          const label = `${TWOFA_ISSUER}:${session.session.username}`;
+          const uri = `otpauth://totp/${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(TWOFA_ISSUER)}&algorithm=SHA1&digits=6&period=${TWOFA_TOTP_STEP_SECONDS}`;
+          return privateJsonResponse({ success: true, secret, uri }, corsHeaders);
+        }
+
+        if (body.tipo === "twofa_setup_confirm") {
+          const username = session.session.username;
+          const rateScope = `sensitive:${twofaClientAddress(request)}:${username}`;
+          if (await twofaIsRateLimited(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          if (await twofaConsumeOperation(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          const setupKey = `twofa_setup:${twofaUsernameKey(username)}`;
+          const setupValue = await env.AUTH_KV.get(setupKey);
+          if (!setupValue) return errorResponse("La configurazione 2FA è scaduta. Avviala di nuovo.", corsHeaders, 400);
+          const setup = JSON.parse(setupValue);
+          const step = await twofaVerifyTotp(setup.secret, body.code);
+          if (step === null) {
+            await twofaRecordFailure(env, rateScope);
+            return errorResponse("Codice Authenticator non valido.", corsHeaders, 401);
+          }
+          await env.AUTH_KV.put(`twofa:${twofaUsernameKey(username)}`, JSON.stringify({
+            secret: setup.secret,
+            lastTimeStep: step
+          }));
+          await env.AUTH_KV.delete(setupKey);
+          const backupCodes = await twofaGenerateBackupCodes(env, username);
+          await twofaClearFailures(env, rateScope);
+          return privateJsonResponse({ success: true, backupCodes, remainingBackupCodes: backupCodes.length }, corsHeaders);
+        }
+
+        if (body.tipo === "twofa_status" || body.tipo === "twofa_devices") {
+          const username = session.session.username;
+          const enabled = Boolean(await env.AUTH_KV.get(`twofa:${twofaUsernameKey(username)}`));
+          const backupValue = await env.AUTH_KV.get(`twofa_backup:${twofaUsernameKey(username)}`);
+          let remainingBackupCodes = 0;
+          if (backupValue) {
+            try {
+              const records = JSON.parse(backupValue);
+              remainingBackupCodes = Array.isArray(records) ? records.length : 0;
+            } catch {
+              await env.AUTH_KV.delete(`twofa_backup:${twofaUsernameKey(username)}`);
+            }
+          }
+          const devices = [];
+          for (const key of await twofaListDevices(env, username)) {
+            const value = await env.AUTH_KV.get(key.name);
+            if (!value) continue;
+            try {
+              const record = JSON.parse(value);
+              if (!Number.isInteger(record.expiresAt) || record.expiresAt <= Math.floor(Date.now() / 1000)) {
+                await env.AUTH_KV.delete(key.name);
+                continue;
+              }
+              devices.push({
+                deviceId: record.deviceId,
+                label: record.label,
+                createdAt: record.createdAt,
+                lastUsedAt: record.lastUsedAt,
+                expiresAt: record.expiresAt,
+                current: record.deviceId === body.deviceId
+              });
+            } catch {
+              await env.AUTH_KV.delete(key.name);
+            }
+          }
+          return privateJsonResponse({ success: true, enabled, remainingBackupCodes, devices }, corsHeaders);
+        }
+
+        if (body.tipo === "twofa_backup_regenerate" || body.tipo === "twofa_disable") {
+          const username = session.session.username;
+          const rateScope = `sensitive:${twofaClientAddress(request)}:${username}`;
+          if (await twofaIsRateLimited(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          if (await twofaConsumeOperation(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          const validProof = await twofaVerifyProof(env, username, body.code);
+          if (!validProof) {
+            await twofaRecordFailure(env, rateScope);
+            return errorResponse("Codice Authenticator o codice di backup non valido.", corsHeaders, 401);
+          }
+          await twofaClearFailures(env, rateScope);
+          if (body.tipo === "twofa_backup_regenerate") {
+            const backupCodes = await twofaGenerateBackupCodes(env, username);
+            return privateJsonResponse({ success: true, backupCodes, remainingBackupCodes: backupCodes.length }, corsHeaders);
+          }
+          await env.AUTH_KV.delete(`twofa:${twofaUsernameKey(username)}`);
+          await env.AUTH_KV.delete(`twofa_backup:${twofaUsernameKey(username)}`);
+          await env.AUTH_KV.delete(`twofa_setup:${twofaUsernameKey(username)}`);
+          for (const key of await twofaListDevices(env, username)) await env.AUTH_KV.delete(key.name);
+          return privateJsonResponse({ success: true }, corsHeaders);
+        }
+
+        if (body.tipo === "twofa_device_revoke" || body.tipo === "twofa_devices_revoke") {
+          const username = session.session.username;
+          const rateScope = `sensitive:${twofaClientAddress(request)}:${username}`;
+          if (await twofaIsRateLimited(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          if (await twofaConsumeOperation(env, rateScope)) return twofaRateLimitResponse(corsHeaders);
+          const devices = await twofaListDevices(env, username);
+          if (body.tipo === "twofa_device_revoke") {
+            if (typeof body.deviceId !== "string" ||
+                !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.deviceId)) {
+              await twofaRecordFailure(env, rateScope);
+              return errorResponse("Identificativo dispositivo non valido.", corsHeaders, 400);
+            }
+            await env.AUTH_KV.delete(`${twofaDevicePrefix(username)}${body.deviceId}`);
+            await twofaClearFailures(env, rateScope);
+            return privateJsonResponse({ success: true, currentRevoked: body.deviceId === body.currentDeviceId }, corsHeaders);
+          }
+          for (const key of devices) await env.AUTH_KV.delete(key.name);
+          await twofaClearFailures(env, rateScope);
+          return privateJsonResponse({
+            success: true,
+            currentRevoked: devices.some(key => key.name.endsWith(`:${body.currentDeviceId}`))
+          }, corsHeaders);
         }
 
         if (body.tipo === "get_drive_pdf_url") {
