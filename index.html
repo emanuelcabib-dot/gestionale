@@ -441,6 +441,17 @@
                     <button type="button" class="settings-tab-btn" onclick="switchReportTab(event, 'paneReportVerificaBustePaga')">💶 Verifica Buste Paga</button>
                 </div>
 
+                <div id="modalSceltaPDFReport" role="dialog" aria-modal="true" aria-labelledby="titoloSceltaPDFReport" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,.45); align-items:center; justify-content:center; padding:20px; box-sizing:border-box;">
+                    <div style="width:min(100%, 440px); background:#fff; padding:24px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,.2);">
+                        <h3 id="titoloSceltaPDFReport" style="margin:0 0 18px; border:0;">Contenuto del PDF</h3>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <button type="button" id="btnSoloReportPDF" style="flex:1; min-width:140px; background:#34495e;">Solo report</button>
+                            <button type="button" id="btnReportDettaglioPDF" style="flex:1; min-width:180px; background:#2980b9;">Report + dettaglio record</button>
+                            <button type="button" id="btnAnnullaSceltaPDF" style="background:#7f8c8d;">Annulla</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="paneReportAssenzeMensile" class="settings-pane report-pane active">
                     <form id="formReport" class="filtri-bar" onsubmit="event.preventDefault(); salvaEGeneraPDF();">
                         <div class="form-group">
@@ -462,7 +473,9 @@
                         </div>
                         <button type="submit" id="btnReport" class="btn-submit" style="background-color: #9b59b6;">Genera PDF Mensile (Assenze)</button>
                     </form>
-                    <div style="overflow-x:auto;">
+                    <div id="riepilogoAssenzeMensile" aria-live="polite"></div>
+                    <button type="button" id="btnDettaglioAssenzeMensile" aria-expanded="false" onclick="toggleDettaglioReport('paneReportAssenzeMensile')" style="margin:0 0 14px; background:#536b7a;">Visualizza assenze</button>
+                    <div id="contenitoreDettaglioAssenzeMensile" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                             <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaAssenzeMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
@@ -484,7 +497,9 @@
                         </div>
                         <button type="submit" id="btnReportAnnual" class="btn-submit" style="background-color: #2c3e50;">Genera PDF Annuale (Assenze)</button>
                     </form>
-                    <div style="overflow-x:auto;">
+                    <div id="riepilogoAssenzeAnnuale" aria-live="polite"></div>
+                    <button type="button" id="btnDettaglioAssenzeAnnuale" aria-expanded="false" onclick="toggleDettaglioReport('paneReportAssenzeAnnuale')" style="margin:0 0 14px; background:#536b7a;">Visualizza assenze</button>
+                    <div id="contenitoreDettaglioAssenzeAnnuale" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                             <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Tipo assenza</th><th style="padding:10px;">Quantità</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaAssenzeAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
@@ -513,7 +528,9 @@
                         </div>
                         <button type="submit" id="btnReportTimbMensile" class="btn-submit" style="background-color: #2980b9;">Genera PDF Mensile (Timbrature)</button>
                     </form>
-                    <div style="overflow-x:auto;">
+                    <div id="riepilogoTimbratureMensile" aria-live="polite"></div>
+                    <button type="button" id="btnDettaglioTimbratureMensile" aria-expanded="false" onclick="toggleDettaglioReport('paneReportTimbratureMensile')" style="margin:0 0 14px; background:#536b7a;">Visualizza timbrature</button>
+                    <div id="contenitoreDettaglioTimbratureMensile" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                             <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaTimbratureMensile"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
@@ -535,7 +552,9 @@
                         </div>
                         <button type="submit" id="btnReportTimbAnnual" class="btn-submit" style="background-color: #16a085;">Genera PDF Annuale (Timbrature)</button>
                     </form>
-                    <div style="overflow-x:auto;">
+                    <div id="riepilogoTimbratureAnnuale" aria-live="polite"></div>
+                    <button type="button" id="btnDettaglioTimbratureAnnuale" aria-expanded="false" onclick="toggleDettaglioReport('paneReportTimbratureAnnuale')" style="margin:0 0 14px; background:#536b7a;">Visualizza timbrature</button>
+                    <div id="contenitoreDettaglioTimbratureAnnuale" style="display:none; overflow-x:auto;">
                         <table style="width:100%; border-collapse:collapse; background:white; font-size:14px; text-align:left; border:1px solid #e0e0e0;">
                             <thead><tr style="background:#2c3e50; color:white;"><th style="padding:10px;">Data</th><th style="padding:10px;">Evento</th><th style="padding:10px;">Orario</th><th style="padding:10px;">Note</th></tr></thead>
                             <tbody id="tabellaAnteprimaTimbratureAnnuale"><tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento anteprima...</td></tr></tbody>
@@ -3141,7 +3160,91 @@
             document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();
         }
 
-        async function generaPDFTuttiIMesi(anno, tipoReport) {
+        function scegliOpzioneEsportazioneReport() {
+            return new Promise(resolve => {
+                const modal = document.getElementById('modalSceltaPDFReport');
+                const soloReport = document.getElementById('btnSoloReportPDF');
+                const conDettaglio = document.getElementById('btnReportDettaglioPDF');
+                const annulla = document.getElementById('btnAnnullaSceltaPDF');
+                const concludi = scelta => {
+                    modal.style.display = 'none';
+                    soloReport.onclick = null;
+                    conDettaglio.onclick = null;
+                    annulla.onclick = null;
+                    modal.onclick = null;
+                    document.removeEventListener('keydown', gestisciTasto);
+                    resolve(scelta);
+                };
+                const gestisciTasto = evento => {
+                    if (evento.key === 'Escape') concludi(null);
+                };
+                soloReport.onclick = () => concludi(false);
+                conDettaglio.onclick = () => concludi(true);
+                annulla.onclick = () => concludi(null);
+                modal.onclick = evento => {
+                    if (evento.target === modal) concludi(null);
+                };
+                document.addEventListener('keydown', gestisciTasto);
+                modal.style.display = 'flex';
+                soloReport.focus();
+            });
+        }
+
+        function creaTabelleDettaglioPDF(tipo, records) {
+            const assenze = tipo === 'assenze';
+            const headers = assenze
+                ? ['Data', 'Tipo assenza', 'Quantità', 'Note']
+                : ['Data', 'Evento', 'Orario', 'Note'];
+            const righe = records.map(record => {
+                const campi = record.fields || {};
+                return assenze
+                    ? [formattaDataTabella(campi.Data), campi.Tipo_Assenza || '-', campi.Quantita ?? '-', campi.Note || '-']
+                    : [formattaDataTabella(campi.Data), campi.Evento || '-', `${String(campi.Ora ?? 0).padStart(2, '0')}:${String(campi.Minuti ?? 0).padStart(2, '0')}`, campi.Note || '-'];
+            });
+            if (!righe.length) righe.push([`Nessun${assenze ? 'a assenza' : 'a timbratura'} nel periodo selezionato.`, '', '', '']);
+            const capacitaCelle = [10, 21, 12, 38];
+            const altezze = righe.map(riga => Math.max(22, ...riga.map((cella, indice) => Math.ceil(String(cella ?? '').length / capacitaCelle[indice]) * 11 + 10)));
+            return [{
+                subtitle: 'Dettaglio singoli record',
+                headers,
+                widths: [75, 145, 75, 230],
+                numericColumns: [],
+                rows: righe,
+                rowHeights: altezze
+            }];
+        }
+
+        async function caricaRecordPeriodoReport(tipo, anno, mese = null) {
+            const anni = anno === 'TUTTI'
+                ? Array.from(new Set(Array.from(document.querySelectorAll('.select-report-anno option'))
+                    .map(opzione => opzione.value)
+                    .filter(valore => /^\d{4}$/.test(valore))))
+                : [String(anno)];
+            const tuttiRecord = [];
+            for (const annoCorrente of anni) {
+                const response = await apiFetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'get_storico', token: sessionToken, anno: annoCorrente })
+                });
+                const dati = await response.json();
+                if (!response.ok || !dati.success) throw new Error('Impossibile caricare i record del periodo selezionato.');
+                tuttiRecord.push(...(dati[tipo] || []));
+            }
+            const limiteMese = mese === 'TUTTI'
+                ? (Number(anno) === new Date().getFullYear() ? new Date().getMonth() + 1 : 12)
+                : null;
+            const numeroMese = mese && mese !== 'TUTTI' ? nomiMesi.indexOf(mese) : null;
+            const records = tuttiRecord.filter(record => {
+                const parti = estraiPartiData(record.fields?.Data);
+                return (!anno || anno === 'TUTTI' || parti.aa === String(anno))
+                    && (numeroMese === null || Number(parti.mm) === numeroMese)
+                    && (limiteMese === null || Number(parti.mm) <= limiteMese);
+            });
+            return ordinaRecordCronologicamente(records, tipo);
+        }
+
+        async function generaPDFTuttiIMesi(anno, tipoReport, includiDettagli = false) {
             const annoNumero = Number(anno);
             const dataCorrente = new Date();
             const annoCorrente = dataCorrente.getFullYear();
@@ -3178,6 +3281,18 @@
                 pagine.forEach(pagina => pdfUnito.addPage(pagina));
             }
 
+            if (includiDettagli) {
+                const records = await caricaRecordPeriodoReport(tipo, anno, 'TUTTI');
+                const dettaglioPDF = await buildPdfFromText(titoloAlto, 'Dettaglio singoli record', '', '', {
+                    filtroTesto: `Anno: ${anno} | Mesi inclusi: ${mesi.join(', ')}`,
+                    tables: creaTabelleDettaglioPDF(tipo, records),
+                    restituisciBytes: true
+                });
+                const documentoDettaglio = await PDFDocument.load(dettaglioPDF);
+                const pagineDettaglio = await pdfUnito.copyPages(documentoDettaglio, documentoDettaglio.getPageIndices());
+                pagineDettaglio.forEach(pagina => pdfUnito.addPage(pagina));
+            }
+
             const fontNormale = await pdfUnito.embedFont(StandardFonts.Helvetica);
             const coloreTestoGrigio = rgb(0.35, 0.38, 0.42);
             const dataEmissione = `Emesso il ${new Date().toLocaleDateString('it-IT')}`;
@@ -3208,19 +3323,26 @@
             try {
                 if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
                 if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const includiDettagli = await scegliOpzioneEsportazioneReport();
+                if (includiDettagli === null) return;
                 const annoSel = document.getElementById('rep_anno').value;
                 const meseSel = document.getElementById('rep_mese').value;
                 if (meseSel === 'TUTTI') {
-                    await generaPDFTuttiIMesi(annoSel, 'assenze');
+                    await generaPDFTuttiIMesi(annoSel, 'assenze', includiDettagli);
                     return;
                 }
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
+                    const tabellePDF = tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }));
+                    if (includiDettagli) {
+                        const records = await caricaRecordPeriodoReport('assenze', annoSel, meseSel);
+                        tabellePDF.push(...creaTabelleDettaglioPDF('assenze', records));
+                    }
                     await buildPdfFromText("PROSPETTO RIEPILOGATIVO", "Assenze mensili", '', `Report_${resJson.mese}_${resJson.anno}.pdf`, {
                         filtroTesto: `Anno: ${resJson.anno} | Mese: ${resJson.mese}`,
-                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                        tables: tabellePDF
                     });
                 } else { mostraAlert("Errore generazione report o limite API raggiunto."); }
             } catch (error) {
@@ -3233,14 +3355,21 @@
             try {
                 if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
                 if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const includiDettagli = await scegliOpzioneEsportazioneReport();
+                if (includiDettagli === null) return;
                 const annoSel = document.getElementById('rep_anno_annual').value;
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_annuale", token: sessionToken, anno: annoSel }) });
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'assenze');
+                    const tabellePDF = tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }));
+                    if (includiDettagli) {
+                        const records = await caricaRecordPeriodoReport('assenze', annoSel);
+                        tabellePDF.push(...creaTabelleDettaglioPDF('assenze', records));
+                    }
                     await buildPdfFromText("PROSPETTO RIEPILOGATIVO", "Assenze annuali", '', `Report_Annuale_${resJson.anno}.pdf`, {
                         filtroTesto: `Anno: ${resJson.anno}`,
-                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                        tables: tabellePDF
                     });
                 } else { mostraAlert("Errore generazione report annuale."); }
             } catch (error) {
@@ -3253,19 +3382,26 @@
             try {
                 if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
                 if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const includiDettagli = await scegliOpzioneEsportazioneReport();
+                if (includiDettagli === null) return;
                 const annoSel = document.getElementById('rep_timb_anno').value;
                 const meseSel = document.getElementById('rep_timb_mese').value;
                 if (meseSel === 'TUTTI') {
-                    await generaPDFTuttiIMesi(annoSel, 'timbrature');
+                    await generaPDFTuttiIMesi(annoSel, 'timbrature', includiDettagli);
                     return;
                 }
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "genera_report_timbrature_mensile", token: sessionToken, anno: annoSel, mese: meseSel }) });
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
+                    const tabellePDF = tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }));
+                    if (includiDettagli) {
+                        const records = await caricaRecordPeriodoReport('presenze', annoSel, meseSel);
+                        tabellePDF.push(...creaTabelleDettaglioPDF('presenze', records));
+                    }
                     await buildPdfFromText("PROSPETTO TIMBRATURE", "Timbrature mensili", '', `Timbrature_${resJson.mese}_${resJson.anno}.pdf`, {
                         filtroTesto: `Anno: ${resJson.anno} | Mese: ${resJson.mese}`,
-                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                        tables: tabellePDF
                     });
                 } else { mostraAlert("Errore generazione report timbrature mensile."); }
             } catch (error) {
@@ -3278,14 +3414,21 @@
             try {
                 if (!sessionToken) { mostraAlert("Sessione non valida."); return; }
                 if (typeof PDFLib === 'undefined') throw new Error("Il modulo PDF non è stato caricato.");
+                const includiDettagli = await scegliOpzioneEsportazioneReport();
+                if (includiDettagli === null) return;
                 const annoSel = document.getElementById('rep_timb_anno_annual').value;
                 const response = await apiFetch(WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: "get_report_timbrature_annuale", token: sessionToken, anno: annoSel }) });
                 const resJson = await response.json();
                 if (response.ok && resJson.success) {
                     const tables = creaTabelleReportDaTesto(resJson.testoReport, 'timbrature');
+                    const tabellePDF = tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }));
+                    if (includiDettagli) {
+                        const records = await caricaRecordPeriodoReport('presenze', annoSel);
+                        tabellePDF.push(...creaTabelleDettaglioPDF('presenze', records));
+                    }
                     await buildPdfFromText("PROSPETTO TIMBRATURE", "Timbrature annuali", '', `Timbrature_Annuale_${resJson.anno}.pdf`, {
                         filtroTesto: `Anno: ${resJson.anno}`,
-                        tables: tables.map(table => ({ ...table, hideHeaders: true, headers: ['Voce', 'Valore'], widths: [260, 265], numericColumns: [1] }))
+                        tables: tabellePDF
                     });
                 } else { mostraAlert("Errore generazione report timbrature annuale."); }
             } catch (error) {
@@ -3608,6 +3751,8 @@
         let datiAnteprimaReport = null;
         let annoDatiAnteprimaReport = null;
         let richiestaAnteprimaReport = 0;
+        let richiestaProspettoAnteprima = 0;
+        const cacheProspettiAnteprima = new Map();
         let ordinamentoCronologico = 'desc';
         let vistaStoricoAttiva = 'presenze';
         const nomiMesi = ["", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
@@ -3694,35 +3839,122 @@
             }
         }
 
-        function configurazioneAnteprimaReport() {
-            const paneId = document.querySelector('#report_panel .report-pane.active')?.id;
+        function configurazioneAnteprimaReport(paneId = document.querySelector('#report_panel .report-pane.active')?.id) {
             const configurazioni = {
-                paneReportAssenzeMensile: { tipo: 'assenze', annoId: 'rep_anno', meseId: 'rep_mese', tabellaId: 'tabellaAnteprimaAssenzeMensile' },
-                paneReportAssenzeAnnuale: { tipo: 'assenze', annoId: 'rep_anno_annual', tabellaId: 'tabellaAnteprimaAssenzeAnnuale' },
-                paneReportTimbratureMensile: { tipo: 'presenze', annoId: 'rep_timb_anno', meseId: 'rep_timb_mese', tabellaId: 'tabellaAnteprimaTimbratureMensile' },
-                paneReportTimbratureAnnuale: { tipo: 'presenze', annoId: 'rep_timb_anno_annual', tabellaId: 'tabellaAnteprimaTimbratureAnnuale' }
+                paneReportAssenzeMensile: { tipo: 'assenze', annoId: 'rep_anno', meseId: 'rep_mese', summaryId: 'riepilogoAssenzeMensile', tabellaId: 'tabellaAnteprimaAssenzeMensile', detailContainerId: 'contenitoreDettaglioAssenzeMensile', detailButtonId: 'btnDettaglioAssenzeMensile' },
+                paneReportAssenzeAnnuale: { tipo: 'assenze', annoId: 'rep_anno_annual', summaryId: 'riepilogoAssenzeAnnuale', tabellaId: 'tabellaAnteprimaAssenzeAnnuale', detailContainerId: 'contenitoreDettaglioAssenzeAnnuale', detailButtonId: 'btnDettaglioAssenzeAnnuale' },
+                paneReportTimbratureMensile: { tipo: 'presenze', annoId: 'rep_timb_anno', meseId: 'rep_timb_mese', summaryId: 'riepilogoTimbratureMensile', tabellaId: 'tabellaAnteprimaTimbratureMensile', detailContainerId: 'contenitoreDettaglioTimbratureMensile', detailButtonId: 'btnDettaglioTimbratureMensile' },
+                paneReportTimbratureAnnuale: { tipo: 'presenze', annoId: 'rep_timb_anno_annual', summaryId: 'riepilogoTimbratureAnnuale', tabellaId: 'tabellaAnteprimaTimbratureAnnuale', detailContainerId: 'contenitoreDettaglioTimbratureAnnuale', detailButtonId: 'btnDettaglioTimbratureAnnuale' }
             };
             return configurazioni[paneId] || null;
         }
 
-        function aggiornaAnteprimaReport() {
-            if (!datiAnteprimaReport) return;
+        async function richiediTestoProspettoReport(tipo, anno, mese = null) {
+            const tipoRichiesta = tipo === 'assenze'
+                ? (mese ? 'genera_report_mensile' : 'get_report_annuale')
+                : (mese ? 'genera_report_timbrature_mensile' : 'get_report_timbrature_annuale');
+            const body = { tipo: tipoRichiesta, token: sessionToken, anno };
+            if (mese) body.mese = mese;
+            const response = await apiFetch(WORKER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const risultato = await response.json();
+            if (!response.ok || !risultato.success) throw new Error(risultato.error || 'Impossibile caricare il prospetto.');
+            return risultato.testoReport || '';
+        }
+
+        async function caricaProspettiAnteprima(configurazione, anno, mese) {
+            const chiaveBase = `${configurazione.tipo}:${anno}`;
+            if (configurazione.meseId && mese === 'TUTTI') {
+                const annoNumero = Number(anno);
+                const oggi = new Date();
+                const numeroMesi = annoNumero === oggi.getFullYear() ? oggi.getMonth() + 1 : (annoNumero < oggi.getFullYear() ? 12 : 0);
+                const mesi = nomiMesi.slice(1, numeroMesi + 1);
+                const prospetti = [];
+                for (const meseCorrente of mesi) {
+                    const chiave = `${chiaveBase}:${meseCorrente}`;
+                    if (!cacheProspettiAnteprima.has(chiave)) {
+                        cacheProspettiAnteprima.set(chiave, richiediTestoProspettoReport(configurazione.tipo, anno, meseCorrente)
+                            .catch(error => { cacheProspettiAnteprima.delete(chiave); throw error; }));
+                    }
+                    prospetti.push({ titolo: `${meseCorrente} ${anno}`, testo: await cacheProspettiAnteprima.get(chiave) });
+                }
+                return prospetti;
+            }
+
+            const chiave = `${chiaveBase}:${mese || 'annuale'}`;
+            if (!cacheProspettiAnteprima.has(chiave)) {
+                cacheProspettiAnteprima.set(chiave, richiediTestoProspettoReport(configurazione.tipo, anno, mese)
+                    .catch(error => { cacheProspettiAnteprima.delete(chiave); throw error; }));
+            }
+            const titolo = mese ? `${mese} ${anno}` : (anno === 'TUTTI' ? 'Tutti gli anni' : `Anno ${anno}`);
+            return [{ titolo, testo: await cacheProspettiAnteprima.get(chiave) }];
+        }
+
+        function renderizzaProspettiAnteprima(configurazione, prospetti) {
+            const contenitore = document.getElementById(configurazione.summaryId);
+            contenitore.innerHTML = prospetti.map(prospetto => {
+                const tabelle = creaTabelleReportDaTesto(prospetto.testo, configurazione.tipo);
+                const contenutoTabelle = tabelle.length ? tabelle.map(tabella => `
+                    <section style="margin:0 0 14px; border:1px solid #dfe5e8; border-radius:6px; overflow:hidden; background:#fff;">
+                        <h4 style="margin:0; padding:10px 12px; color:#2c3e50; background:#f2f5f6; border-bottom:1px solid #dfe5e8;">${escapeHtmlReport(tabella.subtitle || 'Riepilogo')}</h4>
+                        <div style="overflow-x:auto;">
+                            <table style="width:100%; border-collapse:collapse; text-align:left; font-size:14px;">
+                                <thead><tr style="background:#2c3e50; color:#fff;"><th style="padding:9px 12px;">Voce</th><th style="padding:9px 12px;">Valore</th></tr></thead>
+                                <tbody>${tabella.rows.length ? tabella.rows.map((riga, indice) => `<tr style="border-bottom:1px solid #e0e0e0; background:${indice % 2 ? '#f8f9fa' : '#fff'};"><td style="padding:9px 12px;">${escapeHtmlReport(riga[0])}</td><td style="padding:9px 12px;">${escapeHtmlReport(riga[1])}</td></tr>`).join('') : '<tr><td colspan="2" style="padding:10px 12px; color:#7f8c8d;">Nessun dato riepilogativo.</td></tr>'}</tbody>
+                            </table>
+                        </div>
+                    </section>`).join('') : '<p style="padding:12px; color:#7f8c8d;">Nessun dato riepilogativo disponibile.</p>';
+                return `<div style="margin-bottom:20px;"><h3 style="margin:14px 0 10px;">${escapeHtmlReport(prospetto.titolo)}</h3>${contenutoTabelle}</div>`;
+            }).join('');
+        }
+
+        function toggleDettaglioReport(paneId) {
+            const configurazione = configurazioneAnteprimaReport(paneId);
+            if (!configurazione) return;
+            const contenitore = document.getElementById(configurazione.detailContainerId);
+            const pulsante = document.getElementById(configurazione.detailButtonId);
+            const visibile = contenitore.style.display === 'none';
+            contenitore.style.display = visibile ? 'block' : 'none';
+            pulsante.setAttribute('aria-expanded', String(visibile));
+            pulsante.textContent = `${visibile ? 'Nascondi' : 'Visualizza'} ${configurazione.tipo === 'assenze' ? 'assenze' : 'timbrature'}`;
+            aggiornaAnteprimaReport();
+        }
+
+        async function aggiornaAnteprimaReport() {
             const configurazione = configurazioneAnteprimaReport();
             if (!configurazione) return;
             const anno = document.getElementById(configurazione.annoId).value;
-            if (anno !== annoDatiAnteprimaReport) {
-                caricaAnteprimaReport();
-                return;
-            }
             const meseSelezionato = configurazione.meseId
                 ? document.getElementById(configurazione.meseId).value
+                : null;
+            const richiestaProspetto = ++richiestaProspettoAnteprima;
+            const contenitoreRiepilogo = document.getElementById(configurazione.summaryId);
+            contenitoreRiepilogo.innerHTML = '<p style="padding:12px; color:#7f8c8d;">Caricamento prospetto...</p>';
+            caricaProspettiAnteprima(configurazione, anno, meseSelezionato).then(prospetti => {
+                const configurazioneAttiva = configurazioneAnteprimaReport();
+                if (richiestaProspetto !== richiestaProspettoAnteprima || configurazioneAttiva?.summaryId !== configurazione.summaryId) return;
+                renderizzaProspettiAnteprima(configurazione, prospetti);
+            }).catch(error => {
+                if (richiestaProspetto !== richiestaProspettoAnteprima) return;
+                console.error('Errore caricamento prospetto anteprima:', error);
+                contenitoreRiepilogo.innerHTML = '<p style="padding:12px; color:#c0392b;">Impossibile caricare il prospetto riepilogativo.</p>';
+            });
+
+            const mese = meseSelezionato && meseSelezionato !== 'TUTTI'
+                ? String(nomiMesi.indexOf(meseSelezionato)).padStart(2, '0')
                 : null;
             const limiteMeseTutti = meseSelezionato === 'TUTTI'
                 ? (Number(anno) === new Date().getFullYear() ? new Date().getMonth() + 1 : 12)
                 : null;
-            const mese = meseSelezionato && meseSelezionato !== 'TUTTI'
-                ? String(nomiMesi.indexOf(meseSelezionato)).padStart(2, '0')
-                : null;
+            const corpoDettaglio = document.getElementById(configurazione.tabellaId);
+            if (!datiAnteprimaReport || anno !== annoDatiAnteprimaReport) {
+                corpoDettaglio.innerHTML = '<tr><td colspan="4" style="padding:15px; text-align:center; color:#7f8c8d;">Caricamento record...</td></tr>';
+                caricaAnteprimaReport();
+                return;
+            }
             const recordFiltrati = ordinaRecordCronologicamente(datiAnteprimaReport[configurazione.tipo].filter(record => {
                 const parti = estraiPartiData(record.fields.Data);
                 return parti.aa === anno
@@ -3730,7 +3962,7 @@
                     && (limiteMeseTutti === null || Number(parti.mm) <= limiteMeseTutti);
             }), configurazione.tipo);
             const eAssenza = configurazione.tipo === 'assenze';
-            document.getElementById(configurazione.tabellaId).innerHTML = recordFiltrati.length ? recordFiltrati.map(record => {
+            corpoDettaglio.innerHTML = recordFiltrati.length ? recordFiltrati.map(record => {
                 const campi = record.fields;
                 return eAssenza ? `
                     <tr style="border-bottom:1px solid #e0e0e0;">
@@ -3745,7 +3977,7 @@
                         <td style="padding:10px;">${escapeHtmlReport(String(campi.Ora ?? 0).padStart(2, '0'))}:${escapeHtmlReport(String(campi.Minuti ?? 0).padStart(2, '0'))}</td>
                         <td style="padding:10px;">${escapeHtmlReport(campi.Note)}</td>
                     </tr>`;
-            }).join('') : `<tr><td colspan="4" style="padding:15px; text-align:center;">Nessun${eAssenza ? "a assenza" : "a timbratura"} per i filtri selezionati.</td></tr>`;
+                    }).join('') : `<tr><td colspan="4" style="padding:15px; text-align:center;">Nessun${eAssenza ? "a assenza" : "a timbratura"} per i filtri selezionati.</td></tr>`;
         }
 
         function cambiaVistaStorico(nuovaVista) {
