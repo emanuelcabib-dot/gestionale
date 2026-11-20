@@ -1505,7 +1505,7 @@
                 });
                 const selectAnno = document.getElementById('dashboardAnno');
                 const selezioneAnno = selectAnno.value;
-                selectAnno.innerHTML = [...anni].sort((a, b) => Number(b) - Number(a)).map(anno => `<option value="${anno}">${anno}</option>`).join('');
+                selectAnno.innerHTML = [...anni].sort((a, b) => Number(b) - Number(a)).map(anno => `<option value="${escapeHtmlReport(anno)}">${escapeHtmlReport(anno)}</option>`).join('');
                 selectAnno.value = anni.has(selezioneAnno) ? selezioneAnno : String(new Date().getFullYear());
                 const selectMese = document.getElementById('dashboardMese');
                 if (!selectMese.options.length) {
@@ -1831,9 +1831,19 @@
         }
 
         function logout(messaggio = '') {
+            const tokenDaRevocare = sessionToken;
             window.clearTimeout(inactivityTimeoutId);
             inactivityTimeoutId = null;
             sessionToken = "";
+            if (tokenDaRevocare) {
+                fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'logout', token: tokenDaRevocare })
+                }).then(response => {
+                    if (!response.ok) console.warn('Revoca della sessione non riuscita.');
+                }).catch(error => console.warn('Impossibile revocare la sessione:', error));
+            }
             cacheDatiGlobali = null;
             timestampCacheDatiGlobali = 0;
             eventiGiornoCorrente = [];
@@ -2001,7 +2011,7 @@
             
             let htmlOptions = '';
             for (let a = annoCorrente; a >= annoInizio; a--) {
-                htmlOptions += `<option value="${a}">${a}</option>`;
+                htmlOptions += `<option value="${escapeHtmlReport(a)}">${escapeHtmlReport(a)}</option>`;
             }
 
             document.querySelectorAll('.select-anno').forEach(select => {
@@ -2062,7 +2072,7 @@
                 if (resStorico.ok) {
                     const dS = await resStorico.json();
                     const presenze = dS.presenze || [];
-                    txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia nei registri passati (${presenze.length} eventi quest'anno).`;
+                    txtTimbraturePassate.innerHTML = `✅ Nessuna anomalia nei registri passati (${escapeHtmlReport(presenze.length)} eventi quest'anno).`;
 
                     const recordsOggi = presenze.filter(record => {
                         const partiData = estraiPartiData(record.fields.Data);
@@ -2077,12 +2087,12 @@
                         const riepilogoOggi = calcolaRiepilogoGiornata(recordsOggi);
                         cardGiornata.className = eventiOggi.includes("Uscita") ? "home-card success" : "home-card warning";
                         const dettagliOre = riepilogoOggi.completata
-                            ? `• <b>Ore lavorate:</b> ${riepilogoOggi.lavorate}<br>• <b>Straordinari:</b> ${riepilogoOggi.straordinari}<br>• <b>Permessi:</b> ${riepilogoOggi.permessi}`
+                            ? `• <b>Ore lavorate:</b> ${escapeHtmlReport(riepilogoOggi.lavorate)}<br>• <b>Straordinari:</b> ${escapeHtmlReport(riepilogoOggi.straordinari)}<br>• <b>Permessi:</b> ${escapeHtmlReport(riepilogoOggi.permessi)}`
                             : `• <i>Giornata in corso (in attesa di timbratura Uscita per il calcolo definitivo)</i>`;
-                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${eventiOggi.join(', ')}<br><br>📊 <b>Riepilogo ore odierne:</b><br>${dettagliOre}`;
+                        txtGiornata.innerHTML = `📌 <b>Eventi registrati:</b> ${escapeHtmlReport(eventiOggi.join(', '))}<br><br>📊 <b>Riepilogo ore odierne:</b><br>${dettagliOre}`;
                     } else {
                         cardGiornata.className = "home-card";
-                        txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${gg}/${mm}/${aa}).`;
+                        txtGiornata.innerHTML = `📌 Nessuna timbratura registrata oggi (${escapeHtmlReport(gg)}/${escapeHtmlReport(mm)}/${escapeHtmlReport(aa)}).`;
                     }
 
                     const assenze = dS.assenze || [];
@@ -2094,10 +2104,10 @@
                         return t >= oggiEpoch && t <= futuroEpoch;
                     });
                     if (assenzeVicine.length > 0) {
-                        let htmlAss = `🌴 Trovate <b>${assenzeVicine.length}</b> assenze nei prossimi ${giorniAnticipoAssenze} giorni:<ul style="margin:5px 0 0 15px; padding:0; font-size:13px;">`;
+                        let htmlAss = `🌴 Trovate <b>${escapeHtmlReport(assenzeVicine.length)}</b> assenze nei prossimi ${escapeHtmlReport(giorniAnticipoAssenze)} giorni:<ul style="margin:5px 0 0 15px; padding:0; font-size:13px;">`;
                         assenzeVicine.forEach(r => {
                             const f = r.fields;
-                            htmlAss += `<li><b>${formattaDataTabella(f.Data)}</b>: ${f.Tipo_Assenza} (${f.Quantita}) ${f.Note ? '- ' + f.Note : ''}</li>`;
+                            htmlAss += `<li><b>${escapeHtmlReport(formattaDataTabella(f.Data))}</b>: ${escapeHtmlReport(f.Tipo_Assenza)} (${escapeHtmlReport(f.Quantita)}) ${f.Note ? '- ' + escapeHtmlReport(f.Note) : ''}</li>`;
                         });
                         htmlAss += `</ul>`;
                         txtAssenzeProgrammate.innerHTML = htmlAss;
@@ -2248,10 +2258,11 @@
                     <th style="padding:10px;">Parametro</th><th style="padding:10px;">Valore</th><th style="padding:10px;">Descrizione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
+                const id = Number(r.id);
                 html += `<tr style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><b>${r.fields.Parametro}</b></td>
-                    <td style="padding:10px;"><input type="text" id="cfg_val_${r.id}" value="${r.fields.Valore !== undefined ? r.fields.Valore : ''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="text" id="cfg_desc_${r.id}" value="${r.fields.Descrizione !== undefined ? r.fields.Descrizione : ''}" style="padding:6px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><b>${escapeHtmlReport(r.fields.Parametro ?? '')}</b></td>
+                    <td style="padding:10px;"><input type="text" id="cfg_val_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Valore ?? ''))}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="cfg_desc_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Descrizione ?? ''))}" style="padding:6px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -2264,11 +2275,12 @@
                     <th style="padding:10px;">Anno Inizio Validità</th><th style="padding:10px;">Ferie Annuo Spettante</th><th style="padding:10px;">Permessi Annuo Spettante</th><th style="padding:10px; text-align:center;">Azione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr id="tr_contrattuale_${r.id}" style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><input type="number" id="ctr_anno_${r.id}" value="${r.fields.Anno_Inizio_Validita||''}" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="text" id="ctr_fer_${r.id}" value="${r.fields.Ferie_Annuo_Spettante||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="text" id="ctr_perm_${r.id}" value="${r.fields.Permessi_Annuo_Spettante||''}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaContrattualeEsistente(${r.id})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
+                const id = Number(r.id);
+                html += `<tr id="tr_contrattuale_${escapeHtmlReport(id)}" style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="number" id="ctr_anno_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Anno_Inizio_Validita || ''))}" style="padding:6px; width:100px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="ctr_fer_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Ferie_Annuo_Spettante || ''))}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="text" id="ctr_perm_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Permessi_Annuo_Spettante || ''))}" style="padding:6px; width:120px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaContrattualeEsistente(${escapeHtmlReport(id)})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -2316,12 +2328,13 @@
                     <th style="padding:10px;">Nome Evento</th><th style="padding:10px;">Unico al Giorno</th><th style="padding:10px;">Attivo</th><th style="padding:10px;">Ordine</th><th style="padding:10px; text-align:center;">Azione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr id="tr_timbratura_${r.id}" style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><input type="text" id="timb_nome_${r.id}" value="${r.fields.Nome||''}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="checkbox" id="timb_unico_${r.id}" ${r.fields.Unico_Al_Giorno?'checked':''}></td>
-                    <td style="padding:10px;"><input type="checkbox" id="timb_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
-                    <td style="padding:10px;"><input type="number" class="timb-ordine-input" id="timb_ord_${r.id}" value="${r.fields.Ordine||0}" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaTimbraturaEsistente(${r.id})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
+                const id = Number(r.id);
+                html += `<tr id="tr_timbratura_${escapeHtmlReport(id)}" style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="text" id="timb_nome_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Nome || ''))}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="checkbox" id="timb_unico_${escapeHtmlReport(id)}" ${r.fields.Unico_Al_Giorno?'checked':''}></td>
+                    <td style="padding:10px;"><input type="checkbox" id="timb_att_${escapeHtmlReport(id)}" ${r.fields.Attivo?'checked':''}></td>
+                    <td style="padding:10px;"><input type="number" class="timb-ordine-input" id="timb_ord_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Ordine || 0))}" style="padding:6px; width:60px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaTimbraturaEsistente(${escapeHtmlReport(id)})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -2372,11 +2385,12 @@
                     <th style="padding:10px;">Nome Assenza</th><th style="padding:10px;">Blocca Timbrature</th><th style="padding:10px;">Attivo</th><th style="padding:10px; text-align:center;">Azione</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
-                html += `<tr id="tr_assenza_${r.id}" style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><input type="text" id="ass_nome_${r.id}" value="${r.fields.Nome||''}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><input type="checkbox" id="ass_blocc_${r.id}" ${r.fields.Blocca_Timbrature?'checked':''}></td>
-                    <td style="padding:10px;"><input type="checkbox" id="ass_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
-                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaAssenzaEsistente(${r.id})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
+                const id = Number(r.id);
+                html += `<tr id="tr_assenza_${escapeHtmlReport(id)}" style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="text" id="ass_nome_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Nome || ''))}" style="padding:6px; width:180px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><input type="checkbox" id="ass_blocc_${escapeHtmlReport(id)}" ${r.fields.Blocca_Timbrature?'checked':''}></td>
+                    <td style="padding:10px;"><input type="checkbox" id="ass_att_${escapeHtmlReport(id)}" ${r.fields.Attivo?'checked':''}></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaAssenzaEsistente(${escapeHtmlReport(id)})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -2448,15 +2462,16 @@
                 </tr></thead><tbody>`;
             records.forEach(record => {
                 const fields = record.fields || {};
+                const id = Number(record.id);
                 const mese = Number(fields.Mese) || 1;
                 const giorno = Math.min(Number(fields.Giorno) || 1, numeroGiorniFestivita(mese));
-                html += `<tr id="tr_festivita_${record.id}" style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><input type="text" id="fest_descr_${record.id}" value="${escapeHtmlReport(fields.Descrizione || '')}" style="padding:6px; width:220px; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><select id="fest_giorno_${record.id}" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${opzioniGiorniFestivita(mese, giorno)}</select></td>
-                    <td style="padding:10px;"><select id="fest_mese_${record.id}" onchange="aggiornaSelectGiornoFestivita(this, document.getElementById('fest_giorno_${record.id}'))" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${nomiMesi.slice(1).map((nome, indice) => `<option value="${indice + 1}" ${indice + 1 === mese ? 'selected' : ''}>${nome}</option>`).join('')}</select></td>
-                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="fest_ric_${record.id}" ${fields.Ricorrente === true ? 'checked' : ''}></td>
-                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="fest_att_${record.id}" ${fields.Attivo === true ? 'checked' : ''}></td>
-                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaFestivitaEsistente(${Number(record.id)})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
+                html += `<tr id="tr_festivita_${escapeHtmlReport(id)}" style="border-bottom:1px solid #e0e0e0;">
+                    <td style="padding:10px;"><input type="text" id="fest_descr_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(fields.Descrizione || ''))}" style="padding:6px; width:220px; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><select id="fest_giorno_${escapeHtmlReport(id)}" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${opzioniGiorniFestivita(mese, giorno)}</select></td>
+                    <td style="padding:10px;"><select id="fest_mese_${escapeHtmlReport(id)}" onchange="aggiornaSelectGiornoFestivita(this, document.getElementById('fest_giorno_${escapeHtmlReport(id)}'))" style="padding:6px; border:1px solid #ccc; border-radius:4px;">${nomiMesi.slice(1).map((nome, indice) => `<option value="${indice + 1}" ${indice + 1 === mese ? 'selected' : ''}>${escapeHtmlReport(nome)}</option>`).join('')}</select></td>
+                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="fest_ric_${escapeHtmlReport(id)}" ${fields.Ricorrente === true ? 'checked' : ''}></td>
+                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="fest_att_${escapeHtmlReport(id)}" ${fields.Attivo === true ? 'checked' : ''}></td>
+                    <td style="padding:10px; text-align:center;"><button type="button" onclick="rimuoviRigaFestivitaEsistente(${escapeHtmlReport(id)})" style="background:#e74c3c; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer;">🗑️ Elimina</button></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -2572,17 +2587,18 @@
                     <th style="padding:10px; width:20%;">Titolo</th><th style="padding:10px; width:40%;">Messaggio</th><th style="padding:10px; width:15%;">Tipo</th><th style="padding:10px; width:15%;">Data Scadenza</th><th style="padding:10px; width:10%;">Attivo</th>
                 </tr></thead><tbody>`;
             records.forEach(r => {
+                const id = Number(r.id);
                 let dataInputStr = "";
                 if (r.fields.Data_Scadenza) {
                     const d = new Date(r.fields.Data_Scadenza * 1000);
                     dataInputStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 }
                 html += `<tr style="border-bottom:1px solid #e0e0e0;">
-                    <td style="padding:10px;"><input type="text" id="avv_tit_${r.id}" value="${r.fields.Titolo||''}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px;"><textarea id="avv_msg_${r.id}" rows="2" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px; resize:vertical;">${r.fields.Messaggio||''}</textarea></td>
-                    <td style="padding:10px;"><select id="avv_tipo_${r.id}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"><option value="Info" ${r.fields.Tipo==='Info'?'selected':''}>Info</option><option value="Urgente" ${r.fields.Tipo==='Urgente'?'selected':''}>Urgente</option><option value="Scadenza" ${r.fields.Tipo==='Scadenza'?'selected':''}>Scadenza</option></select></td>
-                    <td style="padding:10px;"><input type="date" id="avv_scd_${r.id}" value="${dataInputStr}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
-                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="avv_att_${r.id}" ${r.fields.Attivo?'checked':''}></td>
+                    <td style="padding:10px;"><input type="text" id="avv_tit_${escapeHtmlReport(id)}" value="${escapeHtmlReport(String(r.fields.Titolo || ''))}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px;"><textarea id="avv_msg_${escapeHtmlReport(id)}" rows="2" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px; resize:vertical;">${escapeHtmlReport(String(r.fields.Messaggio || ''))}</textarea></td>
+                    <td style="padding:10px;"><select id="avv_tipo_${escapeHtmlReport(id)}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"><option value="Info" ${r.fields.Tipo==='Info'?'selected':''}>Info</option><option value="Urgente" ${r.fields.Tipo==='Urgente'?'selected':''}>Urgente</option><option value="Scadenza" ${r.fields.Tipo==='Scadenza'?'selected':''}>Scadenza</option></select></td>
+                    <td style="padding:10px;"><input type="date" id="avv_scd_${escapeHtmlReport(id)}" value="${escapeHtmlReport(dataInputStr)}" style="padding:8px; width:100%; border:1px solid #ccc; border-radius:4px;"></td>
+                    <td style="padding:10px; text-align:center;"><input type="checkbox" id="avv_att_${escapeHtmlReport(id)}" ${r.fields.Attivo?'checked':''}></td>
                 </tr>`;
             });
             html += `</tbody></table>`;
@@ -3982,6 +3998,12 @@
             })[carattere]);
         }
 
+        function escapeInlineString(valore) {
+            return escapeHtmlReport(JSON.stringify(String(valore ?? ''))
+                .replace(/\u2028/g, '\\u2028')
+                .replace(/\u2029/g, '\\u2029'));
+        }
+
         async function caricaAnteprimaReport() {
             if (!sessionToken) return;
             const richiesta = ++richiestaAnteprimaReport;
@@ -4182,7 +4204,7 @@
             dataset.forEach(r => mesiSet.add(estraiPartiData(r.fields.Data).mm));
             selectMese.innerHTML = '<option value="TUTTI">Tutti i mesi</option>';
             Array.from(mesiSet).sort().forEach(mm => {
-                selectMese.innerHTML += `<option value="${mm}">${mm} - ${nomiMesi[parseInt(mm, 10)]}</option>`;
+                selectMese.innerHTML += `<option value="${escapeHtmlReport(mm)}">${escapeHtmlReport(mm)} - ${escapeHtmlReport(nomiMesi[parseInt(mm, 10)])}</option>`;
             });
             aggiornaSelectGiorni();
         }
@@ -4198,7 +4220,7 @@
             });
             selectGiorno.innerHTML = '<option value="TUTTI">Tutti i giorni</option>';
             Array.from(giorniSet).sort().forEach(gg => {
-                selectGiorno.innerHTML += `<option value="${gg}">Giorno ${gg}</option>`;
+                selectGiorno.innerHTML += `<option value="${escapeHtmlReport(gg)}">Giorno ${escapeHtmlReport(gg)}</option>`;
             });
             renderizzaTabellaAttiva();
         }
@@ -4224,24 +4246,39 @@
 
             if (vistaStoricoAttiva === 'presenze') {
                 datiAttualmenteFiltrati = ordinaRecordCronologicamente(datiStoricoPresenze.filter(filtraRiga), 'presenze');
-                document.getElementById("tabellaStoricoPresenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => `
+                document.getElementById("tabellaStoricoPresenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => {
+                    const id = Number(r.id);
+                    const data = String(r.fields.Data ?? '');
+                    const evento = String(r.fields.Evento ?? '');
+                    const ora = parseInt(r.fields.Ora, 10);
+                    const minuti = parseInt(r.fields.Minuti, 10);
+                    const note = String(r.fields.Note ?? '');
+                    return `
                     <tr style="border-bottom:1px solid #e0e0e0;">
-                        <td style="padding:10px;">${formattaDataTabella(r.fields.Data)}</td>
-                        <td style="padding:10px;"><b>${r.fields.Evento}</b></td>
-                        <td style="padding:10px;">${String(r.fields.Ora).padStart(2, '0')}:${String(r.fields.Minuti).padStart(2, '0')}</td>
-                        <td style="padding:10px;">${r.fields.Note || '-'}</td>
-                        <td style="padding:10px;"><button onclick="attivaModificaPresenza(${r.id}, '${r.fields.Data}', '${r.fields.Evento}', ${parseInt(r.fields.Ora)}, ${parseInt(r.fields.Minuti)}, '${r.fields.Note || ''}')" style="background:#3498db; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
-                    </tr>`).join('') : `<tr><td colspan="5" style="padding:15px; text-align:center;">Nessuna timbratura trovata.</td></tr>`;
+                        <td style="padding:10px;">${escapeHtmlReport(formattaDataTabella(r.fields.Data))}</td>
+                        <td style="padding:10px;"><b>${escapeHtmlReport(r.fields.Evento)}</b></td>
+                        <td style="padding:10px;">${escapeHtmlReport(String(r.fields.Ora ?? '').padStart(2, '0'))}:${escapeHtmlReport(String(r.fields.Minuti ?? '').padStart(2, '0'))}</td>
+                        <td style="padding:10px;">${escapeHtmlReport(r.fields.Note || '-')}</td>
+                        <td style="padding:10px;"><button onclick="attivaModificaPresenza(${escapeHtmlReport(id)}, ${escapeInlineString(data)}, ${escapeInlineString(evento)}, ${escapeHtmlReport(ora)}, ${escapeHtmlReport(minuti)}, ${escapeInlineString(note)})" style="background:#3498db; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="5" style="padding:15px; text-align:center;">Nessuna timbratura trovata.</td></tr>`;
             } else {
                 datiAttualmenteFiltrati = ordinaRecordCronologicamente(datiStoricoAssenze.filter(filtraRiga), 'assenze');
-                document.getElementById("tabellaStoricoAssenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => `
+                document.getElementById("tabellaStoricoAssenze").innerHTML = datiAttualmenteFiltrati.length ? datiAttualmenteFiltrati.map(r => {
+                    const id = Number(r.id);
+                    const data = String(r.fields.Data ?? '');
+                    const tipoAssenza = String(r.fields.Tipo_Assenza ?? '');
+                    const quantita = Number(r.fields.Quantita);
+                    const note = String(r.fields.Note ?? '');
+                    return `
                     <tr style="border-bottom:1px solid #e0e0e0;">
-                        <td style="padding:10px;">${formattaDataTabella(r.fields.Data)}</td>
-                        <td style="padding:10px;"><b>${r.fields.Tipo_Assenza}</b></td>
-                        <td style="padding:10px;">${r.fields.Quantita}</td>
-                        <td style="padding:10px;">${r.fields.Note || '-'}</td>
-                        <td style="padding:10px;"><button onclick="attivaModificaAssenza(${r.id}, '${r.fields.Data}', '${r.fields.Tipo_Assenza}', ${r.fields.Quantita}, '${r.fields.Note || ''}')" style="background:#e67e22; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
-                    </tr>`).join('') : `<tr><td colspan="5" style="padding:15px; text-align:center;">Nessuna assenza trovata.</td></tr>`;
+                        <td style="padding:10px;">${escapeHtmlReport(formattaDataTabella(r.fields.Data))}</td>
+                        <td style="padding:10px;"><b>${escapeHtmlReport(r.fields.Tipo_Assenza)}</b></td>
+                        <td style="padding:10px;">${escapeHtmlReport(r.fields.Quantita)}</td>
+                        <td style="padding:10px;">${escapeHtmlReport(r.fields.Note || '-')}</td>
+                        <td style="padding:10px;"><button onclick="attivaModificaAssenza(${escapeHtmlReport(id)}, ${escapeInlineString(data)}, ${escapeInlineString(tipoAssenza)}, ${escapeHtmlReport(quantita)}, ${escapeInlineString(note)})" style="background:#e67e22; color:white; padding:5px 10px; border:none; border-radius:4px; cursor:pointer;">📝 Modifica</button></td>
+                    </tr>`;
+                }).join('') : `<tr><td colspan="5" style="padding:15px; text-align:center;">Nessuna assenza trovata.</td></tr>`;
             }
         }
 

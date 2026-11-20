@@ -32,6 +32,157 @@ function privateJsonResponse(data, corsHeaders, status = 200) {
   return response;
 }
 
+function errorResponse(message, corsHeaders, status = 400) {
+  return jsonResponse({ success: false, error: message }, corsHeaders, status);
+}
+
+function upstreamErrorStatus(response) {
+  return response.status === 429 ? 429 : response.status === 403 ? 403 : 500;
+}
+
+function isRecordId(value) {
+  return (typeof value === "number" || (typeof value === "string" && /^\d+$/.test(value))) &&
+    Number.isSafeInteger(Number(value)) && Number(value) > 0;
+}
+
+function parseFiniteNumber(value) {
+  if ((typeof value !== "number" && typeof value !== "string") ||
+      (typeof value === "string" && !value.trim())) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function parseCalendarDate(value) {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!match) return null;
+  const [, dayText, monthText, yearText] = match;
+  const day = Number(dayText);
+  const month = Number(monthText);
+  const year = Number(yearText);
+  if (year < 1900 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return { day, month, year, epochStart: Math.floor(date.getTime() / 1000) };
+}
+
+function recordMatchesDate(record, date) {
+  const timestamp = Number(record?.fields?.Data);
+  if (!Number.isFinite(timestamp)) return false;
+  const recordDate = new Date(timestamp * 1000);
+  return recordDate.getUTCFullYear() === date.year &&
+    recordDate.getUTCMonth() + 1 === date.month &&
+    recordDate.getUTCDate() === date.day;
+}
+
+async function getGristRecords(base, table, headers) {
+  const response = await fetch(`${base}/${table}/records`, { headers });
+  if (!response.ok) throw new Error("Impossibile verificare i dati su Grist");
+  const data = await response.json();
+  return Array.isArray(data.records) ? data.records : [];
+}
+
+function validString(value, maxLength, allowEmpty = true) {
+  return typeof value === "string" &&
+    value.length <= maxLength &&
+    (allowEmpty || Boolean(value.trim()));
+}
+
+function validInteger(value, minimum, maximum) {
+  const number = parseFiniteNumber(value);
+  return number !== null && Number.isInteger(number) && number >= minimum && number <= maximum;
+}
+
+function numeroGiorniDelMese(mese) {
+  if (mese === 2) return 29;
+  return [4, 6, 9, 11].includes(mese) ? 30 : 31;
+}
+
+async function validateCalendarWrite(base, headers, date, kind, body, recordId) {
+  const [holidays, absences, absenceTypes, entries, types] = await Promise.all([
+    getGristRecords(base, "Festivita", headers),
+    getGristRecords(base, "Registro_Ferie_Permessi", headers),
+    getGristRecords(base, "Tipi_Assenza", headers),
+    getGristRecords(base, "Prova", headers),
+    getGristRecords(base, kind === "presenze" ? "Tipi_Timbratura" : "Tipi_Assenza", headers)
+  ]);
+  const holiday = holidays.some(record => {
+    const fields = record.fields || {};
+    return fields.Attivo === true &&
+      Number(fields.Giorno) === date.day &&
+      Number(fields.Mese) === date.month &&
+      (fields.Ricorrente === true || date.year === new Date().getFullYear());
+  });
+  if (holiday) return { status: 403, error: "Non è possibile registrare dati in una festività attiva." };
+
+  if (kind === "presenze") {
+    const tipo = types.find(record => record.fields?.Nome === body.evento && record.fields?.Attivo === true);
+    if (!tipo) return { status: 400, error: "Tipo di timbratura non valido." };
+    const bloccoAssenza = absences.some(record => {
+      if (!recordMatchesDate(record, date)) return false;
+      const absenceName = String(record.fields?.Tipo_Assenza || "").trim().toLowerCase();
+      return absenceTypes.some(absenceType =>
+        absenceType.fields?.Attivo === true &&
+        absenceType.fields?.Blocca_Timbrature === true &&
+        String(absenceType.fields?.Nome || "").trim().toLowerCase() === absenceName
+      );
+    });
+    if (bloccoAssenza && recordId === null) {
+      return { status: 403, error: "La data è bloccata da un'assenza." };
+    }
+
+    const entriesToday = entries.filter(record =>
+      recordMatchesDate(record, date) && Number(record.id) !== recordId
+    );
+    if (recordId === null && entriesToday.some(record => record.fields?.Evento === "Uscita")) {
+      return { status: 403, error: "La giornata ha già una timbratura di uscita." };
+    }
+    if (tipo.fields?.Unico_Al_Giorno === true &&
+        entriesToday.some(record => record.fields?.Evento === body.evento)) {
+      return { status: 403, error: "Il tipo di timbratura è già registrato per questa data." };
+    }
+    return null;
+  }
+
+  const tipo = types.find(record => record.fields?.Nome === body.tipoAssenza && record.fields?.Attivo === true);
+  if (!tipo) return { status: 400, error: "Tipo di assenza non valido." };
+  if (absences.some(record =>
+    recordMatchesDate(record, date) && Number(record.id) !== recordId
+  )) {
+    return { status: 403, error: "È già presente un'assenza in questa data." };
+  }
+  if (entries.some(record => recordMatchesDate(record, date))) {
+    return { status: 403, error: "La data contiene già una timbratura." };
+  }
+  return null;
+}
+
+const SESSION_TTL_SECONDS = 24 * 60 * 60;
+
+async function getSession(env, token) {
+  if (typeof token !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)) {
+    return null;
+  }
+  const key = `session:${token}`;
+  const value = await env.AUTH_KV.get(key);
+  if (!value) return null;
+  let session;
+  try {
+    session = JSON.parse(value);
+  } catch {
+    await env.AUTH_KV.delete(key);
+    return null;
+  }
+  if (!session || typeof session !== "object" || Array.isArray(session) ||
+      typeof session.username !== "string" ||
+      !Number.isInteger(session.expiresAt) ||
+      session.expiresAt <= Math.floor(Date.now() / 1000)) {
+    await env.AUTH_KV.delete(key);
+    return null;
+  }
+  return { key, session };
+}
+
 function equalSecret(actual, expected) {
   if (typeof actual !== "string" || typeof expected !== "string") return false;
   const actualBytes = textEncoder.encode(actual);
@@ -284,9 +435,13 @@ async function syncPasswordVersion(env, username) {
   await env.AUTH_KV.put(versionKey, passwordVersion);
 }
 
-function issueSession(env, corsHeaders) {
-  const sessionToken = btoa(env.GRIST_API_KEY).substring(0, 30);
-  return jsonResponse({
+async function issueSession(env, corsHeaders, username) {
+  const sessionToken = crypto.randomUUID();
+  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  await env.AUTH_KV.put(`session:${sessionToken}`, JSON.stringify({ username, expiresAt }), {
+    expirationTtl: SESSION_TTL_SECONDS
+  });
+  return privateJsonResponse({
     success: true,
     token: sessionToken,
     urls: { dashboard: env.URL_DASHBOARD, impostazioni: env.URL_IMPOSTAZIONI }
@@ -296,14 +451,22 @@ function issueSession(env, corsHeaders) {
 const GRIST_API_BASE = "https://gestionale-lavoro-emanuel-01.getgrist.com/api";
 export default {
   async fetch(request, env, ctx) {
+    const defaultOrigins = ["https://emanuelcabib-dot.github.io"];
+    const configuredOrigins = typeof env.ALLOWED_ORIGINS === "string"
+      ? env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim()).filter(Boolean)
+      : [];
+    const allowedOrigins = new Set(configuredOrigins.length ? configuredOrigins : defaultOrigins);
+    const requestOrigin = request.headers.get("Origin");
     const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Vary": "Origin",
     };
+    const originAllowed = requestOrigin !== null && allowedOrigins.has(requestOrigin);
+    if (originAllowed) corsHeaders["Access-Control-Allow-Origin"] = requestOrigin;
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, { status: originAllowed ? 204 : 403, headers: corsHeaders });
     }
 
     const url = new URL(request.url);
@@ -313,10 +476,10 @@ export default {
         try {
           body = await request.json();
         } catch (e) {
-          return new Response(JSON.stringify({ success: false, error: "JSON non valido nel body" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
+          return errorResponse("JSON non valido nel body", corsHeaders, 400);
+        }
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return errorResponse("JSON non valido nel body", corsHeaders, 400);
         }
 
         if (body.tipo === "auth") {
@@ -330,7 +493,7 @@ export default {
             return jsonResponse({ success: false, error: "Nome utente o password non validi" }, corsHeaders, 401);
           }
           await syncPasswordVersion(env, username);
-          return issueSession(env, corsHeaders);
+          return await issueSession(env, corsHeaders, username);
         }
 
         if (body.tipo === "webauthn_auth_options") {
@@ -420,12 +583,20 @@ export default {
           }
           credential.signCount = parsedData.signCount;
           await env.AUTH_KV.put(credentialKey, JSON.stringify(credential));
-          return issueSession(env, corsHeaders);
+          return await issueSession(env, corsHeaders, username);
         }
 
-        const expectedToken = btoa(env.GRIST_API_KEY).substring(0, 30);
-        if (!body.token || body.token !== expectedToken) {
-          return new Response(JSON.stringify({ success: false, error: "Sessione non autorizzata o scaduta" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const session = await getSession(env, body.token);
+        if (!session) {
+          if (body.tipo === "logout" && typeof body.token === "string" &&
+              /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.token)) {
+            await env.AUTH_KV.delete(`session:${body.token}`);
+          }
+          return errorResponse("Sessione non autorizzata o scaduta", corsHeaders, 403);
+        }
+        if (body.tipo === "logout") {
+          await env.AUTH_KV.delete(session.key);
+          return privateJsonResponse({ success: true }, corsHeaders);
         }
 
         if (body.tipo === "get_drive_pdf_url") {
@@ -530,7 +701,7 @@ export default {
               ["verify"]
             );
           } catch (error) {
-            return jsonResponse({ success: false, error: `Registrazione WebAuthn non valida: ${error.message}` }, corsHeaders, 400);
+            return errorResponse("Registrazione WebAuthn non valida", corsHeaders, 400);
           }
           const credentialKey = `credential:${encodeCredentialId(username)}:${credentialId}`;
           if (await env.AUTH_KV.get(credentialKey)) {
@@ -560,11 +731,35 @@ export default {
         }
 
         if (body.tipo === "modifica_config_app") {
-          const idRecord = parseInt(body.id_riga, 10);
+          if (!isRecordId(body.id_riga) ||
+              !validString(body.valore, 2000) ||
+              !validString(body.descrizione, 5000)) {
+            return errorResponse("Dati Config_App non validi", corsHeaders, 400);
+          }
+          const idRecord = Number(body.id_riga);
+          const configRecords = await getGristRecords(BASE_GRIST, "Config_App", headersGrist);
+          const configRecord = configRecords.find(record => Number(record.id) === idRecord);
+          if (!configRecord) return errorResponse("Parametro Config_App non trovato", corsHeaders, 400);
+          const configLimits = {
+            "Anno inizio storico": [1900, new Date().getFullYear()],
+            "Giorni anticipo assenze": [0, 3650],
+            "Giorni anticipo scadenze": [0, 3650],
+            "Giorno avviso fine mese": [1, 31],
+            "Ora minima ingresso": [0, 23],
+            "Ora minima uscita": [0, 23]
+          };
+          const parametro = configRecord.fields?.Parametro;
+          const configLimit = Object.hasOwn(configLimits, parametro) ? configLimits[parametro] : null;
+          if (configLimit) {
+            const configValue = parseFiniteNumber(body.valore);
+            if (!validInteger(configValue, configLimit[0], configLimit[1])) {
+              return errorResponse("Valore Config_App fuori intervallo", corsHeaders, 400);
+            }
+          }
           const resMod = await fetch(`${BASE_GRIST}/Config_App/records`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Valore": String(body.valore), "Descrizione": String(body.descrizione) } }] })
+            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Valore": body.valore, "Descrizione": body.descrizione } }] })
           });
           if (!resMod.ok) return new Response(JSON.stringify({ success: false, error: "Errore modifica Config_App" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -578,21 +773,37 @@ export default {
         }
 
         if (body.tipo === "modifica_contrattuali") {
-          const idRecord = parseInt(body.id_riga, 10);
+          const anno = parseFiniteNumber(body.anno_inizio);
+          const ferie = parseFiniteNumber(body.ferie_annuo);
+          const permessi = parseFiniteNumber(body.permessi_annuo);
+          if (!isRecordId(body.id_riga) || !validInteger(anno, 1900, 9999) ||
+              ferie === null || ferie < 0 || ferie > 366 ||
+              permessi === null || permessi < 0 || permessi > 8760) {
+            return errorResponse("Parametri contrattuali non validi", corsHeaders, 400);
+          }
+          const idRecord = Number(body.id_riga);
           const resMod = await fetch(`${BASE_GRIST}/Parametri_contrattuali/records`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Anno_Inizio_Validita": parseInt(body.anno_inizio), "Ferie_Annuo_Spettante": parseFloat(body.ferie_annuo), "Permessi_Annuo_Spettante": parseFloat(body.permessi_annuo) } }] })
+            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Anno_Inizio_Validita": anno, "Ferie_Annuo_Spettante": ferie, "Permessi_Annuo_Spettante": permessi } }] })
           });
           if (!resMod.ok) return new Response(JSON.stringify({ success: false, error: "Errore modifica Parametri_contrattuali" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (body.tipo === "aggiungi_contrattuali") {
+          const anno = parseFiniteNumber(body.anno_inizio);
+          const ferie = parseFiniteNumber(body.ferie_annuo);
+          const permessi = parseFiniteNumber(body.permessi_annuo);
+          if (!validInteger(anno, 1900, 9999) ||
+              ferie === null || ferie < 0 || ferie > 366 ||
+              permessi === null || permessi < 0 || permessi > 8760) {
+            return errorResponse("Parametri contrattuali non validi", corsHeaders, 400);
+          }
           const resAdd = await fetch(`${BASE_GRIST}/Parametri_contrattuali/records`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ fields: { "Anno_Inizio_Validita": parseInt(body.anno_inizio), "Ferie_Annuo_Spettante": parseFloat(body.ferie_annuo), "Permessi_Annuo_Spettante": parseFloat(body.permessi_annuo) } }] })
+            body: JSON.stringify({ records: [{ fields: { "Anno_Inizio_Validita": anno, "Ferie_Annuo_Spettante": ferie, "Permessi_Annuo_Spettante": permessi } }] })
           });
           if (!resAdd.ok) return new Response(JSON.stringify({ success: false, error: "Errore aggiunta Parametri_contrattuali" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -606,25 +817,32 @@ export default {
         }
 
         if (body.tipo === "modifica_tipo_assenza") {
-          const idRecord = parseInt(body.id_riga, 10);
+          if (!isRecordId(body.id_riga) || !validString(body.nome, 100, false) ||
+              typeof body.blocca !== "boolean" || typeof body.attivo !== "boolean") {
+            return errorResponse("Tipo di assenza non valido", corsHeaders, 400);
+          }
+          const idRecord = Number(body.id_riga);
           const resMod = await fetch(`${BASE_GRIST}/Tipi_Assenza/records`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Nome": String(body.nome), "Blocca_Timbrature": Boolean(body.blocca), "Attivo": Boolean(body.attivo) } }] })
+            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Nome": body.nome.trim(), "Blocca_Timbrature": body.blocca, "Attivo": body.attivo } }] })
           });
           if (!resMod.ok) return new Response(JSON.stringify({ success: false, error: "Errore modifica Tipi_Assenza" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (body.tipo === "aggiungi_tipo_assenza") {
-          const nome = String(body.nome || "").trim();
-          if (!nome) return new Response(JSON.stringify({ success: false, error: "Nome assenza non valido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (!validString(body.nome, 100, false) ||
+              typeof body.blocca !== "boolean" || typeof body.attivo !== "boolean") {
+            return errorResponse("Nome o regole del tipo di assenza non validi", corsHeaders, 400);
+          }
+          const nome = body.nome.trim();
           const resAdd = await fetch(`${BASE_GRIST}/Tipi_Assenza/records`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ fields: { "Nome": nome, "Blocca_Timbrature": Boolean(body.blocca), "Attivo": Boolean(body.attivo) } }] })
+            body: JSON.stringify({ records: [{ fields: { "Nome": nome, "Blocca_Timbrature": body.blocca, "Attivo": body.attivo } }] })
           });
-          if (!resAdd.ok) return new Response(JSON.stringify({ success: false, error: "Errore aggiunta Tipi_Assenza" }), { status: resAdd.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (!resAdd.ok) return errorResponse("Errore aggiunta Tipi_Assenza", corsHeaders, upstreamErrorStatus(resAdd));
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -636,26 +854,35 @@ export default {
         }
 
         if (body.tipo === "modifica_tipo_timbratura") {
-          const idRecord = parseInt(body.id_riga, 10);
+          const ordine = parseFiniteNumber(body.ordine);
+          if (!isRecordId(body.id_riga) || !validString(body.nome, 100, false) ||
+              typeof body.unico !== "boolean" || typeof body.attivo !== "boolean" ||
+              !validInteger(ordine, 0, 9999)) {
+            return errorResponse("Tipo di timbratura non valido", corsHeaders, 400);
+          }
+          const idRecord = Number(body.id_riga);
           const resMod = await fetch(`${BASE_GRIST}/Tipi_Timbratura/records`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Nome": String(body.nome), "Unico_Al_Giorno": Boolean(body.unico), "Attivo": Boolean(body.attivo), "Ordine": parseInt(body.ordine) } }] })
+            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Nome": body.nome.trim(), "Unico_Al_Giorno": body.unico, "Attivo": body.attivo, "Ordine": ordine } }] })
           });
           if (!resMod.ok) return new Response(JSON.stringify({ success: false, error: "Errore modifica Tipi_Timbratura" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (body.tipo === "aggiungi_tipo_timbratura") {
-          const nome = String(body.nome || "").trim();
-          const ordine = Number.parseInt(body.ordine, 10);
-          if (!nome || !Number.isInteger(ordine)) return new Response(JSON.stringify({ success: false, error: "Nome o ordine timbratura non valido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const ordine = parseFiniteNumber(body.ordine);
+          if (!validString(body.nome, 100, false) || !validInteger(ordine, 0, 9999) ||
+              typeof body.unico !== "boolean" || typeof body.attivo !== "boolean") {
+            return errorResponse("Nome, ordine o regole del tipo di timbratura non validi", corsHeaders, 400);
+          }
+          const nome = body.nome.trim();
           const resAdd = await fetch(`${BASE_GRIST}/Tipi_Timbratura/records`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ fields: { "Nome": nome, "Unico_Al_Giorno": Boolean(body.unico), "Attivo": Boolean(body.attivo), "Ordine": ordine } }] })
+            body: JSON.stringify({ records: [{ fields: { "Nome": nome, "Unico_Al_Giorno": body.unico, "Attivo": body.attivo, "Ordine": ordine } }] })
           });
-          if (!resAdd.ok) return new Response(JSON.stringify({ success: false, error: "Errore aggiunta Tipi_Timbratura" }), { status: resAdd.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (!resAdd.ok) return errorResponse("Errore aggiunta Tipi_Timbratura", corsHeaders, upstreamErrorStatus(resAdd));
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -667,27 +894,33 @@ export default {
         }
 
         if (body.tipo === "aggiungi_festivita" || body.tipo === "modifica_festivita") {
-          const descrizione = String(body.descrizione || "").trim();
-          const giorno = Number(body.giorno);
-          const mese = Number(body.mese);
-          const ricorrente = Boolean(body.ricorrente);
-          const attivo = Boolean(body.attivo);
-          const idRecord = Number(body.id_riga);
-          if (!descrizione || !Number.isInteger(giorno) || giorno < 1 || giorno > 31 || !Number.isInteger(mese) || mese < 1 || mese > 12) {
-            return new Response(JSON.stringify({ success: false, error: "Descrizione, giorno o mese della festività non validi" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const descrizione = typeof body.descrizione === "string" ? body.descrizione.trim() : "";
+          const giorno = parseFiniteNumber(body.giorno);
+          const mese = parseFiniteNumber(body.mese);
+          const modifica = body.tipo === "modifica_festivita";
+          if (!validString(descrizione, 200, false) ||
+              !validInteger(giorno, 1, 31) || !validInteger(mese, 1, 12) ||
+              giorno > numeroGiorniDelMese(mese) ||
+              typeof body.ricorrente !== "boolean" || typeof body.attivo !== "boolean" ||
+              (modifica && !isRecordId(body.id_riga))) {
+            return errorResponse("Descrizione, giorno o mese della festività non validi", corsHeaders, 400);
           }
-          if (body.tipo === "modifica_festivita" && (!Number.isSafeInteger(idRecord) || idRecord <= 0)) {
-            return new Response(JSON.stringify({ success: false, error: "ID festività non valido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const festivitaEsistenti = await getGristRecords(BASE_GRIST, "Festivita", headersGrist);
+          if (festivitaEsistenti.some(record =>
+            Number(record.id) !== Number(body.id_riga) &&
+            Number(record.fields?.Giorno) === giorno &&
+            Number(record.fields?.Mese) === mese
+          )) {
+            return errorResponse("Esiste già una festività per questa data", corsHeaders, 400);
           }
 
-          const fields = { "Descrizione": descrizione, "Giorno": giorno, "Mese": mese, "Ricorrente": ricorrente, "Attivo": attivo };
-          const modifica = body.tipo === "modifica_festivita";
+          const fields = { "Descrizione": descrizione, "Giorno": giorno, "Mese": mese, "Ricorrente": body.ricorrente, "Attivo": body.attivo };
           const response = await fetch(`${BASE_GRIST}/Festivita/records`, {
             method: modifica ? "PATCH" : "POST",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [modifica ? { id: idRecord, fields } : { fields }] })
+            body: JSON.stringify({ records: [modifica ? { id: Number(body.id_riga), fields } : { fields }] })
           });
-          if (!response.ok) return new Response(JSON.stringify({ success: false, error: modifica ? "Errore modifica Festivita" : "Errore aggiunta Festivita" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (!response.ok) return errorResponse(modifica ? "Errore modifica Festivita" : "Errore aggiunta Festivita", corsHeaders, upstreamErrorStatus(response));
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
@@ -699,11 +932,21 @@ export default {
         }
 
         if (body.tipo === "modifica_avviso") {
-          const idRecord = parseInt(body.id_riga, 10);
+          const dataScadenza = body.data_scadenza === null ? 0 : parseFiniteNumber(body.data_scadenza);
+          if (!isRecordId(body.id_riga) ||
+              !validString(body.titolo, 200, false) ||
+              !validString(body.messaggio, 10000, false) ||
+              !["Info", "Urgente", "Scadenza"].includes(body.tipo_avviso) ||
+              dataScadenza === null || !Number.isInteger(dataScadenza) ||
+              dataScadenza < 0 || dataScadenza > 253402300799 ||
+              typeof body.attivo !== "boolean") {
+            return errorResponse("Dati dell'avviso non validi", corsHeaders, 400);
+          }
+          const idRecord = Number(body.id_riga);
           const resMod = await fetch(`${BASE_GRIST}/Avvisi/records`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json", ...headersGrist },
-            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Titolo": String(body.titolo), "Messaggio": String(body.messaggio), "Tipo": String(body.tipo_avviso), "Data_Scadenza": Number(body.data_scadenza) || null, "Attivo": Boolean(body.attivo) } }] })
+            body: JSON.stringify({ records: [{ id: idRecord, fields: { "Titolo": body.titolo.trim(), "Messaggio": body.messaggio.trim(), "Tipo": body.tipo_avviso, "Data_Scadenza": dataScadenza || null, "Attivo": body.attivo } }] })
           });
           if (!resMod.ok) return new Response(JSON.stringify({ success: false, error: "Errore modifica Avvisi" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -714,9 +957,9 @@ export default {
         // ==========================================
 
         if (body.tipo === "get_presenze") {
-          const [giorno, mese, anno] = body.data.split('/').map(Number);
-          const timestampGristEpoch = Math.floor(Date.UTC(anno, mese - 1, giorno, 0, 0, 0) / 1000);
-          const filtroGrist = encodeURIComponent(JSON.stringify({ Data: [timestampGristEpoch] }));
+          const date = parseCalendarDate(body.data);
+          if (!date) return errorResponse("Data non valida", corsHeaders, 400);
+          const filtroGrist = encodeURIComponent(JSON.stringify({ Data: [date.epochStart] }));
           const responseGrist = await fetch(`${BASE_GRIST}/Prova/records?filter=${filtroGrist}`, { headers: headersGrist });
           if (!responseGrist.ok) {
             return new Response(JSON.stringify({ success: false, error: "Errore recupero Grist" }), { status: responseGrist.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -728,9 +971,12 @@ export default {
         }
 
         if (body.tipo === "check_assenza") {
-          const [giorno, mese, anno] = body.data.split('/').map(Number);
-          const epochInizio = Math.floor(Date.UTC(anno, mese - 1, giorno, 0, 0, 0) / 1000);
-          const epochFine = Math.floor(Date.UTC(anno, mese - 1, giorno, 23, 59, 59) / 1000);
+          const date = parseCalendarDate(body.data);
+          if (!date || (body.id_riga !== undefined && body.id_riga !== null && !isRecordId(body.id_riga))) {
+            return errorResponse("Data o ID assenza non validi", corsHeaders, 400);
+          }
+          const epochInizio = date.epochStart;
+          const epochFine = epochInizio + 86399;
           
           const [resReg, resTipi] = await Promise.all([
             fetch(`${BASE_GRIST}/Registro_Ferie_Permessi/records`, { headers: headersGrist }),
@@ -1159,16 +1405,14 @@ export default {
         if (body.tipo === "salva_verifica_busta_paga") {
           const ferieInput = body.ferie_residue;
           const permessiInput = body.permessi_residui;
-          const anno = Number(body.anno);
-          const mese = Number(body.mese);
-          const ferieResidue = Number(ferieInput);
-          const permessiResidui = Number(permessiInput);
-          if (!Number.isInteger(anno) || anno < 1900 || anno > 9999 ||
-              !Number.isInteger(mese) || mese < 1 || mese > 12 ||
-              ferieInput === undefined || ferieInput === null || ferieInput === "" ||
-              permessiInput === undefined || permessiInput === null || permessiInput === "" ||
-              !Number.isFinite(ferieResidue) || !Number.isFinite(permessiResidui)) {
-            return new Response(JSON.stringify({ success: false, error: "Dati della verifica busta paga non validi" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          const anno = parseFiniteNumber(body.anno);
+          const mese = parseFiniteNumber(body.mese);
+          const ferieResidue = parseFiniteNumber(ferieInput);
+          const permessiResidui = parseFiniteNumber(permessiInput);
+          if (!validInteger(anno, 1900, 9999) || !validInteger(mese, 1, 12) ||
+              ferieResidue === null || Math.abs(ferieResidue) > 100000 ||
+              permessiResidui === null || Math.abs(permessiResidui) > 100000) {
+            return errorResponse("Dati della verifica busta paga non validi", corsHeaders, 400);
           }
           const fields = {
             "Anno": anno,
@@ -1184,7 +1428,7 @@ export default {
             })
           });
           if (!response.ok) {
-            return new Response(JSON.stringify({ success: false, error: "Errore aggiornamento della riga ID 1 in Verifica_Buste_Paga" }), { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return errorResponse("Errore aggiornamento della riga ID 1 in Verifica_Buste_Paga", corsHeaders, upstreamErrorStatus(response));
           }
           const data = (await response.json()) || {};
           const records = Array.isArray(data.records) ? data.records : [];
@@ -1258,51 +1502,81 @@ export default {
             festivita: "Festivita",
             verifica_buste_paga: "Verifica_Buste_Paga"
           };
-          const tabellaId = Object.hasOwn(tabelleEliminabili, body.tabella) ? tabelleEliminabili[body.tabella] : null;
+          const tabellaId = typeof body.tabella === "string" && Object.hasOwn(tabelleEliminabili, body.tabella)
+            ? tabelleEliminabili[body.tabella]
+            : null;
+          if (!tabellaId || !isRecordId(body.id_riga)) {
+            return errorResponse("Tabella o ID record non valido", corsHeaders, 400);
+          }
           const idRecord = Number(body.id_riga);
-          if (!tabellaId || !Number.isSafeInteger(idRecord) || idRecord <= 0) return new Response(JSON.stringify({ success: false, error: "Tabella o ID record non valido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
           const resElimina = await fetch(`${BASE_GRIST}/${tabellaId}/records/delete`, {
             method: "POST", headers: { ...headersGrist, "Content-Type": "application/json" },
             body: JSON.stringify([idRecord])
           });
-          if (!resElimina.ok) return new Response(JSON.stringify({ success: false, error: "Errore durante l'eliminazione su Grist" }), { status: resElimina.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          if (!resElimina.ok) return errorResponse("Errore durante l'eliminazione su Grist", corsHeaders, 500);
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         let tabellaId = "";
         let fields = {};
-        const idRigaModifica = body.id_riga;
+        const hasRecordId = body.id_riga !== undefined && body.id_riga !== null && body.id_riga !== "";
+        if (hasRecordId && !isRecordId(body.id_riga)) {
+          return errorResponse("ID record non valido", corsHeaders, 400);
+        }
+        const idRigaModifica = hasRecordId ? Number(body.id_riga) : null;
+        const data = parseCalendarDate(body.data);
+        const note = body.note;
+        if (!data || !validString(note, 5000)) {
+          return errorResponse("Data o note non valide", corsHeaders, 400);
+        }
 
         if (body.tipo === "presenze") {
+          const ore = parseFiniteNumber(body.ore);
+          const minuti = parseFiniteNumber(body.minuti);
+          if (!validString(body.evento, 100, false) ||
+              !validInteger(ore, 0, 23) || !validInteger(minuti, 0, 59) ||
+              (body.note_modifica !== undefined && !validString(body.note_modifica, 5000))) {
+            return errorResponse("Dati della timbratura non validi", corsHeaders, 400);
+          }
+          const erroreRegole = await validateCalendarWrite(BASE_GRIST, headersGrist, data, "presenze", body, idRigaModifica);
+          if (erroreRegole) return errorResponse(erroreRegole.error, corsHeaders, erroreRegole.status);
           tabellaId = "Prova";
           fields = {
             "Data": body.data,
             "Evento": body.evento,
-            "Ora": String(body.ore || 0).padStart(2, '0'),
-            "Minuti": String(body.minuti || 0).padStart(2, '0'),
-            "Note": body.note
+            "Ora": String(ore).padStart(2, '0'),
+            "Minuti": String(minuti).padStart(2, '0'),
+            "Note": note
           };
         } else if (body.tipo === "registro") {
+          const quantita = parseFiniteNumber(body.quantita);
+          if (!validString(body.tipoAssenza, 100, false) ||
+              !validInteger(quantita, 1, 8) ||
+              (body.note_modifica !== undefined && !validString(body.note_modifica, 5000))) {
+            return errorResponse("Dati dell'assenza non validi", corsHeaders, 400);
+          }
+          const erroreRegole = await validateCalendarWrite(BASE_GRIST, headersGrist, data, "registro", body, idRigaModifica);
+          if (erroreRegole) return errorResponse(erroreRegole.error, corsHeaders, erroreRegole.status);
           tabellaId = "Registro_Ferie_Permessi";
           fields = {
             "Data": body.data,
             "Tipo_Assenza": body.tipoAssenza,
-            "Quantita": body.quantita,
-            "Note": body.note
+            "Quantita": quantita,
+            "Note": note
           };
         } else {
-          return new Response(JSON.stringify({ success: false, error: "Tipo richiesta non riconosciuto" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          return errorResponse("Tipo richiesta non riconosciuto", corsHeaders, 400);
         }
 
-        if (idRigaModifica) {
+        if (idRigaModifica !== null) {
           fields["Ultima_Modifica"] = Math.floor(Date.now() / 1000);
           fields["Note_Modifica"] = body.note_modifica || "Modificato da pannello gestionale";
         }
 
-        const metodoHTTP = idRigaModifica ? "PATCH" : "POST";
-        const payloadGrist = idRigaModifica
-          ? { records: [{ id: parseInt(idRigaModifica), fields }] }
+        const metodoHTTP = idRigaModifica !== null ? "PATCH" : "POST";
+        const payloadGrist = idRigaModifica !== null
+          ? { records: [{ id: idRigaModifica, fields }] }
           : { records: [{ fields }] };
 
         const response = await fetch(`${BASE_GRIST}/${tabellaId}/records`, {
@@ -1311,17 +1585,19 @@ export default {
           body: JSON.stringify(payloadGrist)
         });
 
+        if (!response.ok) return errorResponse("Errore durante il salvataggio su Grist", corsHeaders, 500);
         const result = await response.json();
         return new Response(JSON.stringify({ success: true, data: result }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
       } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        console.error("Errore interno del Worker", error);
+        return errorResponse("Errore interno del server", corsHeaders, 500);
       }
     }
 
     if (request.method === "GET") {
-      return new Response("Endpoint non riconosciuto", { status: 404, headers: corsHeaders });
+      return errorResponse("Endpoint non riconosciuto", corsHeaders, 404);
     }
-    return new Response("Metodo non consentito", { status: 405 });
+    return errorResponse("Metodo non consentito", corsHeaders, 405);
   }
 };
